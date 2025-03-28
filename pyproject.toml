@@ -1,0 +1,19 @@
+[project]
+name = "epoikos-simulation"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.115.12",
+    "faststream[nats]>=0.5.37",
+    "loguru>=0.7.3",
+    "pydantic>=2.11.0",
+    "pydantic-settings>=2.8.1",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "pre-commit>=4.2.0",
+]
