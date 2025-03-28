@@ -1,14 +1,15 @@
-# Epoikos Simulation
+# EpOikoS Simulation
+
+This project runs a [FastAPI](https://fastapi.tiangolo.com) Webserver as well as the [Faststream Plugin](https://faststream.airt.ai/latest/getting-started/integrations/fastapi/) to integrate with [NATS](https://nats.io), a highly performant messaging system.
 
 ## Installation
 
 ### Prerequisites
 
-1. Make sure to have NATS installed. You can follow the [installation guide](https://docs.nats.io/running-a-nats-service/introduction/installation).
-2. Run the NATS server with the config located in `config/nats-server.conf` to enable the jetstream storage:
-    ```shell
-    nats-server -c config/nats-server.conf
-    ```
+Make sure to have NATS installed. You can follow the [installation guide](https://docs.nats.io/running-a-nats-service/introduction/installation). Run the NATS server with the config located in `config/nats-server.conf` to enable the jetstream storage:
+```shell
+nats-server -c config/nats-server.conf
+```
 ### Python Setup
 
 Install Packages using [uv](https://docs.astral.sh/uv/getting-started/installation/).
@@ -37,3 +38,27 @@ uv run fastapi dev
 ```
 
 Once the application is running, you can access the API documentation is available at [`http://localhost:8000/docs`](http://localhost:8000/docs).
+
+## File Structure
+
+```
+.
+├── main.py
+├── broker.py
+├── config
+│   ├── base.py
+│   ├── nats-server.conf
+│   └── nats.py
+├── routers
+│   ├── simulation.py
+│   └── world.py
+├── subscribers
+│   └── world.py
+└── uv.lock
+```
+
+- `config/`: Contains the configuration files. It uses [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) to manage the settings.
+- `routers/`: Contains the FastAPI routers.
+- `subscribers/`: Contains the NATS subscribers.
+- `main.py`: The main entrypoint for the FastAPI application.
+- `broker.py`: Exports the NATS connection and the Jetstream context for use in the application.
