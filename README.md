@@ -36,6 +36,10 @@ Start the application using the following command:
 ```shell
 uv run fastapi dev
 ```
+Alternatively, if the above does not work run it using uvicorn:
+```shell
+uv run uvicorn main:app --port 8000 --reload
+```
 
 Once the application is running, you can access the API documentation is available at [`http://localhost:8000/docs`](http://localhost:8000/docs).
 
