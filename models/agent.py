@@ -42,7 +42,6 @@ class Agent:
         self._milvus.drop_collection(self.collection_name)
 
     def create(self):
-        self.id = uuid.uuid4().hex
         logger.info(f"Creating agent {self.id}")
         self._create_collection()
         self._create_in_db()
