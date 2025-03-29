@@ -20,4 +20,4 @@ def get_client():
     return TinyDB(settings.tinydb.path)
 
 
-DB = Annotated[MilvusClient, Depends(get_client)]
+DB = Annotated[TinyDB, Depends(get_client)]
