@@ -40,8 +40,8 @@ class Simulation:
 
         await self._nats.stream.delete_stream(f"simulation-{self.id}")
 
-        agent_rows = self._db.table("agents").search(Query().simulation_id == id)
-        self._db.table("simulations").remove(Query()["id"] == id)
+        agent_rows = self._db.table("agents").search(Query().simulation_id == self.id)
+        self._db.table("simulations").remove(Query()["id"] == self.id)
         for row in agent_rows:
             agent = Agent(
                 milvus=milvus, db=self._db, simulation_id=self.id, id=row["id"]
