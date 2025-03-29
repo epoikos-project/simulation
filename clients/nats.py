@@ -10,4 +10,4 @@ def nats_broker() -> NatsBroker:
     return router.broker
 
 
-Broker = Annotated[NatsBroker, Depends(nats_broker)]
+Nats = Annotated[NatsBroker, Depends(nats_broker)]

@@ -1,27 +1,37 @@
 import asyncio
-from fastapi import APIRouter
 
+from fastapi import APIRouter
 from loguru import logger
-from nats.js.api import StreamConfig
-from broker import Broker
+from clients import Nats, Milvus, DB
+from models.simulation import Simulation
 
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
 
 
 @router.post("")
-async def create_simulation(name: str, broker: Broker):
+async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):
     try:
-        await broker.stream.add_stream(
-            StreamConfig(name=f"simulation-{name}", subjects=[f"simulation.{name}.*"])
-        )
+        simulation = Simulation(id=name, nats=broker, db=db)
+        await simulation.create()
     except Exception as e:
         logger.error(f"Error creating simulation: {e}")
         return {"message": f"Error creating simulation"}
     return {"message": "Simulation created successfully!"}
 
 
+@router.delete("/{id}")
+async def delete_simulation(id: str, db: DB, milvus: Milvus, nats: Nats):
+    try:
+        simulation = Simulation(id=id, db=db, nats=nats)
+        await simulation.delete(milvus=milvus)
+    except Exception as e:
+        logger.error(f"Error deleting simulation: {e}")
+        return {"message": f"Error deleting simulation"}
+    return {"message": "Simulation deleted successfully!"}
+
+
 @router.post("/{simulation_id}/replay")
-async def replay(simulation_id: str, broker: Broker):
+async def replay(simulation_id: str, broker: Nats):
     js = broker.stream
 
     # Get stream info to fetch the total number of messages in the stream
