@@ -47,22 +47,44 @@ Once the application is running, you can access the API documentation is availab
 
 ```
 .
-├── main.py
-├── broker.py
+├── README.md
+├── clients
+│   ├── milvus.py
+│   ├── nats.py
+│   └── tinydb.py
 ├── config
-│   ├── base.py
-│   ├── nats-server.conf
-│   └── nats.py
+│   ├── base.py
+│   ├── milvus.py
+│   ├── nats-server.conf
+│   ├── nats.py
+│   └── tinydb.py
+├── data
+│   ├── jetstream
+│   ├── milvus
+│   └── tinydb
+├── main.py
+├── models
+│   ├── agent.py
+│   └── simulation.py
 ├── routers
-│   ├── simulation.py
-│   └── world.py
+│   ├── agent.py
+│   ├── debug.py
+│   ├── simulation.py
+│   └── world.py
 ├── subscribers
-│   └── world.py
+│   └── world.py
 └── uv.lock
 ```
 
-- `config/`: Contains the configuration files. It uses [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) to manage the settings.
+- `clients/`: Contains the clients for the different services used in the application in our case
+  - `milvus.py`: Contains the Milvus client.
+  - `nats.py`: Contains the NATS client.
+  - `tinydb.py`: Contains the TinyDB client.
+- `config/`: Contains the configuration files. It uses [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) to manage the settings. 
+- `data/`: The data directory will only be created once the application is running. It contains the data storage for the application.
+- `models/`: Contains the logic of our entities in the application. Mainly
+  - `agent.py`: Contains the Agent model.
+  - `simulation.py`: Contains the Simulation model.
 - `routers/`: Contains the FastAPI routers.
 - `subscribers/`: Contains the NATS subscribers.
 - `main.py`: The main entrypoint for the FastAPI application.
-- `broker.py`: Exports the NATS connection and the Jetstream context for use in the application.
