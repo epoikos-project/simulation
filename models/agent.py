@@ -72,7 +72,7 @@ class Agent:
     def _load_from_db(self):
         table = self._db.table(settings.tinydb.tables.agent_table)
         agent = table.search(Query()["id"] == self.id)
-        print(agent)
+        
         if not agent:
             raise ValueError(f"Agent with id {self.id} not found in database.")
         return agent[0]
