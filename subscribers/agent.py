@@ -14,4 +14,7 @@ router = NatsRouter(settings.nats.url, logger=None, include_in_schema=False)
     "simulation.*.agent",
 )
 async def subscribe_to_agent_messages(m: str):
-    logger.debug(json.loads(m))
+    try:
+        logger.debug(json.loads(m))
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to decode JSON message: {e}")
