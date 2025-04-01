@@ -85,7 +85,7 @@ class Agent:
             self.simulation_id = result["simulation_id"]
             self.name = result["name"]
             self.model = result["model"]
-            self._client = self._initialize_llm(self.model)
+            self._initialize_llm(self.model)
         except ValueError:
             logger.warning(
                 f"Agent {self.id} not found in database. Creating new agent."
