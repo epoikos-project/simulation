@@ -39,6 +39,15 @@ Copy the `.env.example` file to `.env` and update the values as needed.
 cp .env.example .env
 ```
 
+> [!IMPORTANT] 
+> Make sure to update the envs to your local setup! Particularly the OPENAI_API_KEY.
+
+
+```conf
+# Replace in .env
+OPENAI_APIKEY=<your-key>
+```
+
 ## Running the Application
 Start the application using the following command:
 ```shell
