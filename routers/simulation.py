@@ -2,6 +2,7 @@ import asyncio
 
 from fastapi import APIRouter
 from loguru import logger
+from tinydb import Query
 from clients import Nats, Milvus, DB
 from models.simulation import Simulation
 
@@ -17,6 +18,30 @@ async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):
         logger.error(f"Error creating simulation: {e}")
         return {"message": f"Error creating simulation"}
     return {"message": "Simulation created successfully!"}
+
+
+@router.get("")
+async def list_simulations(db: DB):
+    try:
+        table = db.table("simulations")
+        simulations = table.all()
+    except Exception as e:
+        logger.error(f"Error listing simulations: {e}")
+        return {"message": f"Error listing simulations"}
+    return simulations
+
+
+@router.get("/{id}")
+async def get_simulation(id: str, db: DB):
+    try:
+        table = db.table("simulations")
+        simulation = table.get(Query().id == id)
+    except Exception as e:
+        logger.error(f"Error getting simulation: {e}")
+        return {"message": f"Error getting simulation"}
+    if simulation is None:
+        return {"message": "Simulation not found"}
+    return simulation
 
 
 @router.delete("/{id}")

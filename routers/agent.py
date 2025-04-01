@@ -21,6 +21,16 @@ async def create_agent(
     return {"message": f"Agent {agent.id} created successfully!"}
 
 
+@router.get("/{id}")
+async def get_agent(id: str, simulation_id: str, db: clients.DB):
+    """Get an agent by ID"""
+    table = db.table("agents")
+    agent = table.get(Query().id == id and Query().simulation_id == simulation_id)
+    if agent is None:
+        return {"message": "Agent not found"}
+    return agent
+
+
 @router.get("")
 async def list_agents(simulation_id: str, db: clients.DB):
     """List all agents in the simulation"""
