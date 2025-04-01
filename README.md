@@ -4,6 +4,14 @@ This project runs a [FastAPI](https://fastapi.tiangolo.com) Webserver as well as
 
 ## Installation
 
+### Clone the GitHub Repo
+
+Clone the repository to your local machine using the following command:
+```shell
+git clone https://github.com/epoikos-project/simulation epoikos-simulation
+cd epoikos-simulation
+```
+
 ### Prerequisites
 
 Make sure to have NATS installed. You can follow the [installation guide](https://docs.nats.io/running-a-nats-service/introduction/installation). Run the NATS server with the config located in `config/nats-server.conf` to enable the jetstream storage:
@@ -29,6 +37,15 @@ Copy the `.env.example` file to `.env` and update the values as needed.
 
 ```shell
 cp .env.example .env
+```
+
+> [!IMPORTANT] 
+> Make sure to update the envs to your local setup! Particularly the OPENAI_API_KEY.
+
+
+```conf
+# Replace in .env
+OPENAI_APIKEY=<your-key>
 ```
 
 ## Running the Application

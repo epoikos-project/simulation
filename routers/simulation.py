@@ -70,7 +70,7 @@ async def replay(simulation_id: str, broker: Nats):
 
     # Pull messages from the stream in batches as needed
     sub = await js.pull_subscribe(
-        subject=f"simulation.{simulation_id}.*", stream=f"simulation-{simulation_id}"
+        subject=f"simulation.{simulation_id}.>", stream=f"simulation-{simulation_id}"
     )
     messages_retrieved = 0
     batch_size = 10  # Adjust the batch size as needed
@@ -91,7 +91,9 @@ async def replay(simulation_id: str, broker: Nats):
                     ),
                     message=msg.data.decode(),
                 )
-                logger.debug(f"[REPLAY {simulation_id}] - Message: {msg.data.decode()}")
+                logger.debug(
+                    f"[REPLAY {simulation_id} | {msg.subject}] - Message: {msg.data.decode()}"
+                )
                 await msg.ack()
                 messages_retrieved += 1  # Increment the counter of retrieved messages
 

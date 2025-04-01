@@ -1,24 +1,34 @@
+import json
+from autogen_agentchat.messages import ModelClientStreamingChunkEvent
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from tinydb import Query
 
 import clients
-from models.agent import Agent
 from clients import Nats
+from models.agent import Agent
 
 router = APIRouter(prefix="/simulation/{simulation_id}/agent", tags=["Agent"])
 
 
 @router.post("")
 async def create_agent(
-    simulation_id: str, broker: Nats, db: clients.DB, milvus: clients.Milvus
+    simulation_id: str, name: str, broker: Nats, db: clients.DB, milvus: clients.Milvus
 ):
     """Create an agent in the simulation"""
     agent = Agent(milvus=milvus, db=db, simulation_id=simulation_id)
+    agent.name = name
     agent.create()
     await broker.publish(
         f"Agent {agent.id} created", f"simulation.{simulation_id}.agent"
     )
-    return {"message": f"Agent {agent.id} created successfully!"}
+    return {
+        "id": agent.id,
+        "collection_name": agent.collection_name,
+        "simulation_id": simulation_id,
+        "name": agent.name,
+        "model": agent.model,
+    }
 
 
 @router.get("/{id}")
@@ -37,3 +47,37 @@ async def list_agents(simulation_id: str, db: clients.DB):
     table = db.table("agents")
     agents = table.search(Query().simulation_id == simulation_id)
     return agents
+
+
+@router.post("/{agent_id}/chat")
+async def chat_with_agent(
+    simulation_id: str,
+    agent_id: str,
+    msg: str,
+    db: clients.DB,
+    milvus: clients.Milvus,
+    broker: Nats,
+):
+
+    agent = Agent(
+        id=agent_id,
+        milvus=milvus,
+        db=db,
+        simulation_id=simulation_id,
+    )
+
+    agent.load()
+
+    await broker.publish(
+        message=json.dumps({"content": msg, "type": "human_chat"}),
+        subject=f"simulation.{simulation_id}.agent.{agent_id}",
+    )
+
+    response = await agent.llm.run(task=msg)
+
+    content = response.messages[-1].content
+    await broker.publish(
+        message=json.dumps({"content": content, "type": "agent_chat"}),
+        subject=f"simulation.{simulation_id}.agent.{agent_id}",
+    )
+    return {"content": content}
