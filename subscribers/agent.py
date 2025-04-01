@@ -8,10 +8,10 @@ router = NatsRouter(settings.nats.url, logger=None, include_in_schema=False)
 
 
 @router.subscriber(
-    "simulation.*.world.>",
+    "simulation.*.agent.>",
 )
 @router.subscriber(
-    "simulation.*.world",
+    "simulation.*.agent",
 )
-async def subscribe_to_world_messages(m: str):
+async def subscribe_to_agent_messages(m: str):
     logger.debug(json.loads(m))

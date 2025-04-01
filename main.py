@@ -35,3 +35,4 @@ app.include_router(routers.debug.router)
 
 # Include subscribers
 app.include_router(subscribers.world.router)
+app.include_router(subscribers.agent.router)

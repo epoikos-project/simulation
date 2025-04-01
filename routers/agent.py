@@ -1,3 +1,4 @@
+import json
 from autogen_agentchat.messages import ModelClientStreamingChunkEvent
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -38,9 +39,14 @@ async def list_agents(simulation_id: str, db: clients.DB):
     return agents
 
 
-@router.get("/{agent_id}/chat")
-async def test_agent(
-    simulation_id: str, agent_id: str, msg: str, db: clients.DB, milvus: clients.Milvus
+@router.post("/{agent_id}/chat")
+async def chat_with_agent(
+    simulation_id: str,
+    agent_id: str,
+    msg: str,
+    db: clients.DB,
+    milvus: clients.Milvus,
+    broker: Nats,
 ):
 
     agent = Agent(
@@ -52,9 +58,16 @@ async def test_agent(
 
     agent.load()
 
-    async def response_stream():
-        async for response in agent.llm.run_stream(task=msg):
-            if isinstance(response, ModelClientStreamingChunkEvent):
-                yield response.content
+    await broker.publish(
+        message=json.dumps({"content": msg, "type": "human_chat"}),
+        subject=f"simulation.{simulation_id}.agent.{agent_id}",
+    )
 
-    return StreamingResponse(response_stream(), media_type="text/event-stream")
+    response = await agent.llm.run(task=msg)
+
+    content = response.messages[-1].content
+    await broker.publish(
+        message=json.dumps({"content": content, "type": "agent_chat"}),
+        subject=f"simulation.{simulation_id}.agent.{agent_id}",
+    )
+    return {"content": content}

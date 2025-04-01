@@ -28,7 +28,7 @@ class Simulation:
     async def _create_stream(self):
         await self._nats.stream.add_stream(
             StreamConfig(
-                name=f"simulation-{self.id}", subjects=[f"simulation.{self.id}.*"]
+                name=f"simulation-{self.id}", subjects=[f"simulation.{self.id}.>"]
             )
         )
         self._db.table("simulations").insert({"id": self.id})
