@@ -5,6 +5,7 @@ from loguru import logger
 from tinydb import Query
 from clients import Nats, Milvus, DB
 from models.simulation import Simulation
+from services.orchestrator import Orchestrator
 
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
 
@@ -106,3 +107,13 @@ async def replay(simulation_id: str, broker: Nats):
             continue  # Retry fetching messages in case of timeout
 
     return {"status": "Replay completed"}
+
+@router.post("/start")
+async def start_simulation():
+    message = orchestrator.start_simulation()
+    return {"status": message}
+
+@router.post("/stop")
+async def stop_simulation():
+    message = orchestrator.stop_simulation()
+    return {"status": message}
