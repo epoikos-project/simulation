@@ -6,6 +6,7 @@ from tinydb import TinyDB
 from tinydb.queries import Query
 from config.base import settings
 from models.agent import Agent
+from models.world import World
 
 
 class Simulation:
@@ -39,6 +40,11 @@ class Simulation:
         table.remove(Query()["id"] == self.id)
 
         await self._nats.stream.delete_stream(f"simulation-{self.id}")
+        
+        world_rows = self._db.table(settings.tinydb.tables.world).search(Query().simulation_id == self.id)
+        for row in world_rows:
+            world = World(db=self._db, nats=self._nats, id=row["id"])
+            world.delete()
 
         agent_rows = self._db.table("agents").search(Query().simulation_id == self.id)
         self._db.table("simulations").remove(Query()["id"] == self.id)
@@ -47,6 +53,8 @@ class Simulation:
                 milvus=milvus, db=self._db, simulation_id=self.id, id=row["id"]
             )
             agent.delete()
+
+
 
     async def create(self):
         logger.info(f"Creating Simulation {self.id}")
