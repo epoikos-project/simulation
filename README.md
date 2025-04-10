@@ -80,6 +80,10 @@ Once the application is running, you can access the API documentation is availab
 │   ├── milvus
 │   └── tinydb
 ├── main.py
+├── messages
+│   ├── agent
+│   ├── world
+│   └── message_base.py
 ├── models
 │   ├── agent.py
 │   └── simulation.py
@@ -99,6 +103,7 @@ Once the application is running, you can access the API documentation is availab
   - `tinydb.py`: Contains the TinyDB client.
 - `config/`: Contains the configuration files. It uses [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) to manage the settings. 
 - `data/`: The data directory will only be created once the application is running. It contains the data storage for the application.
+- `messages/`: This folder is used for an aligned message protocol to be used on the EventStream. It uses [pydantic](https://docs.pydantic.dev/latest/) to define the messages. You can read more about messages in the [Messages README](messages/README.md).
 - `models/`: Contains the logic of our entities in the application. Mainly
   - `agent.py`: Contains the Agent model.
   - `simulation.py`: Contains the Simulation model.
