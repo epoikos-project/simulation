@@ -97,7 +97,7 @@ Once the application is running, you can access the API documentation is availab
 └── uv.lock
 ```
 
-- `clients/`: Contains the clients for the different services used in the application in our case
+- `clients/`: Contains the clients for the different services used in the application; in our case, there are three clients. For more details, see the [Clients README](clients/README.md).
   - `milvus.py`: Contains the Milvus client.
   - `nats.py`: Contains the NATS client.
   - `tinydb.py`: Contains the TinyDB client.
