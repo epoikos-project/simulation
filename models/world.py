@@ -1,11 +1,11 @@
 import uuid
-import json
 
 from faststream.nats import NatsBroker
 from loguru import logger
 from tinydb import Query, TinyDB
 
 from config.base import settings
+from messages.world import WorldCreatedMessage
 
 
 class World:
@@ -35,9 +35,16 @@ class World:
             }
         )
 
+        world_created_message = WorldCreatedMessage(
+            id=self.id,
+            simulation_id=simulation_id,
+            size=size,
+        )
+
+        # Publish the world created message to NATS
         await self._nats.publish(
-            json.dumps({"type": "created", "message": f"World {self.id} created"}),
-            f"simulation.{simulation_id}.world",
+            world_created_message.model_dump_json(),
+            world_created_message.get_channel_name(),
         )
 
     def delete(self):

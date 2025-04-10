@@ -7,15 +7,20 @@ from pymilvus import MilvusClient
 from tinydb import TinyDB
 from tinydb.queries import Query
 
+from clients.nats import Nats
 from config.base import settings
 from config.openai import AvailableModels, ModelEntry
 
+from messages.agent import AgentCreatedMessage
+
 
 class Agent:
+
     def __init__(
         self,
         milvus: MilvusClient,
         db: TinyDB,
+        nats: Nats,
         simulation_id: str,
         model: ModelEntry = AvailableModels.get("llama-3.3-70b-instruct"),
         id: str = None,
@@ -32,6 +37,7 @@ class Agent:
 
         self._milvus = milvus
         self._db = db
+        self._nats = nats
         self.simulation_id = simulation_id
 
         self.collection_name = f"agent_{self.id}"
@@ -72,7 +78,7 @@ class Agent:
     def _load_from_db(self):
         table = self._db.table(settings.tinydb.tables.agent_table)
         agent = table.search(Query()["id"] == self.id)
-        
+
         if not agent:
             raise ValueError(f"Agent with id {self.id} not found in database.")
         return agent[0]
@@ -97,7 +103,20 @@ class Agent:
         table.remove(Query()["id"] == self.id)
         self._milvus.drop_collection(self.collection_name)
 
-    def create(self):
+    async def create(self):
         logger.info(f"Creating agent {self.id}")
+
+        agent_created_message = AgentCreatedMessage(
+            id=self.id,
+            name=self.name,
+            simulation_id=self.simulation_id,
+        )
+
+        # Publish the agent created message to NATS
+        await self._nats.publish(
+            agent_created_message.model_dump_json(),
+            agent_created_message.get_channel_name(),
+        )
+
         self._create_collection()
         self._create_in_db()
