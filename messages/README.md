@@ -20,7 +20,7 @@ class AgentCreatedMessage(MessageBase):
         return f"simulation.{self.simulation_id}.agent.{self.id}.created"
 ```
 
-This message class inherits from `MessageBase`, which is a base class for all messages and must override the `get_channel_name` method to return the channel name for the message. It further specifies base attributes like `ìd` and `simulation_id` that are common to all messages. 
+This message class inherits from `MessageBase`, which is a base class for all messages and must override the `get_channel_name` method to return the channel name for the message. It further specifies base attributes like `id` and `simulation_id` that are common to all messages. 
 
 
 ## Publishing Messages
