@@ -20,11 +20,7 @@ class Simulation:
         self.id = id
         self._db = db
         self._nats = nats
-        self._tick_counter = (
-            db.table(settings.tinydb.tables.simulation_table)
-            .get(Query()["id"] == self.id)
-            .get("tick", 0)
-        )
+        self._tick_counter = self._initialize_tick_counter()
         self._runner = SimulationRunner()
         self._runner.set_simulation(self)
 
@@ -35,6 +31,14 @@ class Simulation:
 
     def get_nats(self) -> NatsBroker:
         return self._nats
+
+    def _initialize_tick_counter(self):
+        sim = self._db.table(settings.tinydb.tables.simulation_table).get(
+            Query()["id"] == self.id
+        )
+        if sim is None:
+            return 0
+        return sim.get("tick", 0)
 
     def _create_in_db(self):
         table = self._db.table(settings.tinydb.tables.simulation_table)
