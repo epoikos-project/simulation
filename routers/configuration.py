@@ -2,8 +2,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 from clients import DB  # This is your dependency providing a TinyDB instance
-from models.configuration import Configuration,ConfigurationData
-
+from models.configuration import Configuration, ConfigurationData
 router = APIRouter(prefix="/configuration", tags=["Configuration"])
 
 @router.post("")
