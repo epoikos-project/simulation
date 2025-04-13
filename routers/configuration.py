@@ -13,9 +13,11 @@ async def save_configuration(
 ):
     """
     Save or update a configuration based on its name.
+    The payload must include a non-empty agents array.
     """
     config_model = Configuration(db)
     try:
+        # The config.dict() should contain id, name, agents and settings.
         config_model.save(config.dict())
     except Exception as e:
         logger.error(f"Error saving configuration: {e}")
@@ -41,7 +43,7 @@ async def get_all_configurations(
     db: TinyDB = Depends(get_client)
 ):
     """
-    Retrieve all available configurations.
+    Retrieve all configurations.
     """
     table = db.table("configurations")
     return table.all()

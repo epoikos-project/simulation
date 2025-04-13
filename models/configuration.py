@@ -12,9 +12,7 @@ class ConfigurationData(BaseModel):
 
 class Configuration:
     def __init__(self, db: TinyDB) -> None:
-        """
-        Initialize with a TinyDB instance.
-        """
+        """Initialize with a TinyDB instance."""
         self._db = db
         self._table_name = "configurations"
 
@@ -56,10 +54,8 @@ class Configuration:
         Delete a configuration record by its name (case-insensitive).
         """
         table = self._db.table(self._table_name)
-        to_remove = []
-        for document in table.all():
-            if document.get("name", "").lower() == name.lower():
-                to_remove.append(document.doc_id)
+        to_remove = [document.doc_id for document in table.all()
+                     if document.get("name", "").lower() == name.lower()]
         if to_remove:
             table.remove(doc_ids=to_remove)
             logger.info(f"Configuration '{name}' deleted successfully.")
