@@ -1,63 +1,65 @@
 from tinydb import TinyDB, Query
 from loguru import logger
-from typing import Optional, Dict
-
-from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import Optional, Dict, Any, cast, List
+import uuid
+from pydantic import BaseModel, Field
 
 class ConfigurationData(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
     agents: List[Dict[str, Any]]
-    settings: Dict[str, Any]
-    # Add additional fields as needed.
+    settings: Dict[str, Any] = {}
 
 class Configuration:
     def __init__(self, db: TinyDB) -> None:
         """
         Initialize with a TinyDB instance.
-        
-        Args:
-            db (TinyDB): The TinyDB instance.
         """
         self._db = db
-        # You can retrieve the configuration table name from settings, e.g.:
-        # self._table_name = settings.tinydb.tables.configuration_table
-        # For simplicity, we'll use a hardcoded table name:
         self._table_name = "configurations"
 
-    def save(self, config: Dict) -> None:
+    def save(self, config: Dict[str, Any]) -> None:
         """
-        Save or update the configuration JSON.
-        
-        This method removes any existing configuration before inserting
-        the new one, assuming you have a single configuration record.
-        
-        Args:
-            config (dict): The configuration data to save.
+        Save or update the configuration record.
+        If a configuration with the given name (case-insensitive) exists, update it;
+        otherwise, insert a new configuration.
         """
+        name = config.get("name")
+        if not name:
+            raise ValueError("Configuration must have a name")
         table = self._db.table(self._table_name)
-        # If only one configuration should exist, clear any old records
-        table.truncate()
-        table.insert(config)
-        logger.info("Configuration saved successfully.")
+        q = Query()
+        existing = None
+        for document in table.all():
+            if document.get("name", "").lower() == name.lower():
+                existing = document
+                break
+        if existing:
+            table.update(config, doc_ids=[existing.doc_id])
+            logger.info(f"Configuration '{name}' updated successfully.")
+        else:
+            table.insert(config)
+            logger.info(f"Configuration '{name}' saved successfully.")
 
-    def get(self) -> Optional[Dict]:
+    def get(self, name: str) -> Optional[Dict[str, Any]]:
         """
-        Retrieve the configuration JSON from the database.
-        
-        Returns:
-            dict or None: The configuration if found; otherwise, None.
+        Retrieve a configuration record by its name (case-insensitive).
         """
         table = self._db.table(self._table_name)
-        results = table.all()
-        if results:
-            # Assume only one configuration exists.
-            return results[0]
+        for document in table.all():
+            if document.get("name", "").lower() == name.lower():
+                return document
         return None
 
-    def delete(self) -> None:
+    def delete(self, name: str) -> None:
         """
-        Delete the configuration from the database.
+        Delete a configuration record by its name (case-insensitive).
         """
         table = self._db.table(self._table_name)
-        table.truncate()
-        logger.info("Configuration deleted successfully.")
+        to_remove = []
+        for document in table.all():
+            if document.get("name", "").lower() == name.lower():
+                to_remove.append(document.doc_id)
+        if to_remove:
+            table.remove(doc_ids=to_remove)
+            logger.info(f"Configuration '{name}' deleted successfully.")
