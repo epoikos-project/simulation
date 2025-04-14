@@ -50,3 +50,7 @@ app.include_router(routers.configuration.router)
 # Include subscribers
 app.include_router(subscribers.world.router)
 app.include_router(subscribers.agent.router)
+
+from routers import agent, conversation
+app.include_router(agent.router)
+app.include_router(conversation.router)

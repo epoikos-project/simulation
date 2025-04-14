@@ -59,6 +59,7 @@ async def chat_with_agent(
         milvus=milvus,
         db=db,
         simulation_id=simulation_id,
+        nats=broker,
     )
 
     agent.load()
