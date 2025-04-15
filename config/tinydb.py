@@ -7,6 +7,7 @@ class TableSettings(BaseSettings):
     world: str = "world"
     region_table: str = "regions"
     resource_table: str = "resources"
+    configuration_table: str = "configurations"
 
 
 class TinyDBSettings(BaseSettings):
