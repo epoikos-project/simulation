@@ -1,7 +1,5 @@
 import json
-from autogen_agentchat.messages import ModelClientStreamingChunkEvent
 from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
 from tinydb import Query
 
 import clients
@@ -16,12 +14,9 @@ async def create_agent(
     simulation_id: str, name: str, broker: Nats, db: clients.DB, milvus: clients.Milvus
 ):
     """Create an agent in the simulation"""
-    agent = Agent(milvus=milvus, db=db, simulation_id=simulation_id)
+    agent = Agent(milvus=milvus, db=db, simulation_id=simulation_id, nats=broker)
     agent.name = name
-    agent.create()
-    await broker.publish(
-        f"Agent {agent.id} created", f"simulation.{simulation_id}.agent"
-    )
+    await agent.create()
     return {
         "id": agent.id,
         "collection_name": agent.collection_name,
