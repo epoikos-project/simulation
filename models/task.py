@@ -41,7 +41,7 @@ class Task:
             "plan_id": self.plan_id,
             "target": self.target,
             "payoff": self.payoff,
-            "status": self.status,
+            "status": self.status.value,
             "worker": self.worker,
         }
 
