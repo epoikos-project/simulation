@@ -3,6 +3,7 @@ from .world import router as world_router
 from .agent import router as agent_router
 from .debug import router as debug_router
 from .configuration import router as configuration_router
+from .conversation import router as conversation_router
 from .plan import router as plan_router
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     "agent_router",
     "debug_router",
     "configuration_router",
+    "conversation_router",
     "plan_router",
 ]

@@ -56,7 +56,6 @@ class Simulation:
                 name=f"simulation-{self.id}", subjects=[f"simulation.{self.id}.>"]
             )
         )
-        self._db.table("simulations").insert({"id": self.id})
 
     async def delete(self, milvus: MilvusClient):
         logger.info(f"Deleting Simulation {self.id}")
@@ -76,7 +75,11 @@ class Simulation:
         self._db.table("simulations").remove(Query()["id"] == self.id)
         for row in agent_rows:
             agent = Agent(
-                milvus=milvus, db=self._db, simulation_id=self.id, id=row["id"]
+                milvus=milvus,
+                db=self._db,
+                simulation_id=self.id,
+                id=row["id"],
+                nats=self._nats,
             )
             agent.delete()
 
