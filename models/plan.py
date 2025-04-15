@@ -4,12 +4,13 @@ from loguru import logger
 from tinydb import TinyDB
 from config.base import settings
 from clients.nats import NatsBroker
+from clients import Nats, DB
 from tinydb import Query
 
 
 class Plan:
     def __init__(self, db: TinyDB, nats: NatsBroker, id: str, simulation_id: str):
-        if id is None:
+        if id is None or "":
             self.id = uuid.uuid4().hex
         else:
             self.id = id
@@ -51,7 +52,7 @@ class Plan:
         total_payoff = sum(task["payoff"] for task in tasks)
         return total_payoff
 
-    async def create(self):
+    def create(self):
         logger.info(f"Creating plan {self.id}")
         self._save_to_db()
 
@@ -87,3 +88,28 @@ class Plan:
         """Pass ownership of the plan to a new agent."""
         self.owner = agent_id
         self._save_to_db()
+
+
+def get_plan(db: DB, nats: Nats, plan_id: str, simulation_id: str) -> Plan:
+    plan_table = db.table(settings.tinydb.tables.plan_table)
+    query = (Query().id == plan_id) & (Query().simulation_id == simulation_id)
+    plan_data = plan_table.get(query)
+
+    if isinstance(plan_data, list):
+        if not plan_data:
+            plan_data = None
+        else:
+            plan_data = plan_data[0]
+
+    if plan_data is None:
+        raise ValueError("Plan not found")
+
+    plan = Plan(
+        db=db, nats=nats, id=plan_data["id"], simulation_id=plan_data["simulation_id"]
+    )
+    plan.owner = plan_data.get("owner")
+    plan.participants = plan_data.get("participants", [])
+    plan.tasks = plan_data.get("tasks", [])
+    plan.goal = plan_data.get("goal")
+
+    return plan
