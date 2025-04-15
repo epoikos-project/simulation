@@ -121,7 +121,7 @@ async def remove_participant(
 # Otherwise they could exist independently.
 
 
-@router.get("/{plan_id}/task/{task_id}")
+@router.get("/{plan_id}/tasks")
 async def get_tasks(plan_id: str, db: DB):
     """Get all tasks in a plan"""
     table = db.table(settings.tinydb.tables.task_table)

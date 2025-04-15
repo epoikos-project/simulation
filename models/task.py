@@ -19,7 +19,7 @@ class TaskStatus(Enum):
 
 class Task:
     def __init__(self, id: str, db: TinyDB, nats: NatsBroker, plan_id: str):
-        if id is None or "":
+        if not id:
             self.id = uuid.uuid4().hex
         else:
             self.id = id

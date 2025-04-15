@@ -10,7 +10,7 @@ from tinydb import Query
 
 class Plan:
     def __init__(self, db: TinyDB, nats: NatsBroker, id: str, simulation_id: str):
-        if id is None or "":
+        if not id:
             self.id = uuid.uuid4().hex
         else:
             self.id = id
