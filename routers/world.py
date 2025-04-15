@@ -2,6 +2,7 @@ import json
 from fastapi import APIRouter
 from pydantic import BaseModel
 from tinydb import Query
+import logging
 
 from clients import Nats
 from clients.tinydb import DB
@@ -52,7 +53,8 @@ async def create_world(
             total_resources=create_world_input.total_resources,
         )
     except Exception as e:
-        return {"message": f"Error creating world: {str(e)}"}
+        logging.error(f"Error creating world: {str(e)}")
+        return {"message": "An internal error has occurred while creating the world."}
 
     return {
         "message": f"""World created for simulation {simulation_id} of size 
