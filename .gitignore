@@ -12,3 +12,6 @@ wheels/
 .env
 
 data
+
+nats-server 
+.DS_Store
