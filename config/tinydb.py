@@ -8,6 +8,8 @@ class TableSettings(BaseSettings):
     region_table: str = "regions"
     resource_table: str = "resources"
     configuration_table: str = "configurations"
+    plan_table: str = "plans"
+    task_table: str = "tasks"
 
 
 class TinyDBSettings(BaseSettings):
