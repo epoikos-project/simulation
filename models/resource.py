@@ -38,12 +38,12 @@ class Resource:
     ):
         """Create a resource for a given region"""
 
-        table = self._db.table(settings.tinydb.tables.region)
+        table = self._db.table(settings.tinydb.tables.resource_table)
         table.insert(
             {
                 "id": self.id,
                 "region_id": self.region_id,
-                # "world_id": world_id,
+                "world_id": world_id,
                 # "simulation_id": simulation_id,
                 "x_coord": coords[0],
                 "y_coord": coords[1],

@@ -44,7 +44,7 @@ class World:
         # Divide the world into regions
         regions = self._divide_grid_into_regions(size, num_regions)
 
-        # Create regions in the database
+        # Create regions
         for r in regions:
             region = Region(
                 world_id=self.id,
@@ -69,10 +69,15 @@ class World:
             f"simulation.{simulation_id}.world",
         )
 
+    # Delete world and all its regions and resources
     def delete(self):
         logger.info(f"Deleting world {self.id}")
-        table = self._db.table(settings.tinydb.tables.world)
-        table.remove(Query()["id"] == self.id)
+        table_world = self._db.table(settings.tinydb.tables.world)
+        table_regions = self._db.table(settings.tinydb.tables.region_table)
+        table_resources = self._db.table(settings.tinydb.tables.resource_table)
+        table_world.remove(Query()["id"] == self.id)
+        table_regions.remove(Query()["world_id"] == self.id)
+        table_resources.remove(Query()["world_id"] == self.id)
 
     def _divide_grid_into_regions(
         self, size: tuple[int, int], num_regions: int, min_region_size: int = 3

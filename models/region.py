@@ -27,6 +27,17 @@ class Region:
         self._db = db
         self._nats = nats
 
+    def _create_in_db(self, simulation_id: str):
+        """Create a region in the database"""
+        table = self._db.table(settings.tinydb.tables.region)
+        table.insert(
+            {
+                "id": self.id,
+                "world_id": self.world_id,
+                "simulation_id": simulation_id,
+            }
+        )
+
     async def create(
         self,
         simulation_id: str,
@@ -41,7 +52,7 @@ class Region:
     ):
         """Create a region in the simulation"""
 
-        table = self._db.table(settings.tinydb.tables.region)
+        table = self._db.table(settings.tinydb.tables.region_table)
         table.insert(
             {
                 "id": self.id,
@@ -110,3 +121,9 @@ class Region:
             coords.add((x, y))  # Add to the set to avoid duplicates
 
         return list(coords)  # Convert back to a list for the return value
+
+    def get_resources(self):
+        """Get all resources in the region"""
+        table = self._db.table(settings.tinydb.tables.resource_table)
+        resources = table.search(Query()["region_id"] == self.id)
+        return resources
