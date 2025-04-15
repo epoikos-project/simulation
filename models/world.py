@@ -8,6 +8,7 @@ from models.region import Region
 from tinydb import Query, TinyDB
 
 from config.base import settings
+from messages.world import WorldCreatedMessage
 
 
 class World:
@@ -31,7 +32,14 @@ class World:
     ):
         """Create a world in the simulation"""
 
-        table = self._db.table(settings.tinydb.tables.world)
+        # Check if a world already exists for given simulation
+        table = self._db.table(settings.tinydb.tables.world_table)
+        if table.contains(Query()["simulation_id"] == simulation_id):
+            raise ValueError(
+                f"Cannot create world. A world already exists for simulation {simulation_id}."
+            )
+
+        logger.info(f"Creating world {self.id} for simulation {simulation_id}")
         table.insert(
             {
                 "simulation_id": simulation_id,
@@ -59,20 +67,15 @@ class World:
                 resource_regen=10,
             )
 
-        await self._nats.publish(
-            json.dumps(
-                {
-                    "type": "created",
-                    "message": f"World {self.id} created with {num_regions} regions",
-                }
-            ),
-            f"simulation.{simulation_id}.world",
+        world_create_message = WorldCreatedMessage(
+            id=self.id, simulation_id=simulation_id, size=size
         )
+        await world_create_message.publish(self._nats)
 
     # Delete world and all its regions and resources
     def delete(self):
         logger.info(f"Deleting world {self.id}")
-        table_world = self._db.table(settings.tinydb.tables.world)
+        table_world = self._db.table(settings.tinydb.tables.world_table)
         table_regions = self._db.table(settings.tinydb.tables.region_table)
         table_resources = self._db.table(settings.tinydb.tables.resource_table)
         table_world.remove(Query()["id"] == self.id)

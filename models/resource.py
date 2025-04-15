@@ -44,7 +44,7 @@ class Resource:
                 "id": self.id,
                 "region_id": self.region_id,
                 "world_id": world_id,
-                # "simulation_id": simulation_id,
+                "simulation_id": simulation_id,
                 "x_coord": coords[0],
                 "y_coord": coords[1],
                 "energy_yield": energy_yield,
