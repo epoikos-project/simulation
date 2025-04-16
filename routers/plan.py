@@ -7,7 +7,6 @@ from tinydb import Query
 from models.plan import get_plan
 from models.task import Task, TaskStatus, get_task
 
-# TODO: add NATS stream
 
 router = APIRouter(prefix="/simulation/{simulation_id}/plan", tags=["Plan"])
 
@@ -38,34 +37,34 @@ async def create_plan(
     return {"message": "Plan created successfully!"}
 
 
-@router.get("/{plan_id}")
-async def get_plan_data(simulation_id: str, plan_id: str, db: DB, nats: Nats):
-    """Get a plan by ID"""
-    try:
-        plan = get_plan(db, nats, plan_id, simulation_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    return plan._get_plan_dict()
+# @router.get("/{plan_id}")
+# async def get_plan_data(simulation_id: str, plan_id: str, db: DB, nats: Nats):
+#     """Get a plan by ID"""
+#     try:
+#         plan = get_plan(db, nats, plan_id, simulation_id)
+#     except ValueError as e:
+#         raise HTTPException(status_code=404, detail=str(e))
+#     return plan._get_plan_dict()
 
 
-@router.get("")
-async def list_plans(simulation_id: str, db: DB):
-    """List all plans in the simulation"""
-    table = db.table(settings.tinydb.tables.plan_table)
-    plans = table.search(Query().simulation_id == simulation_id)
-    return plans
+# @router.get("")
+# async def list_plans(simulation_id: str, db: DB):
+#     """List all plans in the simulation"""
+#     table = db.table(settings.tinydb.tables.plan_table)
+#     plans = table.search(Query().simulation_id == simulation_id)
+#     return plans
 
 
-@router.delete("/{plan_id}")
-async def delete_plan(simulation_id: str, plan_id: str, db: DB):
-    """Delete a plan by ID"""
-    table = db.table(settings.tinydb.tables.plan_table)
-    query = (Query().id == plan_id) & (Query().simulation_id == simulation_id)
-    plan = table.get(query)
-    if plan is None:
-        return {"message": "Plan not found"}
-    table.remove(query)
-    return {"message": "Plan deleted successfully!"}
+# @router.delete("/{plan_id}")
+# async def delete_plan(simulation_id: str, plan_id: str, db: DB):
+#     """Delete a plan by ID"""
+#     table = db.table(settings.tinydb.tables.plan_table)
+#     query = (Query().id == plan_id) & (Query().simulation_id == simulation_id)
+#     plan = table.get(query)
+#     if plan is None:
+#         return {"message": "Plan not found"}
+#     table.remove(query)
+#     return {"message": "Plan deleted successfully!"}
 
 
 @router.post("/{plan_id}/participant/{agent_id}/add")
@@ -112,17 +111,12 @@ async def remove_participant(
     return {"message": "Participant removed successfully"}
 
 
-# TODO: should task related endpoints have a separate router?
-# If tasks can not exist without a plan (which I would argue), then it might make sense to have them here.
-# Otherwise they could exist independently.
-
-
-@router.get("/{plan_id}/tasks")
-async def get_tasks(plan_id: str, db: DB):
-    """Get all tasks in a plan"""
-    table = db.table(settings.tinydb.tables.task_table)
-    tasks = table.search(Query().plan_id == plan_id)
-    return tasks
+# @router.get("/{plan_id}/tasks")
+# async def get_tasks(plan_id: str, db: DB):
+#     """Get all tasks in a plan"""
+#     table = db.table(settings.tinydb.tables.task_table)
+#     tasks = table.search(Query().plan_id == plan_id)
+#     return tasks
 
 
 @router.post("/{plan_id}/task/{task_id}/add")
@@ -160,16 +154,16 @@ async def add_task(
     return {"message": "Task added successfully"}
 
 
-@router.get("/{plan_id}/task/{task_id}")
-async def get_task_data(
-    simulation_id: str, plan_id: str, task_id: str, db: DB, nats: Nats
-):
-    """Get a task by ID"""
-    try:
-        task = get_task(db, nats, task_id, plan_id, simulation_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    return task._get_task_dict()  # TODO: return dict or object?
+# @router.get("/{plan_id}/task/{task_id}")
+# async def get_task_data(
+#     simulation_id: str, plan_id: str, task_id: str, db: DB, nats: Nats
+# ):
+#     """Get a task by ID"""
+#     try:
+#         task = get_task(db, nats, task_id, plan_id, simulation_id)
+#     except ValueError as e:
+#         raise HTTPException(status_code=404, detail=str(e))
+#     return task._get_task_dict()
 
 
 @router.delete("/{plan_id}/task/{task_id}/remove")
@@ -224,14 +218,14 @@ async def assign_task(
     return {"message": "Task assigned successfully"}
 
 
-@router.get("/{plan_id}/task/{task_id}/target")
-async def get_task_target(
-    simulation_id: str, plan_id: str, task_id: str, db: DB, nats: Nats
-):
-    """Get the target of a task"""
-    try:
-        task = get_task(db, nats, task_id, plan_id, simulation_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+# @router.get("/{plan_id}/task/{task_id}/target")
+# async def get_task_target(
+#     simulation_id: str, plan_id: str, task_id: str, db: DB, nats: Nats
+# ):
+#     """Get the target of a task"""
+#     try:
+#         task = get_task(db, nats, task_id, plan_id, simulation_id)
+#     except ValueError as e:
+#         raise HTTPException(status_code=404, detail=str(e))
 
-    return {"target": task.get_target()}
+#     return {"target": task.get_target()}

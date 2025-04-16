@@ -3,7 +3,7 @@ import uuid
 from loguru import logger
 from tinydb import TinyDB
 from config.base import settings
-from clients.nats import NatsBroker
+from clients import Nats, DB
 from tinydb.queries import Query
 from enum import Enum
 from models.plan import get_plan
@@ -20,14 +20,14 @@ class TaskStatus(Enum):
 
 class Task:
     def __init__(
-        self, id: str, db: TinyDB, nats: NatsBroker, plan_id: str, simulation_id: str
+        self, id: str, db: TinyDB, nats: Nats, plan_id: str, simulation_id: str
     ):
         if not id:
             self.id = uuid.uuid4().hex
         else:
             self.id = id
         self._db: TinyDB = db
-        self._nats: NatsBroker = nats
+        self._nats: Nats = nats
         self.simulation_id: str = simulation_id
         self.plan_id: str = plan_id  # plan.id
         self.target: str | None = None  # resource.id
@@ -81,7 +81,9 @@ class Task:
         return self.target
 
 
-def get_task(db, nats, task_id: str, plan_id: str, simulation_id: str) -> Task:
+def get_task(
+    db: DB, nats: Nats, task_id: str, plan_id: str, simulation_id: str
+) -> Task:
     task_table = db.table(settings.tinydb.tables.task_table)
     task_data = task_table.get(
         (Query().id == task_id)
