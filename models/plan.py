@@ -19,7 +19,6 @@ class Plan:
         self._nats: NatsBroker = nats
         self.owner: str | None = None  # agent.id
         self.participants: list[str] = []  # [agent.id]
-        self.tasks: list[str] = []  # [task.id]
         self.goal: str | None = None
         self.total_payoff: int = self._calculate_expected_payoff()
 
@@ -32,7 +31,6 @@ class Plan:
             "simulation_id": self.simulation_id,
             "owner": self.owner,
             "participants": self.participants,
-            "tasks": self.tasks,
             "goal": self.goal,
             "total_expected_payoff": self._calculate_expected_payoff(),
         }
@@ -46,9 +44,8 @@ class Plan:
         """Return the total expected payoff for the plan."""
 
         tasks = self._db.table(settings.tinydb.tables.task_table).search(
-            Query().id.one_of(self.tasks)
+            Query().plan_id == self.id
         )
-        # tasks = [Task(**task) for task in tasks]
         total_payoff = sum(task["payoff"] for task in tasks)
         return total_payoff
 
@@ -56,22 +53,15 @@ class Plan:
         logger.info(f"Creating plan {self.id}")
         self._save_to_db()
 
-    def add_task(self, task_id: str):
-        """Add a task to the plan."""
-        self.tasks.append(task_id)
-        self._save_to_db()
-
-    def remove_task(self, task_id: str):
-        """Remove a task from the plan."""
-        if task_id in self.tasks:
-            self.tasks.remove(task_id)
-            self._save_to_db()
-        else:
-            logger.warning(f"Task {task_id} not found in plan {self.id}")
+    def delete(self):
+        logger.info(f"Deleting plan {self.id}")
+        table = self._db.table(settings.tinydb.tables.plan_table)
+        table.remove(Query().id == self.id)
 
     def add_participant(self, agent_id: str):
         """Add a participant to the plan."""
         self.participants.append(agent_id)
+        self._save_to_db()
 
     def remove_participant(self, agent_id):
         """Remove a participant from the plan."""
@@ -88,6 +78,31 @@ class Plan:
         """Pass ownership of the plan to a new agent."""
         self.owner = agent_id
         self._save_to_db()
+
+    def get_tasks(self) -> list[str]:
+        """Get the tasks of the plan."""
+        tasks = self._db.table(settings.tinydb.tables.task_table).search(
+            Query().plan_id == self.id
+        )
+        return [task["id"] for task in tasks]
+
+    def get_unassigned_agents(self) -> list[str]:
+        """Get the agents that are not assigned to any task of the plan."""
+        tasks = self._db.table(settings.tinydb.tables.task_table).search(
+            Query().plan_id == self.id
+        )
+        assigned_agents = {task["worker"] for task in tasks if task["worker"]}
+        all_agents = set(self.participants)
+        unassigned_agents = list(all_agents - assigned_agents)
+        return unassigned_agents
+
+    def get_unassigned_tasks(self) -> list[str]:
+        """Get the tasks of the plan that are not assigned to any agent."""
+        tasks = self._db.table(settings.tinydb.tables.task_table).search(
+            Query().plan_id == self.id
+        )
+        unassigned_tasks = [task["id"] for task in tasks if not task["worker"]]
+        return unassigned_tasks
 
 
 def get_plan(db: DB, nats: Nats, plan_id: str, simulation_id: str) -> Plan:
@@ -109,7 +124,6 @@ def get_plan(db: DB, nats: Nats, plan_id: str, simulation_id: str) -> Plan:
     )
     plan.owner = plan_data.get("owner")
     plan.participants = plan_data.get("participants", [])
-    plan.tasks = plan_data.get("tasks", [])
     plan.goal = plan_data.get("goal")
 
     return plan
