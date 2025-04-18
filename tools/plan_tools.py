@@ -1,4 +1,5 @@
 import uuid
+from langfuse.decorators import observe
 from loguru import logger
 from typing import Annotated
 from models.plan import Plan, get_plan
@@ -11,6 +12,7 @@ from models.task import Task, get_task
 # This is done to reduce the amount of information the LLM needs to generate and thereby keep the tool calls simple.
 # Make sure to always include the `agent_id` and `simulation_id` arguments in your function signature even if you don't use them in the function body.
 # If there is need to inject more arguments, we can consider to further refactor the code.
+@observe()
 async def make_plan(
     goal: Annotated[
         str,
@@ -46,7 +48,7 @@ async def make_plan(
     except Exception as e:
         logger.error(f"Error creating plan: {e}")
 
-
+@observe()
 async def add_task(
     target: Annotated[str, "The ID of the resource to be acquired by the task."],
     payoff: Annotated[int, "The expected payoff of the task."],
@@ -82,7 +84,7 @@ async def add_task(
     except Exception as e:
         logger.error(f"Error creating task: {e}")
 
-
+@observe()
 async def take_on_task(
     task_id: Annotated[str, "The ID of the task to you will work on."],
     agent_id: str,

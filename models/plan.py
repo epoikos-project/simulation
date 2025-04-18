@@ -60,8 +60,9 @@ class Plan:
 
     def add_participant(self, agent_id: str):
         """Add a participant to the plan."""
-        self.participants.append(agent_id)
-        self._save_to_db()
+        if agent_id not in self.participants:
+            self.participants.append(agent_id)
+            self._save_to_db()
 
     def remove_participant(self, agent_id):
         """Remove a participant from the plan."""

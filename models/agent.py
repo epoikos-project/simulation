@@ -3,15 +3,17 @@ import json
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_ext.models.openai import OpenAIChatCompletionClient
-from autogen_core import CancellationToken, TRACE_LOGGER_NAME
 from autogen_core.tools import BaseTool, FunctionTool
+from autogen_core import CancellationToken
 from pymilvus import MilvusClient
 from tinydb import TinyDB
 from tinydb.queries import Query
 
+from langfuse.decorators import observe, langfuse_context
+
 from clients.nats import Nats
 from config.base import settings
-from config.openai import AvailableModels, ModelEntry
+from config.openai import AvailableModels, ModelEntry, ModelName
 
 from messages.agent import AgentCreatedMessage
 from datetime import datetime
@@ -34,12 +36,7 @@ from models.context import (
 from models.prompting import SYSTEM_MESSAGE, DESCRIPTION
 from tools import available_tools
 
-import logging
-
-logging.basicConfig(level=logging.WARNING)
-logger = logging.getLogger(TRACE_LOGGER_NAME)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.DEBUG)
+from loguru import logger
 
 
 class Agent:
@@ -83,8 +80,8 @@ class Agent:
         # objective: str # could be some sort of description to guide the agents actions
         # personality: str # might want to use that later
 
-    def _initialize_llm(self, model: ModelEntry):
-        model = AvailableModels.get(model)
+    def _initialize_llm(self, model_name: ModelName):
+        model = AvailableModels.get(model_name)
         self._client = OpenAIChatCompletionClient(
             model=model.name,
             model_info=model.info,
@@ -95,7 +92,7 @@ class Agent:
         tools: List[BaseTool] = [self.make_bound_tool(tool) for tool in available_tools]
 
         self.autogen_agent = AssistantAgent(
-            name=f"{self.id}",
+            name=f"{self.name}",
             model_client=self._client,
             system_message=SYSTEM_MESSAGE,
             description=DESCRIPTION.format(
@@ -150,18 +147,25 @@ class Agent:
         return agent[0]
 
     def load(self):
-        logger.info(f"Loading agent {self.id}")
+        logger.debug(f"Loading agent {self.id}")
         try:
             result = self._load_from_db()
             self.collection_name = result["collection_name"]
             self.simulation_id = result["simulation_id"]
             self.name = result["name"]
             self.model = result["model"]
-            self._initialize_llm(self.model)
         except ValueError:
             logger.warning(
-                f"Agent {self.id} not found in database. Creating new agent."
+                f"Agent {self.id} not found in database"
             )
+            raise ValueError()
+
+        try:
+            self._initialize_llm(self.model)
+        except Exception as e:
+            logger.error(f"Error initializing LLM for agent {self.id}: {e}")
+            raise ValueError(f"Error initializing LLM for agent {self.id}: {e}")
+
         # could maybe also use autogen native functionalities to dump and load agents from database, but I guess this is fine
         # https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/serialize-components.html#agent-example
 
@@ -342,16 +346,23 @@ class Agent:
 
         return context_description
 
+    @observe(as_type="generation", name ="Agent Tick")
     async def trigger(self):
+        langfuse_context.update_current_trace(name=f"Agent Tick {self.name}", metadata={"agent_id": self.id})
+        langfuse_context.update_current_observation(model=self.model, name="Agent Call")
         context = self.get_context()
         # memory = self.get_memory() # TODO: if decided to implement here remove from get_context
         # self.autogen_agent.memory = memory
         # TODO: trigger any other required logic
-
+        logger.info(f"Ticking agent {self.id}")
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
-        # print(output)
+
+        langfuse_context.update_current_observation(usage_details={
+            "input_tokens": self._client.actual_usage().prompt_tokens,
+            "output_tokens": self._client.actual_usage().completion_tokens,
+        })
         return output
 
     #### === Turn-based communication -> TODO: consider to rework this! === ###
@@ -397,7 +408,7 @@ class Agent:
 
     def _format_conversation_for_llm(self, conversation):
         """Format the conversation history for the LLM"""
-        context = """You are in a conversation with another agent. Review the conversation history below and respond appropriately. 
+        context = """You are in a conversation with another agent. Review the conversation history below and respond appropriately.
         Your response should be to the point and concise \n\n"""
 
         for msg in conversation["messages"]:
