@@ -1,8 +1,10 @@
 import uuid
+import json
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_ext.models.openai import OpenAIChatCompletionClient
-from loguru import logger
+from autogen_core import CancellationToken, TRACE_LOGGER_NAME
+from autogen_core.tools import BaseTool, FunctionTool
 from pymilvus import MilvusClient
 from tinydb import TinyDB
 from tinydb.queries import Query
@@ -13,10 +15,34 @@ from config.openai import AvailableModels, ModelEntry
 
 from messages.agent import AgentCreatedMessage
 from datetime import datetime
+from typing import cast, Callable, List
+from functools import partial
+
+from models.plan import get_plan
+from models.task import get_task
+from models.context import (
+    Observation,
+    AgentObservation,
+    ResourceObservation,
+    ObstacleObservation,
+    # OtherObservation,
+    Message,
+    ObservationType,
+    PlanContext,
+    TaskContext,
+)
+from models.prompting import SYSTEM_MESSAGE, DESCRIPTION
+from tools import available_tools
+
+import logging
+
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(TRACE_LOGGER_NAME)
+logger.addHandler(logging.StreamHandler())
+logger.setLevel(logging.DEBUG)
 
 
 class Agent:
-
     def __init__(
         self,
         milvus: MilvusClient,
@@ -24,16 +50,18 @@ class Agent:
         nats: Nats,
         simulation_id: str,
         model: ModelEntry = AvailableModels.get("llama-3.3-70b-instruct"),
-        id: str = None,
+        id: str | None = None,
     ):
         if id is None:
             self.id = uuid.uuid4().hex
         else:
             self.id = id
 
-        self.name = None
-        self._client: OpenAIChatCompletionClient = None
-        self.llm: AssistantAgent = None
+        self.name: str = cast(str, None)
+        self._client: OpenAIChatCompletionClient = cast(
+            OpenAIChatCompletionClient, None
+        )
+        self.autogen_agent: AssistantAgent = cast(AssistantAgent, None)
         self.model = model.name
 
         self._milvus = milvus
@@ -43,6 +71,18 @@ class Agent:
 
         self.collection_name = f"agent_{self.id}"
 
+        # TODO: a bit of a mix between ids, context objects etc. could maybe be improved
+        self.hunger: int = 0
+        self.observations: list[Observation] = []
+        self.message: Message = Message(content="", sender_id="")
+        self.plan: str = ""
+        self.plan_tasks: list[str] = []
+        self.participating_plans: list[str] = []
+        self.assigned_tasks: list[str] = []
+        self.memory: str = ""
+        # objective: str # could be some sort of description to guide the agents actions
+        # personality: str # might want to use that later
+
     def _initialize_llm(self, model: ModelEntry):
         model = AvailableModels.get(model)
         self._client = OpenAIChatCompletionClient(
@@ -51,13 +91,38 @@ class Agent:
             base_url=settings.openai.baseurl,
             api_key=settings.openai.apikey,
         )
-        self.llm = AssistantAgent(
-            name=f"agent_{self.id}",
+
+        tools: List[BaseTool] = [self.make_bound_tool(tool) for tool in available_tools]
+
+        self.autogen_agent = AssistantAgent(
+            name=f"{self.id}",
             model_client=self._client,
-            system_message=f"You have the name {self.name} and id {self.id}.",
-            reflect_on_tool_use=True,
-            model_client_stream=True,  # Enable streaming tokens from the model client.
+            system_message=SYSTEM_MESSAGE,
+            description=DESCRIPTION.format(
+                id=self.id,
+                name=self.name,
+                # personality=self.personality
+            ),
+            reflect_on_tool_use=False,  # False as our current tools do not return text
+            model_client_stream=False,
+            tools=tools,
+            # memory=[]
         )
+
+    def make_bound_tool(
+        self, func: Callable, *, name: str | None = None, description: str | None = None
+    ) -> FunctionTool:
+        """
+        Wraps `func` so that every call gets self.id and self.simulation_id
+        injected as the last two positional args, then wraps that in a FunctionTool.
+        """
+        bound = partial(func, agent_id=self.id, simulation_id=self.simulation_id)
+        return FunctionTool(
+            name=name or func.__name__,
+            description=description or (func.__doc__ or ""),
+            func=bound,
+        )
+        # TODO: if needed adopt this to use more/ flexible arguments
 
     def _create_collection(self):
         self._milvus.create_collection(
@@ -97,6 +162,8 @@ class Agent:
             logger.warning(
                 f"Agent {self.id} not found in database. Creating new agent."
             )
+        # could maybe also use autogen native functionalities to dump and load agents from database, but I guess this is fine
+        # https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/serialize-components.html#agent-example
 
     def delete(self):
         logger.info(f"Deleting agent {self.id}")
@@ -119,8 +186,176 @@ class Agent:
         self._create_collection()
         self._create_in_db()
 
-    # Turn-based communication
-    async def send_message_to_agent(self, target_agent_id: str, content: str):
+    # TODO: consider if this can be moved elsewhere and broken up into smaller parts
+    def _load_context(self):
+        """Load the context from the database or other storage."""
+        # TODO: most of this is just mocked for now. replace with actual loading logic!
+
+        # current hunger level
+        self.hunger = 10  # TODO: get from database
+
+        # observations from the world
+        self.observations.extend(
+            [
+                ResourceObservation(
+                    type=ObservationType.RESOURCE,
+                    location="A1",
+                    distance=5,
+                    id="res_001",
+                    energy_yield=10,
+                    available=True,
+                ),
+                AgentObservation(
+                    type=ObservationType.AGENT,
+                    location="B2",
+                    distance=3,
+                    id="agent_002",
+                    name="AgentB",
+                    relationship_status="Friendly",
+                ),
+                ObstacleObservation(
+                    type=ObservationType.OBSTACLE,
+                    location="C3",
+                    distance=7,
+                    id="obs_003",
+                ),  # we probably want to disregard obstacles for now
+            ]
+        )  # TODO: get this from the world (from database or world instance?)
+
+        # messages by other agents
+        new_message = False  # TODO: adopt this later with communication rework
+        if new_message:
+            content = "Hello how are you?"
+            sender_id = "6687646df37e414a8c6c2f768e3eb964"
+            self.message = Message(content=content, sender_id=sender_id)
+
+        # plans owned by this agent
+        plan_table = self._db.table(settings.tinydb.tables.plan_table)
+        plan_db = plan_table.search(Query().owner == self.id)
+        self.plan: str = plan_db[0]["id"] if plan_db else ""
+        plan_obj = (
+            get_plan(self._db, self._nats, self.plan, self.simulation_id)
+            if self.plan
+            else None
+        )
+        self.plan_tasks: list[str] = plan_obj.get_tasks() if plan_obj else []
+
+        # plans this agent is participating in
+        plan_db = plan_table.search(Query().participants.any(self.id))  # type: ignore
+        self.participating_plans = [plan["id"] for plan in plan_db] if plan_db else []
+
+        task_table = self._db.table(settings.tinydb.tables.task_table)
+        assigned_tasks = task_table.search(Query().worker == self.id)
+        self.assigned_tasks = (
+            [task["id"] for task in assigned_tasks] if assigned_tasks else []
+        )
+
+    def get_context(self) -> str:
+        """Get the context for the agent."""
+        self._load_context()
+
+        hunger_description = f"Your current hunger level is {self.hunger}.  "
+
+        observation_description = (
+            "You have made the following observations in your surroundings: "
+            + "; ".join([str(obs) for obs in self.observations])
+            if self.observations
+            else "You have not made any observations yet. "
+        )
+
+        plan_obj = (
+            get_plan(self._db, self._nats, self.plan, self.simulation_id)
+            if self.plan
+            else None
+        )
+        plan_context = (
+            PlanContext(
+                id=plan_obj.id,
+                owner=plan_obj.owner if plan_obj.owner else "",
+                goal=plan_obj.goal if plan_obj.goal else "",
+                participants=plan_obj.get_participants(),
+                tasks=plan_obj.get_tasks(),
+                total_payoff=plan_obj.total_payoff,
+            )
+            if plan_obj
+            else None
+        )
+
+        tasks_obj = [
+            get_task(self._db, self._nats, task_id, self.simulation_id)
+            for task_id in self.plan_tasks
+        ]
+        tasks_context = [
+            TaskContext(
+                id=task.id,
+                plan_id=task.plan_id,
+                target=task.target,
+                payoff=task.payoff,
+                # status=task.status,
+                worker=task.worker,
+            )
+            for task in tasks_obj
+        ]
+
+        plans_description = (
+            f"You are the owner of the following plan: {plan_context}. "
+            f"These are the tasks in detail: " + ", ".join(map(str, tasks_context))
+            if plan_context
+            else "You do not own any plans. "
+        )
+
+        # TODO
+        # participating_plans_description = (
+        #     "You are currently participating in the following plans: "
+        #     + "; ".join(self.participating_plans)
+        #     + "As part of these plans you are assigned to the following tasks: "
+        #     + ", ".join(self.assigned_tasks)
+        #     if self.participating_plans
+        #     else "You are not currently participating in any plans and are not assigned to any tasks. "
+        # )
+
+        message_description = (
+            f"There is a new message from: {self.message.sender_id}. If appropriate consider replying. If you do not reply the conversation will be terminated. <Message start> {self.message.content} <Message end> "
+            if self.message.content
+            else "There are no current messages from other people. "
+        )  # TODO: add termination logic or reconsider how this should work. Consider how message history is handled.
+        # Should not overflow the context. Maybe have summary of conversation and newest message.
+        # Then if decide to reply this is handled by other agent (MessageAgent) that gets the entire history and sends the message.
+        # While this MessageAgent would also need quite the same context as here, its task would only be the reply and not deciding on a tool call.
+
+        memory_description = (
+            "You have the following memory: " + self.memory
+            if self.memory
+            else "You do not have any memory about past observations and events. "
+        )  # TODO: either pass this in prompt here or use autogen memory field
+
+        context_description = (
+            f"{hunger_description}"
+            f"{observation_description}"
+            f"{plans_description}"
+            # f"{participating_plans_description}"
+            f"{message_description}"
+            f"{memory_description}"
+            f"Given this information now decide on your next action by performing a tool call."
+        )
+        # TODO: improve formatting!
+
+        return context_description
+
+    async def trigger(self):
+        context = self.get_context()
+        # memory = self.get_memory() # TODO: if decided to implement here remove from get_context
+        # self.autogen_agent.memory = memory
+        # TODO: trigger any other required logic
+
+        output = await self.autogen_agent.run(
+            task=context, cancellation_token=CancellationToken()
+        )
+        # print(output)
+        return output
+
+    #### === Turn-based communication -> TODO: consider to rework this! === ###
+    async def send_message_to_agent(self, target_agent_id: str, content: str) -> str:
         """Send a message to another agent"""
         await self._nats.publish(
             message=json.dumps(
@@ -149,7 +384,7 @@ class Agent:
         formatted_conversation = self._format_conversation_for_llm(conversation)
 
         # Get response from LLM
-        response = await self.llm.run(task=formatted_conversation)
+        response = await self.autogen_agent.run(task=formatted_conversation)
         content = response.messages[-1].content
 
         # Check if the agent wants to end the conversation

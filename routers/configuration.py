@@ -6,10 +6,10 @@ from clients.tinydb import get_client
 
 router = APIRouter(prefix="/configuration", tags=["Configuration"])
 
+
 @router.post("")
 async def save_configuration(
-    config: ConfigurationData,
-    db: TinyDB = Depends(get_client)
+    config: ConfigurationData, db: TinyDB = Depends(get_client)
 ):
     """
     Save or update a configuration based on its name.
@@ -22,13 +22,14 @@ async def save_configuration(
     except Exception as e:
         logger.error(f"Error saving configuration: {e}")
         raise HTTPException(status_code=500, detail="Error saving configuration")
-    return {"message": f"Configuration '{config.name}' saved successfully!", "id": config.id}
+    return {
+        "message": f"Configuration '{config.name}' saved successfully!",
+        "id": config.id,
+    }
+
 
 @router.get("/{name}")
-async def get_configuration(
-    name: str,
-    db: TinyDB = Depends(get_client)
-):
+async def get_configuration(name: str, db: TinyDB = Depends(get_client)):
     """
     Retrieve a specific configuration by its name.
     """
@@ -38,21 +39,18 @@ async def get_configuration(
         raise HTTPException(status_code=404, detail="Configuration not found")
     return config_data
 
+
 @router.get("/")
-async def get_all_configurations(
-    db: TinyDB = Depends(get_client)
-):
+async def get_all_configurations(db: TinyDB = Depends(get_client)):
     """
     Retrieve all configurations.
     """
     table = db.table("configurations")
     return table.all()
 
+
 @router.delete("/{name}")
-async def delete_configuration(
-    name: str,
-    db: TinyDB = Depends(get_client)
-):
+async def delete_configuration(name: str, db: TinyDB = Depends(get_client)):
     """
     Delete a configuration by its name.
     """
