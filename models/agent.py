@@ -34,6 +34,7 @@ from models.context import (
     TaskContext,
 )
 from models.prompting import SYSTEM_MESSAGE, DESCRIPTION
+from models.world import World
 from tools import available_tools
 
 from loguru import logger
@@ -70,6 +71,12 @@ class Agent:
 
         # TODO: a bit of a mix between ids, context objects etc. could maybe be improved
         self.hunger: int = 0
+        self.location: tuple[int, int]
+        self.visibilty_range: int = 0
+        self.range_per_move: int = 1
+
+        self.world: World = None
+
         self.observations: list[Observation] = []
         self.message: Message = Message(content="", sender_id="")
         self.plan: str = ""
@@ -135,6 +142,11 @@ class Agent:
                 "simulation_id": self.simulation_id,
                 "name": self.name,
                 "model": self.model,
+                "hunger": self.hunger,
+                "x_coord": self.location[0],
+                "y_coord": self.location[1],
+                "visibility_range": self.visibilty_range,
+                "range_per_move": self.range_per_move,
             }
         )
 
@@ -154,10 +166,17 @@ class Agent:
             self.simulation_id = result["simulation_id"]
             self.name = result["name"]
             self.model = result["model"]
-        except ValueError:
-            logger.warning(
-                f"Agent {self.id} not found in database"
+            self.hunger = result["hunger"]
+            self.location = (result["x_coord"], result["y_coord"])
+            self.visibilty_range = result["visibility_range"]
+            self.range_per_move = result["range_per_move"]
+
+            self.world = World(
+                simulation_id=self.simulation_id, db=self._db, nats=self._nats
             )
+            self.world.load()
+        except ValueError:
+            logger.warning(f"Agent {self.id} not found in database")
             raise ValueError()
 
         try:
@@ -178,6 +197,26 @@ class Agent:
     async def create(self):
         logger.info(f"Creating agent {self.id}")
 
+        self.world = World(
+            simulation_id=self.simulation_id, db=self._db, nats=self._nats
+        )
+        self.world.load()
+
+        # TODO: initialize with function parameters
+        self.hunger = 20
+        self.visibilty_range = 5
+        self.range_per_move = 1
+
+        # Create agent location if not provided
+        self.location = self._create_agent_location()
+        # Store agent in database
+        self._create_collection()
+        self._create_in_db()
+
+        # Place agent in the world
+        await self.world.place_agent(self.id, self.location)
+
+        # TODO: extend AgentCreatedMessage to include more information
         agent_created_message = AgentCreatedMessage(
             id=self.id,
             name=self.name,
@@ -187,8 +226,9 @@ class Agent:
         # Publish the agent created message to NATS
         await agent_created_message.publish(self._nats)
 
-        self._create_collection()
-        self._create_in_db()
+    def _create_agent_location(self):
+        """Create a random location for the agent in the world."""
+        return self.world.get_random_agent_location()
 
     # TODO: consider if this can be moved elsewhere and broken up into smaller parts
     def _load_context(self):
@@ -199,32 +239,9 @@ class Agent:
         self.hunger = 10  # TODO: get from database
 
         # observations from the world
-        self.observations.extend(
-            [
-                ResourceObservation(
-                    type=ObservationType.RESOURCE,
-                    location="A1",
-                    distance=5,
-                    id="res_001",
-                    energy_yield=10,
-                    available=True,
-                ),
-                AgentObservation(
-                    type=ObservationType.AGENT,
-                    location="B2",
-                    distance=3,
-                    id="agent_002",
-                    name="AgentB",
-                    relationship_status="Friendly",
-                ),
-                ObstacleObservation(
-                    type=ObservationType.OBSTACLE,
-                    location="C3",
-                    distance=7,
-                    id="obs_003",
-                ),  # we probably want to disregard obstacles for now
-            ]
-        )  # TODO: get this from the world (from database or world instance?)
+        # TODO: get other observations apart from resources and agents
+        # TODO: improve formatting
+        self.observations.extend(self.world.load_agent_context(self.id))
 
         # messages by other agents
         new_message = False  # TODO: adopt this later with communication rework
@@ -346,9 +363,11 @@ class Agent:
 
         return context_description
 
-    @observe(as_type="generation", name ="Agent Tick")
+    @observe(as_type="generation", name="Agent Tick")
     async def trigger(self):
-        langfuse_context.update_current_trace(name=f"Agent Tick {self.name}", metadata={"agent_id": self.id})
+        langfuse_context.update_current_trace(
+            name=f"Agent Tick {self.name}", metadata={"agent_id": self.id}
+        )
         langfuse_context.update_current_observation(model=self.model, name="Agent Call")
         context = self.get_context()
         # memory = self.get_memory() # TODO: if decided to implement here remove from get_context
@@ -359,10 +378,12 @@ class Agent:
             task=context, cancellation_token=CancellationToken()
         )
 
-        langfuse_context.update_current_observation(usage_details={
-            "input_tokens": self._client.actual_usage().prompt_tokens,
-            "output_tokens": self._client.actual_usage().completion_tokens,
-        })
+        langfuse_context.update_current_observation(
+            usage_details={
+                "input_tokens": self._client.actual_usage().prompt_tokens,
+                "output_tokens": self._client.actual_usage().completion_tokens,
+            }
+        )
         return output
 
     #### === Turn-based communication -> TODO: consider to rework this! === ###

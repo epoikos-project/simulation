@@ -64,11 +64,11 @@ class Simulation:
 
         await self._nats.stream.delete_stream(f"simulation-{self.id}")
 
-        world_rows = self._db.table(settings.tinydb.tables.world).search(
+        world_rows = self._db.table(settings.tinydb.tables.world_table).search(
             Query().simulation_id == self.id
         )
         for row in world_rows:
-            world = World(db=self._db, nats=self._nats, id=row["id"])
+            world = World(simulation_id=self.id, db=self._db, nats=self._nats)
             world.delete()
 
         agent_rows = self._db.table("agents").search(Query().simulation_id == self.id)
