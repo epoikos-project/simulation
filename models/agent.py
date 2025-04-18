@@ -57,7 +57,7 @@ class Agent:
         else:
             self.id = id
 
-        self.name: str = cast(str, None)
+        self.name: str = ""
         self._client: OpenAIChatCompletionClient = cast(
             OpenAIChatCompletionClient, None
         )
