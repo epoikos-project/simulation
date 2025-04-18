@@ -16,27 +16,6 @@ from config.base import settings
 from config.openai import AvailableModels, ModelEntry, ModelName
 
 from messages.agent import AgentCreatedMessage
-from datetime import datetime
-from typing import cast, Callable, List
-from functools import partial
-
-from models.plan import get_plan
-from models.task import get_task
-from models.context import (
-    Observation,
-    AgentObservation,
-    ResourceObservation,
-    ObstacleObservation,
-    # OtherObservation,
-    Message,
-    ObservationType,
-    PlanContext,
-    TaskContext,
-)
-from models.prompting import SYSTEM_MESSAGE, DESCRIPTION
-from tools import available_tools
-
-from loguru import logger
 
 
 class Agent:
@@ -432,5 +411,73 @@ class Agent:
             {"sender_id": self.id, "content": content, "timestamp": str(datetime.now())}
         )
 
+        table.update(conversation, Query().id == conversation_id)
+        return True
+
+# Turn-based communication
+    async def send_message_to_agent(self, target_agent_id: str, content: str):
+        """Send a message to another agent"""
+        await self._nats.publish(
+            message=json.dumps({
+                "content": content, 
+                "type": "agent_communication",
+                "from_agent_id": self.id,
+                "to_agent_id": target_agent_id
+            }),
+            subject=f"simulation.{self.simulation_id}.agent.{target_agent_id}"
+        )
+        return content
+
+    async def receive_conversation_context(self, conversation_id: str):
+        table = self._db.table("agent_conversations")
+        conversation = table.get(Query().id == conversation_id)
+        return conversation 
+
+    async def process_turn(self, conversation_id: str):
+        """Process the agent's turn in a conversation"""
+        # Get conversation context
+        conversation = await self.receive_conversation_context(conversation_id)
+        
+        # Format conversation for the LLM
+        formatted_conversation = self._format_conversation_for_llm(conversation)
+        
+        # Get response from LLM
+        response = await self.llm.run(task=formatted_conversation)
+        content = response.messages[-1].content
+        
+        # Check if the agent wants to end the conversation
+        should_continue = "END_CONVERSATION" not in content
+        
+        # Store the message
+        await self._store_message_in_conversation(conversation_id, content)
+        
+        return content, should_continue
+
+    def _format_conversation_for_llm(self, conversation):
+        """Format the conversation history for the LLM"""
+        context = """You are in a conversation with another agent. Review the conversation history below and respond appropriately. 
+        Your response should be to the point and concise \n\n"""
+        
+        for msg in conversation["messages"]:
+            sender = "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
+            context += f"{sender}: {msg['content']}\n\n"
+        
+        context += "Your turn. You can include END_CONVERSATION in your response if you want to end the conversation.But make sure to talk 2 to 3 steps"
+        return context
+
+    async def _store_message_in_conversation(self, conversation_id: str, content: str):
+        """Store a message in the conversation"""
+        table = self._db.table("agent_conversations")
+        conversation = table.get(Query().id == conversation_id)
+        
+        if not conversation:
+            return False
+        
+        conversation["messages"].append({
+            "sender_id": self.id,
+            "content": content,
+            "timestamp": str(datetime.now())
+        })
+        
         table.update(conversation, Query().id == conversation_id)
         return True
