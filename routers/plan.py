@@ -185,23 +185,23 @@ async def remove_task(
     return {"message": "Task removed successfully"}
 
 
-@router.put("/{plan_id}/task/{task_id}/status")
-async def update_task_status(
-    simulation_id: str, plan_id: str, task_id: str, status: str, db: DB, nats: Nats
-):
-    """Update the status of a task"""
-    try:
-        task = get_task(db, nats, task_id, plan_id, simulation_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+# @router.put("/{plan_id}/task/{task_id}/status")
+# async def update_task_status(
+#     simulation_id: str, plan_id: str, task_id: str, status: str, db: DB, nats: Nats
+# ):
+#     """Update the status of a task"""
+#     try:
+#         task = get_task(db, nats, task_id, simulation_id)
+#     except ValueError as e:
+#         raise HTTPException(status_code=404, detail=str(e))
 
-    try:
-        new_status = TaskStatus(status)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid task status")
+#     try:
+#         new_status = TaskStatus(status)
+#     except ValueError:
+#         raise HTTPException(status_code=400, detail="Invalid task status")
 
-    task.update_status(new_status)
-    return {"message": "Task status updated successfully"}
+#     task.update_status(new_status)
+#     return {"message": "Task status updated successfully"}
 
 
 @router.put("/{plan_id}/task/{task_id}/assign")
@@ -210,7 +210,7 @@ async def assign_task(
 ):
     """Assign a task to an agent"""
     try:
-        task = get_task(db, nats, task_id, plan_id, simulation_id)
+        task = get_task(db, nats, task_id, simulation_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

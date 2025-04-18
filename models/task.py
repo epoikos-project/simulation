@@ -32,7 +32,7 @@ class Task:
         self.plan_id: str = plan_id  # plan.id
         self.target: str | None = None  # resource.id
         self.payoff: int = 0  # TODO: is this expected or explicit?
-        self.status: TaskStatus = TaskStatus.PENDING
+        # self.status: TaskStatus = TaskStatus.PENDING
         self.worker: str | None = None  # agent.id
 
     def __repr__(self) -> str:
@@ -42,9 +42,10 @@ class Task:
         return {
             "id": self.id,
             "plan_id": self.plan_id,
+            "simulation_id": self.simulation_id,
             "target": self.target,
             "payoff": self.payoff,
-            "status": self.status.value,
+            # "status": self.status.value,
             "worker": self.worker,
         }
 
@@ -63,10 +64,10 @@ class Task:
         table.remove(Query().id == self.id)
         logger.info(f"Deleted task {self.id}")
 
-    def update_status(self, status: TaskStatus):
-        """Update the status of the task."""
-        self.status = status
-        self._save_to_db()
+    # def update_status(self, status: TaskStatus):
+    #     """Update the status of the task."""
+    #     self.status = status
+    #     self._save_to_db()
 
     def assign_agent(self, agent_id: str):
         """Assign an agent to the task."""
@@ -74,6 +75,7 @@ class Task:
         plan = get_plan(self._db, self._nats, self.plan_id, self.simulation_id)
         if agent_id not in plan.get_participants():
             plan.add_participant(agent_id)
+        logger.info(f"Assigning agent {agent_id} to task {self.id}")
         self._save_to_db()
 
     def get_target(self) -> str | None:
@@ -81,13 +83,11 @@ class Task:
         return self.target
 
 
-def get_task(
-    db: DB, nats: Nats, task_id: str, plan_id: str, simulation_id: str
-) -> Task:
+def get_task(db: DB, nats: Nats, task_id: str, simulation_id: str) -> Task:
     task_table = db.table(settings.tinydb.tables.task_table)
     task_data = task_table.get(
         (Query().id == task_id)
-        & (Query().plan_id == plan_id)
+        # & (Query().plan_id == plan_id)
         & (Query().simulation_id == simulation_id)
     )
 
@@ -109,7 +109,7 @@ def get_task(
     )
     task.target = task_data.get("target")
     task.payoff = task_data.get("payoff", 0)
-    task.status = TaskStatus(task_data["status"])
+    # task.status = TaskStatus(task_data["status"])
     task.worker = task_data.get("worker")
 
     return task
