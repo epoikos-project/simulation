@@ -1,5 +1,6 @@
 import json
 from fastapi import APIRouter
+from fastapi.exceptions import HTTPException
 from tinydb import Query
 
 import clients
@@ -44,6 +45,48 @@ async def list_agents(simulation_id: str, db: clients.DB):
     return agents
 
 
+@router.post("/{agent_id}/trigger")
+async def trigger_agent(
+    simulation_id: str,
+    agent_id: str,
+    db: clients.DB,
+    nats: Nats,
+    milvus: clients.Milvus,
+):
+    """Trigger an agent to perform a task"""
+    agent = Agent(
+        milvus=milvus, id=agent_id, db=db, simulation_id=simulation_id, nats=nats
+    )
+    agent.load()
+    output = await agent.trigger()
+    return output
+
+
+@router.get("/{agent_id}/context")
+async def get_context(
+    simulation_id: str,
+    agent_id: str,
+    db: clients.DB,
+    nats: Nats,
+    milvus: clients.Milvus,
+):
+    """Get the context of an agent"""
+    agent = Agent(
+        milvus=milvus, db=db, nats=nats, simulation_id=simulation_id, id=agent_id
+    )
+    try:
+        agent.load()
+    except Exception:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    context = agent.get_context()
+    return {
+        "system_message": agent.autogen_agent._system_messages,
+        "description": agent.autogen_agent._description,
+        "context": context,
+    }
+
+
 @router.post("/{agent_id}/chat")
 async def chat_with_agent(
     simulation_id: str,
@@ -53,7 +96,6 @@ async def chat_with_agent(
     milvus: clients.Milvus,
     broker: Nats,
 ):
-
     agent = Agent(
         id=agent_id,
         milvus=milvus,
@@ -69,7 +111,7 @@ async def chat_with_agent(
         subject=f"simulation.{simulation_id}.agent.{agent_id}",
     )
 
-    response = await agent.llm.run(task=msg)
+    response = await agent.autogen_agent.run(task=msg)
 
     content = response.messages[-1].content
     await broker.publish(
