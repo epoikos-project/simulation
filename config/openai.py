@@ -14,6 +14,11 @@ class ModelEntry:
     name: str
     info: ModelInfo
 
+ModelName = Literal[
+        "llama-3.1-8b-instruct",
+        "llama-3.3-70b-instruct",
+    ]
+
 
 class AvailableModels:
     _models: Dict[str, ModelEntry] = {
@@ -36,11 +41,6 @@ class AvailableModels:
             ),
         ),
     }
-
-    ModelName = Literal[
-        "llama-3.1-8b-instruct",
-        "llama-3.3-70b-instruct",
-    ]
 
     @classmethod
     def get(cls, model: ModelName) -> ModelEntry:

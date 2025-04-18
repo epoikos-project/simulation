@@ -1,5 +1,6 @@
 import json
 from fastapi import APIRouter
+from fastapi.exceptions import HTTPException
 from tinydb import Query
 
 import clients
@@ -73,7 +74,11 @@ async def get_context(
     agent = Agent(
         milvus=milvus, db=db, nats=nats, simulation_id=simulation_id, id=agent_id
     )
-    agent.load()
+    try:
+        agent.load()
+    except Exception:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
     context = agent.get_context()
     return {
         "system_message": agent.autogen_agent._system_messages,

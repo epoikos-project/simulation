@@ -9,6 +9,7 @@ dependencies = [
     "autogen-ext[openai]>=0.4.9.3",
     "fastapi[standard]>=0.115.12",
     "faststream[nats]>=0.5.37",
+    "langfuse>=2.60.3",
     "loguru>=0.7.3",
     "pydantic>=2.11.0",
     "pydantic-settings>=2.8.1",
