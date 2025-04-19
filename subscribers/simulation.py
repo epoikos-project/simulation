@@ -8,12 +8,9 @@ router = NatsRouter(settings.nats.url, logger=None, include_in_schema=False)
 
 
 @router.subscriber(
-    "simulation.*.world.>",
+    "simulation.*.*",
 )
-@router.subscriber(
-    "simulation.*.world",
-)
-async def subscribe_to_world_messages(m: str, msg: NatsMessage):
+async def subscribe_to_simulation_messages(m: str, msg: NatsMessage):
     try:
         msg = msg.raw_message
         logger.debug(f"{msg.subject} | {json.loads(m)}")

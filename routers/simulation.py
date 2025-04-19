@@ -56,6 +56,28 @@ async def delete_simulation(id: str, db: DB, milvus: Milvus, nats: Nats):
     return {"message": "Simulation deleted successfully!"}
 
 
+@router.post("/{simulation_id}/start")
+async def start_simulation(simulation_id: str, broker: Nats, db: DB):
+    try:
+        simulation = Simulation(id=simulation_id, nats=broker, db=db)
+        await simulation.start()
+    except Exception as e:
+        logger.error(f"Error starting simulation: {e}")
+        return {"message": f"Error starting simulation"}
+    return {"message": "Simulation started successfully!"}
+
+
+@router.post("/{simulation_id}/stop")
+async def stop_simulation(simulation_id: str, broker: Nats, db: DB):
+    try:
+        simulation = Simulation(id=simulation_id, nats=broker, db=db)
+        await simulation.stop()
+    except Exception as e:
+        logger.error(f"Error stopping simulation: {e}")
+        return {"message": f"Error stopping simulation"}
+    return {"message": "Simulation stopped successfully!"}
+
+
 @router.post("/{simulation_id}/replay")
 async def replay(simulation_id: str, broker: Nats):
     js = broker.stream
