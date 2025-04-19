@@ -54,7 +54,3 @@ app.include_router(routers.plan.router)
 app.include_router(subscribers.world.router)
 app.include_router(subscribers.agent.router)
 app.include_router(subscribers.simulation.router)
-
-from routers import agent, conversation
-app.include_router(agent.router)
-app.include_router(conversation.router)
