@@ -2,22 +2,54 @@ import asyncio
 
 from fastapi import APIRouter
 from loguru import logger
+from pydantic import BaseModel
 from tinydb import Query
 from clients import Nats, Milvus, DB
 from models.simulation import Simulation
+from models.world import World
 
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
 
 
+class CreateWorldInput(BaseModel):
+    """Input model for creating a world"""
+
+    size: tuple[int, int] = (
+        25,
+        25,
+    )  # Tuple representing the size of the world (width, height)
+    num_regions: int = 1  # Number of regions in the world
+    total_resources: int = 20  # Total resources in the world
+
+
 @router.post("")
-async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):
+async def create_simulation(
+    simulation_id: str,
+    db: DB,
+    nats: Nats,
+    create_world_input: CreateWorldInput,
+):
+    """Create a world in the simulation"""
     try:
-        simulation = Simulation(id=name, nats=broker, db=db)
+        simulation = Simulation(id=simulation_id, nats=nats, db=db)
         await simulation.create()
+        world = World(simulation_id, db, nats)
+        await world.create(
+            size=create_world_input.size,
+            num_regions=create_world_input.num_regions,
+            total_resources=create_world_input.total_resources,
+        )
     except Exception as e:
-        logger.error(f"Error creating simulation: {e}")
-        return {"message": f"Error creating simulation"}
-    return {"message": "Simulation created successfully!"}
+        logger.error(f"Error creating world: {str(e)}")
+        return {"message": "An internal error has occurred while creating the world."}
+
+    return {
+        "message": f"""World created for simulation {simulation_id} of size
+        {create_world_input.size[0]}x{create_world_input.size[1]} with 
+        {create_world_input.num_regions} regions 
+        and {create_world_input.total_resources} resources""",
+        "simulation_id": simulation_id,
+    }
 
 
 @router.get("")

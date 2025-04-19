@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from enum import Enum
 from typing import Annotated, Union, Literal
+
 # from typing import Optional
 
 
@@ -12,7 +13,7 @@ class ObservationType(str, Enum):
 
 
 class _BaseObs(BaseModel):
-    location: str
+    location: tuple[int, int]
     distance: int
     id: str
 
