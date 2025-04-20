@@ -123,23 +123,25 @@ class Simulation:
         This method is called by the SimulationRunner for every tick.
         """
         self._tick_counter += 1
-        logger.debug(f"Ticking Simulation {self.id} - Tick {self._tick_counter}")
-        table = self._db.table(settings.tinydb.tables.simulation_table)
-        table.update(
-            {"tick": self._tick_counter},
-            Query()["id"] == self.id,
-        )
+        logger.debug(f"[SIM {self.id}] Tick {self._tick_counter}")
 
-        tick_message = SimulationTickMessage(
-            id=self.id,
-            tick=self._tick_counter,
-        )
+        # persist tick counter
+        sim_table = self._db.table(settings.tinydb.tables.simulation_table)
+        sim_table.update({"tick": self._tick_counter}, Query()["id"] == self.id)
+
+        # broadcast tick event
+        tick_msg = SimulationTickMessage(id=self.id, tick=self._tick_counter)
         await self._nats.publish(
-            tick_message.model_dump_json(), tick_message.get_channel_name()
+            tick_msg.model_dump_json(), tick_msg.get_channel_name()
         )
 
+        # ---------- agents ----------
         agent_table = self._db.table(settings.tinydb.tables.agent_table)
-        agent_rows = table.search(Query().simulation_id == self.id)
+        agent_rows = agent_table.search(Query().simulation_id == self.id)
+        logger.debug(
+            f"[SIM {self.id}] Found {len(agent_rows)} agents for this tick"
+        )
+
         for row in agent_rows:
             agent = Agent(
                 milvus=self._milvus,
@@ -149,4 +151,5 @@ class Simulation:
                 id=row["id"],
             )
             agent.load()
+            logger.debug(f"[SIM {self.id}] Triggering agent {agent.id}")
             await agent.trigger()

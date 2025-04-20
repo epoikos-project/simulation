@@ -16,7 +16,7 @@ from models.agent import Agent
 
 class Orchestrator:
     """
-    Coordinates:
+    Steps:
       1. Loading a named configuration
       2. Spinning up a new Simulation
       3. Creating its World
