@@ -30,8 +30,8 @@ class AgentFactory:
         Create and register one agent from a template dict.
         Template keys:
           - name: str
-          - model: str (e.g. "gpt-4" or "llama-3.3-70b-instruct")
-          // plus any extra fields you later support (objective, role, etc.)
+          - model: str (e.g."llama-3.3-70b-instruct")
+          // plus any extra fields to later support (objective, role, etc.)
         """
         # 1. Lookup the right model entry
         model_name = template.get("model", AvailableModels.get_default().name)
@@ -49,7 +49,7 @@ class AgentFactory:
 
         # 3. Assign human‐readable name (and any other supported fields)
         agent.name = template.get("name", f"agent-{agent.id}")
-        # e.g. if you later support `objective`, then:
+        # e.g. to later support `objective`, then:
         # agent.objective = template.get("objective", "")
 
         # 4. Persist to Milvus & TinyDB, publish NATS event
