@@ -8,6 +8,7 @@ class AgentPlacedMessage(WorldBase):
 
 
     location: tuple[int, int]
+    name: str
 
     @override
     def get_channel_name(self) -> str:
