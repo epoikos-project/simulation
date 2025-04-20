@@ -4,7 +4,7 @@ from messages.world import WorldBase
 
 
 class AgentMovedMessage(WorldBase):
-    """Message sent when an agent is placed in world."""
+    """Message sent when an agent moves in the world."""
 
 
     location: tuple[int, int]
