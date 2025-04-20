@@ -1,13 +1,22 @@
 import json
 from fastapi import APIRouter
 from fastapi.exceptions import HTTPException
+from pydantic import BaseModel
 from tinydb import Query
 
 import clients
 from clients import Nats
 from models.agent import Agent
+from models.world import World
 
 router = APIRouter(prefix="/simulation/{simulation_id}/agent", tags=["Agent"])
+
+
+class MoveAgentInput(BaseModel):
+    """Input model for moving an agent"""
+
+    x_coord: int = None
+    y_coord: int = None
 
 
 @router.post("")
@@ -119,3 +128,19 @@ async def chat_with_agent(
         subject=f"simulation.{simulation_id}.agent.{agent_id}",
     )
     return {"content": content}
+
+
+@router.post("/{agent_id}/move")
+async def move_agent(
+    agent_id: str,
+    simulation_id: str,
+    db: clients.DB,
+    broker: Nats,
+    move_agent_input: MoveAgentInput,
+):
+    """Move an agent to a new location"""
+    world = World(simulation_id=simulation_id, db=db, nats=broker)
+    world.load()
+    new_location = (move_agent_input.x_coord, move_agent_input.y_coord)
+    await world.move_agent(agent_id=agent_id, destination=new_location)
+    return {"message": f"Agent {agent_id} moved to location {new_location}"}

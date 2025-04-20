@@ -2,11 +2,24 @@ import asyncio
 
 from fastapi import APIRouter
 from loguru import logger
+from pydantic import BaseModel
 from tinydb import Query
 from clients import Nats, Milvus, DB
 from models.simulation import Simulation
+from models.world import World
 
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
+
+
+class CreateWorldInput(BaseModel):
+    """Input model for creating a world"""
+
+    size: tuple[int, int] = (
+        25,
+        25,
+    )  # Tuple representing the size of the world (width, height)
+    num_regions: int = 1  # Number of regions in the world
+    total_resources: int = 20  # Total resources in the world
 
 
 @router.post("")
