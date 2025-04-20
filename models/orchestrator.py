@@ -12,6 +12,7 @@ from models.configuration import Configuration
 from models.simulation import Simulation
 from models.world import World
 from models.agent import Agent
+from messages.simulation import SimulationCreatedMessage
 
 
 class Orchestrator:
@@ -34,23 +35,33 @@ class Orchestrator:
         if not cfg:
             raise ValueError(f"Configuration '{config_name}' not found")
 
-        # 2. Simulation
+        # 1) create the sim & world
+        sim_id = await self._create_simulation()
+        await self._create_world(cfg, sim_id)
+
+        # 2) spawn agents
+        for agent_cfg in cfg.get("agents", []):
+            await self._spawn_agents(sim_id, agent_cfg)
+
+        return sim_id
+
+    async def _create_simulation(self) -> str:
         sim_id = uuid.uuid4().hex
         sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)
         await sim.create()
         logger.info(f"Orchestrator: created simulation {sim_id}")
 
+        sim_msg = SimulationCreatedMessage(id=sim_id)
         await self.nats.publish(
-            message=json.dumps({"type": "simulation_created", "id": sim_id}),
-            subject=f"simulation.{sim_id}.created",
+            sim_msg.model_dump_json(),
+            sim_msg.get_channel_name(),
         )
+        return sim_id
 
-        # 3. World
-        ws_raw = cfg.get("settings", {})
-        ws = ws_raw.get("world", ws_raw)
-        world = World(db=self.db, nats=self.nats)
+    async def _create_world(self, cfg: dict, sim_id: str):
+        ws = cfg.get("settings", {}).get("world", {})
+        world = World(simulation_id=sim_id, db=self.db, nats=self.nats)
         await world.create(
-            simulation_id=sim_id,
             size=tuple(ws.get("size", (25, 25))),
             num_regions=ws.get("num_regions", 1),
             total_resources=ws.get("total_resources", 25),
@@ -58,69 +69,57 @@ class Orchestrator:
         logger.info(f"Orchestrator: created world {world.id} for sim {sim_id}")
 
         await self.nats.publish(
-            message=json.dumps(
-                {
-                    "type": "world_created",
-                    "simulation_id": sim_id,
-                    "world_id": world.id,
-                }
-            ),
+            message=json.dumps({
+                "type": "world_created",
+                "simulation_id": sim_id,
+                "world_id": world.id,
+            }),
             subject=f"simulation.{sim_id}.world.created",
         )
 
-        # 4. Agents
-        def _as_dict(x):
-            if isinstance(x, dict):
-                return x
-            if hasattr(x, "model_dump"):
-                return x.model_dump()
-            if hasattr(x, "dict"):
-                return x.dict()
-            return dict(x)
+    async def _spawn_agents(self, sim_id: str, agent_cfg: dict):
+        # 1) choose model (fallback auf default, nur ein Argument)
+        model_name = agent_cfg.get("model") or "llama-3.3-70b-instruct"
+        try:
+            model_entry = AvailableModels.get(model_name)
+        except KeyError:
+            model_entry = AvailableModels.get("llama-3.3-70b-instruct")
 
-        agents_cfg = [_as_dict(a) for a in cfg.get("agents", [])]
+        # 2) einmal Hunger auslesen
+        hunger = next(
+            (int(a["value"])
+             for a in agent_cfg.get("attributes", [])
+             if a.get("name") == "hunger"),
+            0
+        )
 
-        for agent_cfg in agents_cfg:
-            name = agent_cfg.get("name", "")
-            count = agent_cfg.get("count", 1)
-            model_name = agent_cfg.get("model") or ""
-            try:
-                model_entry = AvailableModels.get(model_name)
-            except KeyError:
-                model_entry = AvailableModels.get("llama-3.3-70b-instruct")
+        # 3) spawn count‐mal
+        for _ in range(agent_cfg.get("count", 1)):
+            agent = Agent(
+                milvus=self.milvus,
+                db=self.db,
+                nats=self.nats,
+                simulation_id=sim_id,
+                model=model_entry,
+            )
+            agent.name   = agent_cfg.get("name", "")
+            agent.hunger = hunger
+            await agent.create(
+                hunger=hunger,
+                visibility_range=agent_cfg.get("visibility_range", 5),
+                range_per_move=agent_cfg.get("range_per_move", 1),
+            )
 
-            def _hunger(a_cfg):
-                for attr in a_cfg.get("attributes", []):
-                    if attr.get("name") == "hunger":
-                        return int(attr.get("value", 0))
-                return 0
-
-            for _ in range(count):
-                agent = Agent(
-                    milvus=self.milvus,
-                    db=self.db,
-                    nats=self.nats,
-                    simulation_id=sim_id,
-                    model=model_entry,
-                )
-                agent.name = name
-                agent.hunger = _hunger(agent_cfg)
-                await agent.create()
-
-                logger.info(f"Orchestrator: created agent {agent.id} ({name})")
-                await self.nats.publish(
-                    message=json.dumps(
-                        {
-                            "type": "agent_created",
-                            "simulation_id": sim_id,
-                            "agent_id": agent.id,
-                            "name": name,
-                        }
-                    ),
-                    subject=f"simulation.{sim_id}.agent.created",
-                )
-
-        return sim_id
+            logger.info(f"Orchestrator: created agent {agent.id} ({agent.name})")
+            await self.nats.publish(
+                message=json.dumps({
+                    "type": "agent_created",
+                    "simulation_id": sim_id,
+                    "agent_id": agent.id,
+                    "name": agent.name,
+                }),
+                subject=f"simulation.{sim_id}.agent.created",
+            )
 
     async def start(self, sim_id: str):
         sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)

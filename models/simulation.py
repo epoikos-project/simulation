@@ -114,8 +114,11 @@ class Simulation:
 
     def is_running(self) -> bool:
         table = self._db.table(settings.tinydb.tables.simulation_table)
-        simulation = table.get(Query()["id"] == self.id)
-        return simulation.get("running", False)
+        sim_doc = table.get(Query()["id"] == self.id)
+        # if no matching document (or wrong type), assume not running
+        if not isinstance(sim_doc, dict):
+            return False
+        return sim_doc.get("running", False)
 
     async def tick(self):   
         """Tick the simulation.
