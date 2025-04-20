@@ -27,7 +27,12 @@ class Orchestrator:
 
         # 2. Create a new Simulation
         sim_id = uuid.uuid4().hex
-        simulation = Simulation(db=self._db, nats=self._nats, id=sim_id)
+        simulation = Simulation(
+                        db=self._db,
+                        nats=self._nats,
+                        milvus=self._milvus,
+                        id=sim_id,
+                    )
         await simulation.create()
 
         # Publish a SimulationCreated event (you’ll need to define it)

@@ -8,7 +8,7 @@ from config.base import settings
 from messages.simulation import (
     SimulationStartedMessage,
     SimulationStoppedMessage,
-    SimulationTickMessage,
+    SimulationTickMessage
 )
 from models.agent import Agent
 from models.simulation_runner import SimulationRunner
@@ -16,10 +16,11 @@ from models.world import World
 
 
 class Simulation:
-    def __init__(self, db: TinyDB, nats: NatsBroker, id: str):
+    def __init__(self, db: TinyDB, nats: NatsBroker, milvus: MilvusClient, id: str):
         self.id = id
         self._db = db
         self._nats = nats
+        self._milvus = milvus
         self._tick_counter = self._initialize_tick_counter()
         self._runner = SimulationRunner()
         self._runner.set_simulation(self)
@@ -116,7 +117,7 @@ class Simulation:
         simulation = table.get(Query()["id"] == self.id)
         return simulation.get("running", False)
 
-    async def tick(self):
+    async def tick(self):   
         """Tick the simulation.
 
         This method is called by the SimulationRunner for every tick.
@@ -136,3 +137,16 @@ class Simulation:
         await self._nats.publish(
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
+
+        agent_table = self._db.table(settings.tinydb.tables.agent_table)
+        agent_rows = table.search(Query().simulation_id == self.id)
+        for row in agent_rows:
+            agent = Agent(
+                milvus=self._milvus,
+                db=self._db,
+                nats=self._nats,
+                simulation_id=self.id,
+                id=row["id"],
+            )
+            agent.load()
+            await agent.trigger()

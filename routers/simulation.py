@@ -5,15 +5,14 @@ from loguru import logger
 from tinydb import Query
 from clients import Nats, Milvus, DB
 from models.simulation import Simulation
-from services.orchestrator import Orchestrator
 
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
 
 
 @router.post("")
-async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):
+async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):   
     try:
-        simulation = Simulation(id=name, nats=broker, db=db)
+        simulation = Simulation(db=db, nats=broker, milvus=milvus, id=name)
         await simulation.create()
     except Exception as e:
         logger.error(f"Error creating simulation: {e}")
@@ -48,7 +47,7 @@ async def get_simulation(id: str, db: DB):
 @router.delete("/{id}")
 async def delete_simulation(id: str, db: DB, milvus: Milvus, nats: Nats):
     try:
-        simulation = Simulation(id=id, db=db, nats=nats)
+        simulation = simulation = Simulation(db=db, nats=nats, milvus=milvus, id=id)
         await simulation.delete(milvus=milvus)
     except Exception as e:
         logger.error(f"Error deleting simulation: {e}")
@@ -57,9 +56,9 @@ async def delete_simulation(id: str, db: DB, milvus: Milvus, nats: Nats):
 
 
 @router.post("/{simulation_id}/start")
-async def start_simulation(simulation_id: str, broker: Nats, db: DB):
+async def start_simulation(simulation_id: str, broker: Nats, db: DB, milvus: Milvus):
     try:
-        simulation = Simulation(id=simulation_id, nats=broker, db=db)
+        simulation = simulation = Simulation(db=db, nats=broker, milvus=milvus, id=simulation_id)
         await simulation.start()
     except Exception as e:
         logger.error(f"Error starting simulation: {e}")
@@ -68,9 +67,9 @@ async def start_simulation(simulation_id: str, broker: Nats, db: DB):
 
 
 @router.post("/{simulation_id}/stop")
-async def stop_simulation(simulation_id: str, broker: Nats, db: DB):
+async def stop_simulation(simulation_id: str, broker: Nats, db: DB, milvus: Milvus):
     try:
-        simulation = Simulation(id=simulation_id, nats=broker, db=db)
+        simulation = Simulation(db=db, nats=broker, milvus=milvus, id=simulation_id)
         await simulation.stop()
     except Exception as e:
         logger.error(f"Error stopping simulation: {e}")
@@ -129,13 +128,3 @@ async def replay(simulation_id: str, broker: Nats):
             continue  # Retry fetching messages in case of timeout
 
     return {"status": "Replay completed"}
-
-@router.post("/start")
-async def start_simulation():
-    message = orchestrator.start_simulation()
-    return {"status": message}
-
-@router.post("/stop")
-async def stop_simulation():
-    message = orchestrator.stop_simulation()
-    return {"status": message}

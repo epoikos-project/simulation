@@ -135,6 +135,7 @@ class Agent:
                 "simulation_id": self.simulation_id,
                 "name": self.name,
                 "model": self.model,
+                "hunger": self.hunger
             }
         )
 
@@ -154,6 +155,7 @@ class Agent:
             self.simulation_id = result["simulation_id"]
             self.name = result["name"]
             self.model = result["model"]
+            self.hunger = result.get("hunger", 0)
         except ValueError:
             logger.warning(
                 f"Agent {self.id} not found in database"

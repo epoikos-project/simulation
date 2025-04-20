@@ -7,5 +7,5 @@ __all__ = [
     "SimulationStartedMessage",
     "SimulationTickMessage",
     "SimulationStoppedMessage",
-    "SimulationCreatedMessage",
+    "SimulationCreatedMessage"
 ]
