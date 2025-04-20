@@ -4,6 +4,8 @@ import json
 
 from faststream.nats import NatsBroker
 from loguru import logger
+from messages.world.agent_moved import AgentMovedMessage
+from messages.world.agent_placed import AgentPlacedMessage
 from models.context import AgentObservation, ObservationType, ResourceObservation
 from models.region import Region
 from tinydb import Query, TinyDB
@@ -379,16 +381,8 @@ class World:
         self._update_agent_dict()
 
         # Publish agent placement message
-        await self._nats.publish(
-            json.dumps(
-                {
-                    "type": "agent_placed",
-                    "message": f"Agent {agent_id} placed in world {self.id} at {agent_location}",
-                    "location": agent_location,
-                }
-            ),
-            f"simulation.{self.simulation_id}.agent.{agent_id}",
-        )
+        agent_placed_message = AgentPlacedMessage(id=agent_id, location=agent_location, simulation_id=self.simulation_id)
+        await agent_placed_message.publish(self._nats)
 
     async def remove_agent(self, agent_id: str):
         """Remove agent from world"""
@@ -474,14 +468,9 @@ class World:
             Query()["id"] == agent_id,
         )
 
-        # Publish agent movement message
-        await self._nats.publish(
-            json.dumps(
-                {
-                    "type": "agent_moved",
-                    "message": f"Agent {agent_id} moved to {destination}",
-                    "location": destination,
-                }
-            ),
-            f"simulation.{self.simulation_id}.agent.{agent_id}",
+        agent_moved_message = AgentMovedMessage(
+            simulation_id=self.simulation_id,
+            id=agent_id,
+            location=destination,
         )
+        await agent_moved_message.publish(self._nats)
