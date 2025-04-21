@@ -49,3 +49,10 @@ class AvailableModels:
     @classmethod
     def all(cls) -> Dict[str, ModelEntry]:
         return cls._models
+
+    @classmethod
+    def get_default(cls) -> ModelEntry:
+        """
+        Return the default model entry.
+        """
+        return cls._models["llama-3.3-70b-instruct"]
