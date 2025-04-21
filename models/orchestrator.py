@@ -78,14 +78,11 @@ class Orchestrator:
         )
 
     async def _spawn_agents(self, sim_id: str, agent_cfg: dict):
-        # 1) choose model (fallback auf default, nur ein Argument)
+        # 1) choose model (fallback auf default)
         model_name = agent_cfg.get("model") or "llama-3.3-70b-instruct"
-        try:
-            model_entry = AvailableModels.get(model_name)
-        except KeyError:
-            model_entry = AvailableModels.get("llama-3.3-70b-instruct")
+        model_entry = AvailableModels.get(model_name)
 
-        # 2) einmal Hunger auslesen
+        # 2) read out hunger attr
         hunger = next(
             (int(a["value"])
              for a in agent_cfg.get("attributes", [])
@@ -93,7 +90,7 @@ class Orchestrator:
             0
         )
 
-        # 3) spawn count‐mal
+        # 3) spawn count times
         for _ in range(agent_cfg.get("count", 1)):
             agent = Agent(
                 milvus=self.milvus,
