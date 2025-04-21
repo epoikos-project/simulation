@@ -345,6 +345,21 @@ class World:
             & (Query()["id"] == self.id),
         )
 
+    async def tick(self):
+        """Tick the world"""
+        for key, value in self.agent_dict.items():
+            try:
+                new_x_change = random.choice([-1, 0, 1])
+                new_y_change = random.choice([-1, 0, 1])
+                while abs(new_x_change) + abs(new_y_change) > 1:
+                    new_x_change = random.choice([-1, 0, 1])
+                    new_y_change = random.choice([-1, 0, 1])
+                new_x = value[0] + new_x_change
+                new_y = value[1] + new_y_change
+                await self.move_agent(key, (new_x, new_y))
+            except Exception as e:
+                print(f"Error ticking agent {key}: {e}")
+
     async def place_agent(self, agent_id: str, agent_location: tuple[int, int]):
         """Place agent in world"""
         table_agents = self._db.table(settings.tinydb.tables.agent_table)
@@ -381,7 +396,7 @@ class World:
         self._update_agent_dict()
 
         # Publish agent placement message
-        agent_placed_message = AgentPlacedMessage(id=agent_id, name=agent["name"], location=agent_location, simulation_id=self.simulation_id)
+        agent_placed_message = AgentPlacedMessage(id=agent_id, name=agent.get("name"), location=agent_location, simulation_id=self.simulation_id)
         await agent_placed_message.publish(self._nats)
 
     async def remove_agent(self, agent_id: str):
@@ -430,6 +445,7 @@ class World:
     async def move_agent(self, agent_id: str, destination: tuple[int, int]):
         """Move agent to new location in world"""
         # Check if agent is placed in world
+        logger.debug(f"Moving agent {agent_id} to {destination}")
         if agent_id not in self.agent_dict:
             raise ValueError(f"Agent {agent_id} is not placed in the world.")
         # Check if destination is valid

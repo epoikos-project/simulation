@@ -24,6 +24,8 @@ class Simulation:
         self._runner = SimulationRunner()
         self._runner.set_simulation(self)
 
+        self.world = self._initialize_world()
+
         self.collection_name = f"agent_{self.id}"
 
     def get_db(self) -> TinyDB:
@@ -31,6 +33,11 @@ class Simulation:
 
     def get_nats(self) -> NatsBroker:
         return self._nats
+
+    def _initialize_world(self):
+        world = World(simulation_id=self.id, nats=self._nats, db=self._db)
+        world.load()
+        return world
 
     def _initialize_tick_counter(self):
         sim = self._db.table(settings.tinydb.tables.simulation_table).get(
@@ -47,6 +54,7 @@ class Simulation:
                 "id": self.id,
                 "collection_name": self.collection_name,
                 "running": False,
+                "tick": 0
             }
         )
 
@@ -133,6 +141,8 @@ class Simulation:
             id=self.id,
             tick=self._tick_counter,
         )
+
+        await self.world.tick()
         await self._nats.publish(
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
