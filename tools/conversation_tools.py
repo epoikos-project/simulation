@@ -1,5 +1,6 @@
 import uuid
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Optional, Union
+import json
 from langfuse.decorators import observe
 
 from models.conversation import Conversation
@@ -8,7 +9,7 @@ from clients.nats import nats_broker
 
 @observe()
 async def start_conversation(
-    participant_ids: Annotated[List[str], "List of agent IDs to include in the conversation."],
+    participant_ids: Annotated[Union[List[str], str], "List of agent IDs to include in the conversation, or JSON string of such list."],
     initial_prompt: Annotated[Optional[str], "Optional initial prompt to start the conversation."],
     agent_id: str,
     simulation_id: str,
@@ -17,10 +18,15 @@ async def start_conversation(
     db = get_client()
     nats = nats_broker()
 
-    # Create and persist the conversation
+    # Allow participant_ids passed as JSON string
+    if isinstance(participant_ids, str):
+        try:
+            participant_ids = json.loads(participant_ids)
+        except json.JSONDecodeError:
+            raise ValueError("participant_ids must be a JSON list of strings or a list of strings.")
+
     conv = Conversation(db=db, simulation_id=simulation_id, agent_ids=participant_ids, initial_prompt=initial_prompt)
-    conv_id = conv.save()
-    return conv_id
+    return conv.save()
 
 @observe()
 async def engage_conversation(
@@ -28,23 +34,23 @@ async def engage_conversation(
     agent_id: str,
     simulation_id: str,
 ) -> dict:
-    """Process the agent's turn in an existing conversation, advance or end it, and return the response."""
-    from models.agent import Agent
+    """Process the agent’s turn in an existing conversation, advance or end it, and return the response."""
     db = get_client()
     nats = nats_broker()
 
-    # Load the agent
+    # Import Agent here to avoid circular dependency
+    from models.agent import Agent
+
     agent = Agent(milvus=None, db=db, nats=nats, simulation_id=simulation_id, id=agent_id)
     await agent.load()
 
-    # Let the agent generate its reply
     content, should_continue = await agent.process_turn(conversation_id)
 
-    # Update conversation state
+    # Load and update conversation state
     conv = Conversation.load(db, conversation_id)
-    if not should_continue:
-        conv.end_conversation()
-    else:
+    if should_continue:
         conv.advance_turn()
+    else:
+        conv.end_conversation()
 
     return {"content": content, "should_continue": should_continue}
