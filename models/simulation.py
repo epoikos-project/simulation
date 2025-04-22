@@ -8,11 +8,12 @@ from config.base import settings
 from messages.simulation import (
     SimulationStartedMessage,
     SimulationStoppedMessage,
-    SimulationTickMessage
+    SimulationTickMessage,
 )
 from models.agent import Agent
 from models.simulation_runner import SimulationRunner
 from models.world import World
+import asyncio
 
 
 class Simulation:
@@ -25,6 +26,8 @@ class Simulation:
         self._runner = SimulationRunner()
         self._runner.set_simulation(self)
 
+        self.world = self._initialize_world()
+
         self.collection_name = f"agent_{self.id}"
 
     def get_db(self) -> TinyDB:
@@ -32,6 +35,11 @@ class Simulation:
 
     def get_nats(self) -> NatsBroker:
         return self._nats
+
+    def _initialize_world(self):
+        world = World(simulation_id=self.id, nats=self._nats, db=self._db)
+        world.load()
+        return world
 
     def _initialize_tick_counter(self):
         sim = self._db.table(settings.tinydb.tables.simulation_table).get(
@@ -48,6 +56,7 @@ class Simulation:
                 "id": self.id,
                 "collection_name": self.collection_name,
                 "running": False,
+                "tick": 0,
             }
         )
 
@@ -120,7 +129,7 @@ class Simulation:
             return False
         return simulation.get("running", False)
 
-    async def tick(self):   
+    async def tick(self):
         """Tick the simulation.
 
         This method is called by the SimulationRunner for every tick.
@@ -138,14 +147,22 @@ class Simulation:
             tick_msg.model_dump_json(), tick_msg.get_channel_name()
         )
 
+        tick_message = SimulationTickMessage(
+            id=self.id,
+            tick=self._tick_counter,
+        )
+
+        await self.world.tick()
+        await self._nats.publish(
+            tick_message.model_dump_json(), tick_message.get_channel_name()
+        )
+
         # ---------- agents ----------
         agent_table = self._db.table(settings.tinydb.tables.agent_table)
         agent_rows = agent_table.search(Query().simulation_id == self.id)
-        logger.debug(
-            f"[SIM {self.id}] Found {len(agent_rows)} agents for this tick"
-        )
+        logger.debug(f"[SIM {self.id}] Found {len(agent_rows)} agents for this tick")
 
-        for row in agent_rows:
+        async def run_agent(row):
             agent = Agent(
                 milvus=self._milvus,
                 db=self._db,
@@ -156,3 +173,6 @@ class Simulation:
             agent.load()
             logger.debug(f"[SIM {self.id}] Triggering agent {agent.id}")
             await agent.trigger()
+
+        tasks = [run_agent(row) for row in agent_rows]
+        await asyncio.gather(*tasks)

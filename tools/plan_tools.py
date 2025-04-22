@@ -4,6 +4,7 @@ from loguru import logger
 from typing import Annotated
 from models.plan import Plan, get_plan
 from models.task import Task, get_task
+
 # from fastapi import HTTPException
 
 
@@ -29,7 +30,7 @@ async def make_plan(
     agent_id: str,
     simulation_id: str,
 ):
-    """Form a new plan for resource acquisition."""
+    """Form a new plan for resource acquisition. You can only ever have one plan at a time."""
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 
@@ -47,6 +48,7 @@ async def make_plan(
         plan.create()
     except Exception as e:
         logger.error(f"Error creating plan: {e}")
+
 
 @observe()
 async def add_task(
@@ -83,6 +85,7 @@ async def add_task(
         task.create()
     except Exception as e:
         logger.error(f"Error creating task: {e}")
+
 
 @observe()
 async def take_on_task(

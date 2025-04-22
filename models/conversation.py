@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from typing import List, Dict, Optional
 from tinydb.queries import Query
+from config.base import settings
 
 
 # TODO: instead of this custom implementation it might be worth it to consider using native autogen functionalities such as RoundRobinGroupChat
@@ -34,7 +35,7 @@ class Conversation:
 
     def save(self):
         """Save the conversation to the database"""
-        table = self._db.table("agent_conversations")
+        table = self._db.table(settings.tinydb.tables.agent_conversation_table)
         table.insert(
             {
                 "id": self.id,
@@ -50,7 +51,7 @@ class Conversation:
     @classmethod
     def load(cls, db, conversation_id: str):
         """Load a conversation from the database"""
-        table = db.table("agent_conversations")
+        table = db.table(settings.tinydb.tables.agent_conversation_table)
         data = table.get(Query().id == conversation_id)
         if not data:
             return None
