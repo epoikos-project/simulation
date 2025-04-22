@@ -462,7 +462,6 @@ class World:
             raise ValueError(
                 f"Agent {agent_id} cannot move to destination {destination}. Distance {distance} is greater than range {agent_range}."
             )
-            return
 
         # Set agent field of view and get path
         # Create map with obstacles
