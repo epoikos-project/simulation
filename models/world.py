@@ -249,14 +249,15 @@ class World:
         return resource_observations
 
     def _load_agent_observation(
-        self, agent_location: tuple[int, int], visibility_range: int
+        self, agent_id: int, agent_location: tuple[int, int], visibility_range: int
     ):
         """Load agent observation from database given coordinates and visibility range of an agent"""
         table = self._db.table(settings.tinydb.tables.agent_table)
-
+        print(agent_location)
         # Filter agents based on agents location and visibility range
         agents = table.search(
             (Query()["simulation_id"] == self.simulation_id)
+            & (Query()["id"] != agent_id)
             & (Query()["x_coord"] >= agent_location[0] - visibility_range)
             & (Query()["x_coord"] <= agent_location[0] + visibility_range)
             & (Query()["y_coord"] >= agent_location[1] - visibility_range)
@@ -265,6 +266,7 @@ class World:
 
         # Create AgentObservation for each nearby agent
         agent_observations = []
+        print(agents)
         for agent in agents:
             next_agent_location = (agent["x_coord"], agent["y_coord"])
             agent_distance = self._compute_distance(agent_location, next_agent_location)
@@ -285,11 +287,7 @@ class World:
         """Load agent context from database"""
         context = []
 
-        table_agents = self._db.table(settings.tinydb.tables.agent_table)
-        agent = table_agents.get(
-            (Query()["simulation_id"] == self.simulation_id)
-            & (Query()["id"] == agent_id)
-        )
+        agent = self.get_agent(agent_id)
         if not agent:
             raise ValueError(
                 f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
@@ -304,7 +302,9 @@ class World:
         # Load agent's agent observations
         context.append(
             self._load_agent_observation(
-                (agent["x_coord"], agent["y_coord"]), agent["visibility_range"]
+                agent["id"],
+                (agent["x_coord"], agent["y_coord"]),
+                agent["visibility_range"],
             )
         )
         return context
@@ -351,19 +351,6 @@ class World:
 
     async def tick(self):
         """Tick the world"""
-        print(self.get_agents())
-        for value in self.get_agents():
-            try:
-                new_x_change = random.choice([-1, 0, 1])
-                new_y_change = random.choice([-1, 0, 1])
-                while abs(new_x_change) + abs(new_y_change) > 1:
-                    new_x_change = random.choice([-1, 0, 1])
-                    new_y_change = random.choice([-1, 0, 1])
-                new_x = value["x_coord"] + new_x_change
-                new_y = value["y_coord"] + new_y_change
-                await self.move_agent(value["id"], (new_x, new_y))
-            except Exception as e:
-                print(f"Error ticking agent {value["id"]}: {e}")
 
     async def place_agent(self, agent_id: str, agent_location: tuple[int, int]):
         """Place agent in world"""
