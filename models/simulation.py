@@ -155,15 +155,3 @@ class Simulation:
         await self._nats.publish(
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
-
-        for row in agent_rows:
-            agent = Agent(
-                milvus=self._milvus,
-                db=self._db,
-                nats=self._nats,
-                simulation_id=self.id,
-                id=row["id"],
-            )
-            agent.load()
-            logger.debug(f"[SIM {self.id}] Triggering agent {agent.id}")
-            await agent.trigger()
