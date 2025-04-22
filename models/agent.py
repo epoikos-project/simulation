@@ -194,7 +194,7 @@ class Agent:
         table.remove(Query()["id"] == self.id)
         self._milvus.drop_collection(self.collection_name)
 
-    async def create(self):
+    async def create(self, *, hunger: int = 20, visibility_range: int = 5, range_per_move: int = 1):
         logger.info(f"Creating agent {self.id}")
 
         self.world = World(
@@ -203,9 +203,9 @@ class Agent:
         self.world.load()
 
         # TODO: initialize with function parameters
-        self.hunger = 20
-        self.visibilty_range = 5
-        self.range_per_move = 1
+        self.hunger = hunger
+        self.visibilty_range = visibility_range
+        self.range_per_move = range_per_move
 
         # Create agent location if not provided
         self.location = self._create_agent_location()
@@ -236,7 +236,9 @@ class Agent:
         # TODO: most of this is just mocked for now. replace with actual loading logic!
 
         # current hunger level
-        self.hunger = 10  # TODO: get from database
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        docs = table.search(Query().id == self.id)
+        self.hunger = docs[0].get("hunger", 0) if docs else 0
 
         # observations from the world
         # TODO: get other observations apart from resources and agents
