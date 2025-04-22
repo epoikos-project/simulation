@@ -13,6 +13,7 @@ from messages.simulation import (
 from models.agent import Agent
 from models.simulation_runner import SimulationRunner
 from models.world import World
+import asyncio
 
 
 class Simulation:
@@ -155,3 +156,23 @@ class Simulation:
         await self._nats.publish(
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
+
+        # ---------- agents ----------
+        agent_table = self._db.table(settings.tinydb.tables.agent_table)
+        agent_rows = agent_table.search(Query().simulation_id == self.id)
+        logger.debug(f"[SIM {self.id}] Found {len(agent_rows)} agents for this tick")
+
+        async def run_agent(row):
+            agent = Agent(
+                milvus=self._milvus,
+                db=self._db,
+                nats=self._nats,
+                simulation_id=self.id,
+                id=row["id"],
+            )
+            agent.load()
+            logger.debug(f"[SIM {self.id}] Triggering agent {agent.id}")
+            await agent.trigger()
+
+        tasks = [run_agent(row) for row in agent_rows]
+        await asyncio.gather(*tasks)

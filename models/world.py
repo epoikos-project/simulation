@@ -464,23 +464,38 @@ class World:
             raise ValueError(f"Destination {destination} is invalid.")
         # Check if destination is occupied
 
-        agent_coords = self._get_agent_coords()
-        resource_coords = self._get_resource_coords()
-
-        if destination in agent_coords or destination in resource_coords:
-            raise ValueError(f"Destination {destination} is already occupied.")
-
         # Get agent location and distance to destination
         agent_location = (agent["x_coord"], agent["y_coord"])
         distance = self._compute_distance(agent_location, destination)
         # Get agent speed and range
         agent_range = agent["range_per_move"]
 
-        # Check if agent can move to destination
         if distance > agent_range:
             raise ValueError(
                 f"Agent {agent_id} cannot move to destination {destination}. Distance {distance} is greater than range {agent_range}."
             )
+
+        agent_coords = self._get_agent_coords()
+        resource_coords = self._get_resource_coords()
+
+        if destination in agent_coords or destination in resource_coords:
+            # Try moving one step further in a random direction if destination is occupied
+            new_x_change = random.choice([-1, 0, 1])
+            new_y_change = random.choice([-1, 0, 1])
+            while abs(new_x_change) + abs(new_y_change) > 1:
+                new_x_change = random.choice([-1, 0, 1])
+                new_y_change = random.choice([-1, 0, 1])
+            destination = (destination[0] + new_x_change, destination[1] + new_y_change)
+            if (
+                not self._check_coordinates(destination)
+                or destination in agent_coords
+                or destination in resource_coords
+            ):
+                raise ValueError(
+                    f"Destination {destination} is already occupied or invalid."
+                )
+
+        # Check if agent can move to destination
 
         # Update agent location in database
         table_agents = self._db.table(settings.tinydb.tables.agent_table)
