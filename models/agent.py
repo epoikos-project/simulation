@@ -194,7 +194,9 @@ class Agent:
         table.remove(Query()["id"] == self.id)
         self._milvus.drop_collection(self.collection_name)
 
-    async def create(self, *, hunger: int = 20, visibility_range: int = 5, range_per_move: int = 1):
+    async def create(
+        self, *, hunger: int = 20, visibility_range: int = 5, range_per_move: int = 1
+    ):
         logger.info(f"Creating agent {self.id}")
 
         self.world = World(
@@ -322,7 +324,13 @@ class Agent:
 
         plans_description = (
             f"You are the owner of the following plan: {plan_context}. "
-            f"These are the tasks in detail: " + ", ".join(map(str, tasks_context))
+            f"These are the tasks in detail: "
+            + ", ".join(map(str, tasks_context))
+            + (
+                " You have 0 tasks in your plan, it might make sense to add tasks."
+                if not tasks_context
+                else ""
+            )
             if plan_context
             else "You do not own any plans. "
         )
@@ -353,12 +361,14 @@ class Agent:
         )  # TODO: either pass this in prompt here or use autogen memory field
 
         context_description = (
-            f"{hunger_description}"
-            f"{observation_description}"
-            f"{plans_description}"
+            f"{hunger_description}\n\n"
+            f"{observation_description}\n\n"
+            f"{plans_description}\n\n"
             # f"{participating_plans_description}"
-            f"{message_description}"
-            f"{memory_description}"
+            f"{message_description}\n\n"
+            f"{memory_description}\n\n"
+            f"Your current location is {self.location}. \n\n"
+            f"You can only ever have one plan at a time. If you have a plan always add at least one task. Then move on."
             f"Given this information now decide on your next action by performing a tool call."
         )
         # TODO: improve formatting!
@@ -368,7 +378,9 @@ class Agent:
     @observe(as_type="generation", name="Agent Tick")
     async def trigger(self):
         langfuse_context.update_current_trace(
-            name=f"Agent Tick {self.name}", metadata={"agent_id": self.id}
+            name=f"Agent Tick {self.name}",
+            metadata={"agent_id": self.id},
+            session_id=self.simulation_id,
         )
         langfuse_context.update_current_observation(model=self.model, name="Agent Call")
         context = self.get_context()
@@ -376,9 +388,12 @@ class Agent:
         # self.autogen_agent.memory = memory
         # TODO: trigger any other required logic
         logger.info(f"Ticking agent {self.id}")
+
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
+        logger.info(self.autogen_agent._system_messages)
+        logger.info(self.autogen_agent._description)
 
         langfuse_context.update_current_observation(
             usage_details={

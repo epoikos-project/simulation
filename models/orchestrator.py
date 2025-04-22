@@ -69,11 +69,13 @@ class Orchestrator:
         logger.info(f"Orchestrator: created world {world.id} for sim {sim_id}")
 
         await self.nats.publish(
-            message=json.dumps({
-                "type": "world_created",
-                "simulation_id": sim_id,
-                "world_id": world.id,
-            }),
+            message=json.dumps(
+                {
+                    "type": "world_created",
+                    "simulation_id": sim_id,
+                    "world_id": world.id,
+                }
+            ),
             subject=f"simulation.{sim_id}.world.created",
         )
 
@@ -84,10 +86,12 @@ class Orchestrator:
 
         # 2) read out hunger attr
         hunger = next(
-            (int(a["value"])
-             for a in agent_cfg.get("attributes", [])
-             if a.get("name") == "hunger"),
-            0
+            (
+                int(a["value"])
+                for a in agent_cfg.get("attributes", [])
+                if a.get("name") == "hunger"
+            ),
+            0,
         )
 
         # 3) spawn count times
@@ -99,7 +103,7 @@ class Orchestrator:
                 simulation_id=sim_id,
                 model=model_entry,
             )
-            agent.name   = agent_cfg.get("name", "")
+            agent.name = agent_cfg.get("name", "") + str(uuid.uuid4().hex)[:2]
             agent.hunger = hunger
             await agent.create(
                 hunger=hunger,
@@ -109,12 +113,14 @@ class Orchestrator:
 
             logger.info(f"Orchestrator: created agent {agent.id} ({agent.name})")
             await self.nats.publish(
-                message=json.dumps({
-                    "type": "agent_created",
-                    "simulation_id": sim_id,
-                    "agent_id": agent.id,
-                    "name": agent.name,
-                }),
+                message=json.dumps(
+                    {
+                        "type": "agent_created",
+                        "simulation_id": sim_id,
+                        "agent_id": agent.id,
+                        "name": agent.name,
+                    }
+                ),
                 subject=f"simulation.{sim_id}.agent.created",
             )
 
