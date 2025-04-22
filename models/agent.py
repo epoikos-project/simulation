@@ -73,7 +73,7 @@ class Agent:
         self.hunger: int = 0
         self.location: tuple[int, int]
         self.visibilty_range: int = 0
-        self.range_per_move: int = 1
+        self.range_per_move: int = 3
 
         self.world: World = None
 

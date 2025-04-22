@@ -7,6 +7,7 @@ from loguru import logger
 from messages.world.agent_moved import AgentMovedMessage
 from messages.world.agent_placed import AgentPlacedMessage
 from models.context import AgentObservation, ObservationType, ResourceObservation
+from models.map import Map
 from models.region import Region
 from tinydb import Query, TinyDB
 
@@ -249,15 +250,15 @@ class World:
         return resource_observations
 
     def _load_agent_observation(
-        self, agent_id: int, agent_location: tuple[int, int], visibility_range: int
+        self, agent_id: str, agent_location: tuple[int, int], visibility_range: int
     ):
         """Load agent observation from database given coordinates and visibility range of an agent"""
         table = self._db.table(settings.tinydb.tables.agent_table)
         print(agent_location)
         # Filter agents based on agents location and visibility range
         agents = table.search(
-            (Query()["simulation_id"] == self.simulation_id)
-            & (Query()["id"] != agent_id)
+            (Query()["id"] != agent_id)
+            & (Query()["simulation_id"] == self.simulation_id)
             & (Query()["x_coord"] >= agent_location[0] - visibility_range)
             & (Query()["x_coord"] <= agent_location[0] + visibility_range)
             & (Query()["y_coord"] >= agent_location[1] - visibility_range)
@@ -428,7 +429,7 @@ class World:
         return [(agent["x_coord"], agent["y_coord"]) for agent in agents]
 
     def _check_coordinates(self, coords: tuple[int, int]):
-        """Check if coordinates are valid"""
+        """Check if coordinates are within the world bounds"""
         if (
             coords[0] < 0
             or coords[0] >= self.size_x
@@ -462,38 +463,83 @@ class World:
                 f"Agent {agent_id} cannot move to destination {destination}. Distance {distance} is greater than range {agent_range}."
             )
 
-        agent_coords = self._get_agent_coords()
-        resource_coords = self._get_resource_coords()
+        # Set agent field of view and get path
+        # Create map with obstacles
+        obstacles = self._get_agent_obstacles(agent_id)
+        map = Map(self.size_x, self.size_y)
+        map.set_agent_field_of_view(
+            agent_location, agent["visibility_range"], obstacles
+        )
+        # Get shortest path from agent location to destination
+        path, distance = map.get_path(start_int=agent_location, end_int=destination)
 
-        if destination in agent_coords or destination in resource_coords:
-            # Try moving one step further in a random direction if destination is occupied
-            new_x_change = random.choice([-1, 0, 1])
-            new_y_change = random.choice([-1, 0, 1])
-            while abs(new_x_change) + abs(new_y_change) > 1:
-                new_x_change = random.choice([-1, 0, 1])
-                new_y_change = random.choice([-1, 0, 1])
-            destination = (destination[0] + new_x_change, destination[1] + new_y_change)
-            if (
-                not self._check_coordinates(destination)
-                or destination in agent_coords
-                or destination in resource_coords
-            ):
-                raise ValueError(
-                    f"Destination {destination} is already occupied or invalid."
-                )
-
-        # Check if agent can move to destination
+        new_location = path[min(agent_range, distance)]
 
         # Update agent location in database
         table_agents = self._db.table(settings.tinydb.tables.agent_table)
         table_agents.update(
-            {"x_coord": destination[0], "y_coord": destination[1]},
+            {"x_coord": new_location[0], "y_coord": new_location[1]},
             Query()["id"] == agent_id,
         )
 
         agent_moved_message = AgentMovedMessage(
             simulation_id=self.simulation_id,
             id=agent_id,
-            location=destination,
+            start_location=agent_location,
+            new_location=new_location,
+            destination=destination,
+            num_steps=len(path) // agent_range,
         )
         await agent_moved_message.publish(self._nats)
+
+    def _get_agent_properties(self, agent_id: str):
+        """Get agent location, range and field of view from database"""
+        table_agents = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table_agents.search(
+            (Query()["simulation_id"] == self.simulation_id)
+            & (Query()["id"] == agent_id)
+        )
+        if not agent:
+            raise ValueError(
+                f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
+            )
+        return (
+            (agent[0]["x_coord"], agent[0]["y_coord"]),
+            agent[0]["range_per_move"],
+            agent[0]["visibility_range"],
+        )
+
+    def _get_agent_obstacles(self, agent_id: str):
+        """Get obstacles for agent"""
+        agent_location, _, agent_fov = self._get_agent_properties(agent_id)
+
+        # Filter agents based on agents location and visibility range
+        agent_table = self._db.table(settings.tinydb.tables.agent_table)
+        agents = agent_table.search(
+            (Query()["id"] != agent_id)
+            & (Query()["simulation_id"] == self.simulation_id)
+            & (Query()["x_coord"] >= agent_location[0] - agent_fov)
+            & (Query()["x_coord"] <= agent_location[0] + agent_fov)
+            & (Query()["y_coord"] >= agent_location[1] - agent_fov)
+            & (Query()["y_coord"] <= agent_location[1] + agent_fov)
+        )
+
+        table = self._db.table(settings.tinydb.tables.resource_table)
+        # Filter resources based on agents location and visibility range
+        resources = table.search(
+            (Query()["simulation_id"] == self.simulation_id)
+            & (Query()["world_id"] == self.id)
+            & (Query()["x_coord"] >= agent_location[0] - agent_fov)
+            & (Query()["x_coord"] <= agent_location[0] + agent_fov)
+            & (Query()["y_coord"] >= agent_location[1] - agent_fov)
+            & (Query()["y_coord"] <= agent_location[1] + agent_fov)
+        )
+
+        # Create list of obstacles
+        obstacles = []
+        for agent in agents:
+            obstacles.append((agent["x_coord"], agent["y_coord"]))
+        for resource in resources:
+            obstacles.append((resource["x_coord"], resource["y_coord"]))
+
+        return obstacles
