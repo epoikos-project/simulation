@@ -10,6 +10,7 @@ class TableSettings(BaseSettings):
     configuration_table: str = "configurations"
     plan_table: str = "plans"
     task_table: str = "tasks"
+    agent_conversation_table: str = "agent_conversations"
 
 
 class TinyDBSettings(BaseSettings):

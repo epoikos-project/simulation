@@ -79,6 +79,7 @@ class Agent:
 
         self.observations: list[Observation] = []
         self.message: Message = Message(content="", sender_id="")
+        self.conversation_id: str = ""
         self.plan: str = ""
         self.plan_tasks: list[str] = []
         self.participating_plans: list[str] = []
@@ -194,7 +195,9 @@ class Agent:
         table.remove(Query()["id"] == self.id)
         self._milvus.drop_collection(self.collection_name)
 
-    async def create(self):
+    async def create(
+        self, *, hunger: int = 20, visibility_range: int = 5, range_per_move: int = 1
+    ):
         logger.info(f"Creating agent {self.id}")
 
         self.world = World(
@@ -203,9 +206,9 @@ class Agent:
         self.world.load()
 
         # TODO: initialize with function parameters
-        self.hunger = 20
-        self.visibilty_range = 5
-        self.range_per_move = 1
+        self.hunger = hunger
+        self.visibilty_range = visibility_range
+        self.range_per_move = range_per_move
 
         # Create agent location if not provided
         self.location = self._create_agent_location()
@@ -236,7 +239,9 @@ class Agent:
         # TODO: most of this is just mocked for now. replace with actual loading logic!
 
         # current hunger level
-        self.hunger = 10  # TODO: get from database
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        docs = table.search(Query().id == self.id)
+        self.hunger = docs[0].get("hunger", 0) if docs else 0
 
         # observations from the world
         # TODO: get other observations apart from resources and agents
@@ -244,11 +249,19 @@ class Agent:
         self.observations.extend(self.world.load_agent_context(self.id))
 
         # messages by other agents
-        new_message = False  # TODO: adopt this later with communication rework
-        if new_message:
-            content = "Hello how are you?"
-            sender_id = "6687646df37e414a8c6c2f768e3eb964"
-            self.message = Message(content=content, sender_id=sender_id)
+        conversation_table = self._db.table(
+            settings.tinydb.tables.agent_conversation_table
+        )
+        conversation = conversation_table.search(
+            (Query().agent_ids.any(self.id)) & (Query().status == "active")
+        )
+        self.conversation_id = conversation[0]["id"]  # type: ignore
+        if conversation:
+            print(conversation)
+            self.message = Message(
+                content=conversation[0]["messages"][-1]["content"],
+                sender_id=conversation[0]["messages"][-1]["sender_id"],
+            )
 
         # plans owned by this agent
         plan_table = self._db.table(settings.tinydb.tables.plan_table)
@@ -320,7 +333,13 @@ class Agent:
 
         plans_description = (
             f"You are the owner of the following plan: {plan_context}. "
-            f"These are the tasks in detail: " + ", ".join(map(str, tasks_context))
+            f"These are the tasks in detail: "
+            + ", ".join(map(str, tasks_context))
+            + (
+                " You have 0 tasks in your plan, it might make sense to add tasks."
+                if not tasks_context
+                else ""
+            )
             if plan_context
             else "You do not own any plans. "
         )
@@ -351,12 +370,18 @@ class Agent:
         )  # TODO: either pass this in prompt here or use autogen memory field
 
         context_description = (
-            f"{hunger_description}"
-            f"{observation_description}"
-            f"{plans_description}"
+            f"{hunger_description}\n\n"
+            f"{observation_description}\n\n"
+            f"{plans_description}\n\n"
             # f"{participating_plans_description}"
-            f"{message_description}"
-            f"{memory_description}"
+            f"You are currently engaged in a conversation with another agent with ID: {self.conversation_id}. "
+            if self.conversation_id
+            else ""
+            f"{message_description}\n\n"
+            f"{memory_description}\n\n"
+            f"Your current location is {self.location}. \n\n"
+            f"You can only ever have one plan at a time. If you have a plan always add at least one task. NEVER add more than 5 tasks. Continue."
+            f"If you are close to an agent (distance 5 or less), engage in conversation with them. "
             f"Given this information now decide on your next action by performing a tool call."
         )
         # TODO: improve formatting!
@@ -366,7 +391,9 @@ class Agent:
     @observe(as_type="generation", name="Agent Tick")
     async def trigger(self):
         langfuse_context.update_current_trace(
-            name=f"Agent Tick {self.name}", metadata={"agent_id": self.id}
+            name=f"Agent Tick {self.name}",
+            metadata={"agent_id": self.id},
+            session_id=self.simulation_id,
         )
         langfuse_context.update_current_observation(model=self.model, name="Agent Call")
         context = self.get_context()
@@ -374,9 +401,12 @@ class Agent:
         # self.autogen_agent.memory = memory
         # TODO: trigger any other required logic
         logger.info(f"Ticking agent {self.id}")
+
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
+        logger.info(self.autogen_agent._system_messages)
+        logger.info(self.autogen_agent._description)
 
         langfuse_context.update_current_observation(
             usage_details={
@@ -402,7 +432,7 @@ class Agent:
         )
         return content
 
-    async def receive_conversation_context(self, conversation_id: str):
+    def receive_conversation_context(self, conversation_id: str):
         table = self._db.table("agent_conversations")
         conversation = table.get(Query().id == conversation_id)
         return conversation
@@ -410,20 +440,28 @@ class Agent:
     async def process_turn(self, conversation_id: str):
         """Process the agent's turn in a conversation"""
         # Get conversation context
-        conversation = await self.receive_conversation_context(conversation_id)
+
+        conversation = self.receive_conversation_context(conversation_id)
+
+        logger.debug(f"Conversation: {conversation}")
+        logger.debug(f"Conversation ID: {conversation_id}")
 
         # Format conversation for the LLM
         formatted_conversation = self._format_conversation_for_llm(conversation)
 
-        # Get response from LLM
-        response = await self.autogen_agent.run(task=formatted_conversation)
-        content = response.messages[-1].content
+        logger.debug(f"Formatted Conversation: {conversation}")
 
+        # TODO:
+        # Get response from LLM
+        # response = await self.autogen_agent.run(task=formatted_conversation)
+        # content = response.messages[-1].content
+
+        content = "Hello, this is a test message from the agent."
         # Check if the agent wants to end the conversation
         should_continue = "END_CONVERSATION" not in content
 
         # Store the message
-        await self._store_message_in_conversation(conversation_id, content)
+        self._store_message_in_conversation(conversation_id, content)
 
         return content, should_continue
 
@@ -431,7 +469,6 @@ class Agent:
         """Format the conversation history for the LLM"""
         context = """You are in a conversation with another agent. Review the conversation history below and respond appropriately.
         Your response should be to the point and concise \n\n"""
-
         for msg in conversation["messages"]:
             sender = (
                 "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
@@ -441,7 +478,7 @@ class Agent:
         context += "Your turn. You can include END_CONVERSATION in your response if you want to end the conversation. But make sure to talk 2 to 3 steps"
         return context
 
-    async def _store_message_in_conversation(self, conversation_id: str, content: str):
+    def _store_message_in_conversation(self, conversation_id: str, content: str):
         """Store a message in the conversation"""
         table = self._db.table("agent_conversations")
         conversation = table.get(Query().id == conversation_id)

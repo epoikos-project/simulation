@@ -13,16 +13,20 @@ from messages.simulation import (
 from models.agent import Agent
 from models.simulation_runner import SimulationRunner
 from models.world import World
+import asyncio
 
 
 class Simulation:
-    def __init__(self, db: TinyDB, nats: NatsBroker, id: str):
+    def __init__(self, db: TinyDB, nats: NatsBroker, milvus: MilvusClient, id: str):
         self.id = id
         self._db = db
         self._nats = nats
+        self._milvus = milvus
         self._tick_counter = self._initialize_tick_counter()
         self._runner = SimulationRunner()
         self._runner.set_simulation(self)
+
+        self.world = self._initialize_world()
 
         self.collection_name = f"agent_{self.id}"
 
@@ -31,6 +35,11 @@ class Simulation:
 
     def get_nats(self) -> NatsBroker:
         return self._nats
+
+    def _initialize_world(self):
+        world = World(simulation_id=self.id, nats=self._nats, db=self._db)
+        world.load()
+        return world
 
     def _initialize_tick_counter(self):
         sim = self._db.table(settings.tinydb.tables.simulation_table).get(
@@ -47,6 +56,7 @@ class Simulation:
                 "id": self.id,
                 "collection_name": self.collection_name,
                 "running": False,
+                "tick": 0,
             }
         )
 
@@ -114,6 +124,9 @@ class Simulation:
     def is_running(self) -> bool:
         table = self._db.table(settings.tinydb.tables.simulation_table)
         simulation = table.get(Query()["id"] == self.id)
+        # if no matching document (or wrong type), assume not running
+        if not isinstance(simulation, dict):
+            return False
         return simulation.get("running", False)
 
     async def tick(self):
@@ -122,17 +135,44 @@ class Simulation:
         This method is called by the SimulationRunner for every tick.
         """
         self._tick_counter += 1
-        logger.debug(f"Ticking Simulation {self.id} - Tick {self._tick_counter}")
-        table = self._db.table(settings.tinydb.tables.simulation_table)
-        table.update(
-            {"tick": self._tick_counter},
-            Query()["id"] == self.id,
+        logger.debug(f"[SIM {self.id}] Tick {self._tick_counter}")
+
+        # persist tick counter
+        sim_table = self._db.table(settings.tinydb.tables.simulation_table)
+        sim_table.update({"tick": self._tick_counter}, Query()["id"] == self.id)
+
+        # broadcast tick event
+        tick_msg = SimulationTickMessage(id=self.id, tick=self._tick_counter)
+        await self._nats.publish(
+            tick_msg.model_dump_json(), tick_msg.get_channel_name()
         )
 
         tick_message = SimulationTickMessage(
             id=self.id,
             tick=self._tick_counter,
         )
+
+        await self.world.tick()
         await self._nats.publish(
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
+
+        # ---------- agents ----------
+        agent_table = self._db.table(settings.tinydb.tables.agent_table)
+        agent_rows = agent_table.search(Query().simulation_id == self.id)
+        logger.debug(f"[SIM {self.id}] Found {len(agent_rows)} agents for this tick")
+
+        async def run_agent(row):
+            agent = Agent(
+                milvus=self._milvus,
+                db=self._db,
+                nats=self._nats,
+                simulation_id=self.id,
+                id=row["id"],
+            )
+            agent.load()
+            logger.debug(f"[SIM {self.id}] Triggering agent {agent.id}")
+            await agent.trigger()
+
+        tasks = [run_agent(row) for row in agent_rows]
+        await asyncio.gather(*tasks)

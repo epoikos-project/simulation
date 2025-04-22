@@ -23,33 +23,14 @@ class CreateWorldInput(BaseModel):
 
 
 @router.post("")
-async def create_simulation(
-    simulation_id: str,
-    db: DB,
-    nats: Nats,
-    create_world_input: CreateWorldInput,
-):
-    """Create a world in the simulation"""
+async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):   
     try:
-        simulation = Simulation(id=simulation_id, nats=nats, db=db)
+        simulation = Simulation(db=db, nats=broker, milvus=milvus, id=name)
         await simulation.create()
-        world = World(simulation_id, db, nats)
-        await world.create(
-            size=create_world_input.size,
-            num_regions=create_world_input.num_regions,
-            total_resources=create_world_input.total_resources,
-        )
     except Exception as e:
-        logger.error(f"Error creating world: {str(e)}")
-        return {"message": "An internal error has occurred while creating the world."}
-
-    return {
-        "message": f"""World created for simulation {simulation_id} of size
-        {create_world_input.size[0]}x{create_world_input.size[1]} with 
-        {create_world_input.num_regions} regions 
-        and {create_world_input.total_resources} resources""",
-        "simulation_id": simulation_id,
-    }
+        logger.error(f"Error creating simulation: {e}")
+        return {"message": f"Error creating simulation"}
+    return {"message": "Simulation created successfully!"}
 
 
 @router.get("")
@@ -79,7 +60,7 @@ async def get_simulation(id: str, db: DB):
 @router.delete("/{id}")
 async def delete_simulation(id: str, db: DB, milvus: Milvus, nats: Nats):
     try:
-        simulation = Simulation(id=id, db=db, nats=nats)
+        simulation = simulation = Simulation(db=db, nats=nats, milvus=milvus, id=id)
         await simulation.delete(milvus=milvus)
     except Exception as e:
         logger.error(f"Error deleting simulation: {e}")
@@ -88,9 +69,9 @@ async def delete_simulation(id: str, db: DB, milvus: Milvus, nats: Nats):
 
 
 @router.post("/{simulation_id}/start")
-async def start_simulation(simulation_id: str, broker: Nats, db: DB):
+async def start_simulation(simulation_id: str, broker: Nats, db: DB, milvus: Milvus):
     try:
-        simulation = Simulation(id=simulation_id, nats=broker, db=db)
+        simulation = simulation = Simulation(db=db, nats=broker, milvus=milvus, id=simulation_id)
         await simulation.start()
     except Exception as e:
         logger.error(f"Error starting simulation: {e}")
@@ -99,9 +80,9 @@ async def start_simulation(simulation_id: str, broker: Nats, db: DB):
 
 
 @router.post("/{simulation_id}/stop")
-async def stop_simulation(simulation_id: str, broker: Nats, db: DB):
+async def stop_simulation(simulation_id: str, broker: Nats, db: DB, milvus: Milvus):
     try:
-        simulation = Simulation(id=simulation_id, nats=broker, db=db)
+        simulation = Simulation(db=db, nats=broker, milvus=milvus, id=simulation_id)
         await simulation.stop()
     except Exception as e:
         logger.error(f"Error stopping simulation: {e}")
