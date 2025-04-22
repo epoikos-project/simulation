@@ -105,6 +105,7 @@ class Agent:
             description=DESCRIPTION.format(
                 id=self.id,
                 name=self.name,
+                location=self.location,
                 # personality=self.personality
             ),
             reflect_on_tool_use=False,  # False as our current tools do not return text
@@ -194,7 +195,9 @@ class Agent:
         table.remove(Query()["id"] == self.id)
         self._milvus.drop_collection(self.collection_name)
 
-    async def create(self, *, hunger: int = 20, visibility_range: int = 5, range_per_move: int = 1):
+    async def create(
+        self, *, hunger: int = 20, visibility_range: int = 5, range_per_move: int = 1
+    ):
         logger.info(f"Creating agent {self.id}")
 
         self.world = World(
