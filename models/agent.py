@@ -427,41 +427,64 @@ class Agent:
         if not conversation:
             logger.warning(f"No conversation context found for {conversation_id}")
             return "I'm ready to start the conversation.", True
-
+            
         # Format conversation for the LLM
         formatted_conversation = self._format_conversation_for_llm(conversation)
         logger.info(f"Formatted conversation for LLM: {formatted_conversation}")
-
+        
         # Get response from LLM
         try:
             logger.info("Calling LLM for response")
             response = await self.autogen_agent.run(task=formatted_conversation)
+            logger.info(f"LLM response type: {type(response)}")
             logger.info(f"LLM response: {response}")
             
-            if not response or not response.messages:
-                logger.error("No messages in LLM response")
-                content = "I'm thinking about how to respond..."
-            else:
-                content = response.messages[-1].content
-                logger.info(f"Extracted content: {content}")
+            # Extract the actual response text from the LLM output
+            content = None
+            
+            # If response is a TaskResult object with messages
+            if hasattr(response, 'messages') and response.messages:
+                # Debug log all messages
+                for i, msg in enumerate(response.messages):
+                    logger.info(f"Message {i}: type={type(msg)}, content_type={type(msg.content)}")
+                    
+                # Try to find a text response from any of the messages
+                for msg in response.messages:
+                    # Look for assistant/user messages with text content
+                    if hasattr(msg, 'content') and isinstance(msg.content, str):
+                        if msg.content and msg.content != "None" and msg.content != formatted_conversation:
+                            if msg.type in ['TextMessage', 'AgentMessage', 'AssistantMessage']:
+                                content = msg.content
+                                break
+            
+            # If we still don't have content, try direct attributes
+            if not content and hasattr(response, 'content'):
+                content = response.content
                 
+            # Final fallback
+            if not content or content == "None" or content == formatted_conversation:
+                content = "Hello! I'm an agent in this conversation. How can we work together today?"
+                
+            logger.info(f"Extracted content: {content}")
+            
         except Exception as e:
             logger.error(f"Error processing turn for agent {self.id}: {str(e)}")
+            logger.error(traceback.format_exc())
             content = "I encountered an error while processing my turn."
-
+        
         # Check if the agent wants to end the conversation
+        # Make sure we're only checking in our actual response, not the instructions
         should_continue = "END_CONVERSATION" not in content.upper()
         logger.info(f"Should continue conversation: {should_continue}")
-
+        
         # Store the message
         try:
             await self._store_message_in_conversation(conversation_id, content)
             logger.info("Message stored successfully")
         except Exception as e:
             logger.error(f"Error storing message: {str(e)}")
-
+        
         return content, should_continue
-
     def _format_conversation_for_llm(self, conversation):
         """Format the conversation history for the LLM"""
         logger.info("Formatting conversation for LLM")

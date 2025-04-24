@@ -7,6 +7,7 @@ from loguru import logger
 from messages.world.agent_moved import AgentMovedMessage
 from messages.world.agent_placed import AgentPlacedMessage
 from models.context import AgentObservation, ObservationType, ResourceObservation
+from models.map import Map
 from models.region import Region
 from tinydb import Query, TinyDB
 
@@ -27,8 +28,6 @@ class World:
         self.num_regions: int = None
         self.total_resources: int = None
         self.base_energy_cost: int = None
-        self.resource_coords: list[tuple[int, int]] = []
-        self.agent_dict: dict[str, tuple[int, int]] = {}
 
     async def create(
         self,
@@ -73,8 +72,6 @@ class World:
                 resource_regen=10,
             )
 
-            self.resource_coords.extend(region.resource_coords)
-
         logger.info(f"Creating world {self.id} for simulation {self.simulation_id}")
         table.insert(
             {
@@ -85,8 +82,6 @@ class World:
                 "num_regions": num_regions,
                 "total_resources": total_resources,
                 "base_energy_cost": base_energy_cost,
-                "resource_coords": self.resource_coords,
-                "agent_dict": self.agent_dict,
             }
         )
 
@@ -103,8 +98,6 @@ class World:
             "size_x": self.size_x,
             "size_y": self.size_y,
             "base_energy_cost": self.base_energy_cost,
-            "resource_coords": self.resource_coords,
-            "agent_dict": self.agent_dict,
         }
 
     def delete(self):
@@ -171,8 +164,7 @@ class World:
             self.size_x = result["size_x"]
             self.size_y = result["size_y"]
             self.base_energy_cost = result["base_energy_cost"]
-            self.resource_coords = result["resource_coords"]
-            self.agent_dict = result["agent_dict"]
+
         except ValueError:
             logger.warning(
                 f"World {self.id} not found in database. Creating new world."
@@ -258,14 +250,15 @@ class World:
         return resource_observations
 
     def _load_agent_observation(
-        self, agent_location: tuple[int, int], visibility_range: int
+        self, agent_id: str, agent_location: tuple[int, int], visibility_range: int
     ):
         """Load agent observation from database given coordinates and visibility range of an agent"""
         table = self._db.table(settings.tinydb.tables.agent_table)
-
+        print(agent_location)
         # Filter agents based on agents location and visibility range
         agents = table.search(
-            (Query()["simulation_id"] == self.simulation_id)
+            (Query()["id"] != agent_id)
+            & (Query()["simulation_id"] == self.simulation_id)
             & (Query()["x_coord"] >= agent_location[0] - visibility_range)
             & (Query()["x_coord"] <= agent_location[0] + visibility_range)
             & (Query()["y_coord"] >= agent_location[1] - visibility_range)
@@ -274,6 +267,7 @@ class World:
 
         # Create AgentObservation for each nearby agent
         agent_observations = []
+        print(agents)
         for agent in agents:
             next_agent_location = (agent["x_coord"], agent["y_coord"])
             agent_distance = self._compute_distance(agent_location, next_agent_location)
@@ -294,29 +288,24 @@ class World:
         """Load agent context from database"""
         context = []
 
-        table_agents = self._db.table(settings.tinydb.tables.agent_table)
-        agent = table_agents.search(
-            (Query()["simulation_id"] == self.simulation_id)
-            & (Query()["id"] == agent_id)
-        )
+        agent = self.get_agent(agent_id)
         if not agent:
             raise ValueError(
                 f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
             )
-        # Check if agent is already placed in world
-        if agent_id not in self.agent_dict:
-            raise ValueError(f"Agent {agent_id} is not placed in the world.")
 
         # Load agent's resource observations
         context.append(
             self._load_resource_observation(
-                self.agent_dict[agent_id], agent[0]["visibility_range"]
+                (agent["x_coord"], agent["y_coord"]), agent["visibility_range"]
             )
         )
         # Load agent's agent observations
         context.append(
             self._load_agent_observation(
-                self.agent_dict[agent_id], agent[0]["visibility_range"]
+                agent["id"],
+                (agent["x_coord"], agent["y_coord"]),
+                agent["visibility_range"],
             )
         )
         return context
@@ -324,7 +313,11 @@ class World:
     def get_random_agent_location(self):
         """Get random agent location in world that is not occupied by an agent or resource"""
         location = self._get_random_location()
-        while location in self.agent_dict.values() or location in self.resource_coords:
+
+        while (
+            location in self._get_agent_coords()
+            or location in self._get_resource_coords()
+        ):
             location = self._get_random_location()
         return location
 
@@ -334,16 +327,31 @@ class World:
         y = random.randint(0, self.size_y - 1)
         return (x, y)
 
-    def _update_agent_dict(self):
-        """Update the `agent_dict` field in the database for the current world instance."""
-        world_table = self._db.table(settings.tinydb.tables.world_table)
-        world_table.update(
-            {
-                "agent_dict": self.agent_dict,
-            },
-            (Query()["simulation_id"] == self.simulation_id)
-            & (Query()["id"] == self.id),
+    def get_resources(self):
+        """Get all resources in world"""
+        table_resources = self._db.table(settings.tinydb.tables.resource_table)
+        resources = table_resources.search(
+            Query()["simulation_id"] == self.simulation_id
         )
+        return resources
+
+    def get_agents(self):
+        """Get all agents in world"""
+        table_agents = self._db.table(settings.tinydb.tables.agent_table)
+        agents = table_agents.search(Query()["simulation_id"] == self.simulation_id)
+        return agents
+
+    def get_agent(self, agent_id: str):
+        """Get agent from world"""
+        table_agents = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table_agents.get(
+            (Query()["simulation_id"] == self.simulation_id)
+            & (Query()["id"] == agent_id)
+        )
+        return agent if agent else None
+
+    async def tick(self):
+        """Tick the world"""
 
     async def place_agent(self, agent_id: str, agent_location: tuple[int, int]):
         """Place agent in world"""
@@ -357,9 +365,8 @@ class World:
             raise ValueError(
                 f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
             )
-        # Check if agent is already placed in world
-        if agent_id in self.agent_dict:
-            raise ValueError(f"Agent {agent_id} is already placed in the world.")
+        agent_coords = self._get_agent_coords()[:-1]
+        resource_coords = self._get_resource_coords()
 
         # Check if agent coordinates are valid
         # should be unnecessary since agent should be created with valid coordinates
@@ -368,20 +375,19 @@ class World:
             raise ValueError(
                 f"Agent {agent_id} coordinates {agent_location} are invalid."
             )
+
         # Check if agent coordinates are already occupied
-        if agent_location in self.agent_dict.values() or any(
-            agent_location in sublist for sublist in self.resource_coords
-        ):
+        if agent_location in agent_coords or agent_location in resource_coords:
             raise ValueError(
                 f"Agent {agent_id} coordinates {agent_location} are already occupied."
             )
-
-        # Place agent in world
-        self.agent_dict[agent_id] = agent_location
-        self._update_agent_dict()
-
         # Publish agent placement message
-        agent_placed_message = AgentPlacedMessage(id=agent_id, name=agent["name"], location=agent_location, simulation_id=self.simulation_id)
+        agent_placed_message = AgentPlacedMessage(
+            id=agent_id,
+            name=agent.get("name"),
+            location=agent_location,
+            simulation_id=self.simulation_id,
+        )
         await agent_placed_message.publish(self._nats)
 
     async def remove_agent(self, agent_id: str):
@@ -396,13 +402,11 @@ class World:
             raise ValueError(
                 f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
             )
-        # Check if agent is already placed
-        if agent_id not in self.agent_dict:
-            raise ValueError(f"Agent {agent_id} is not placed in the world.")
 
-        # Remove agent from world
-        self.agent_dict.pop(agent_id)
-        self._update_agent_dict()
+        agents = self.get_agents()
+        # Check if agent is already placed
+        if agent_id not in agents:
+            raise ValueError(f"Agent {agent_id} is not placed in the world.")
 
         # Publish agent removal message
         await self._nats.publish(
@@ -415,8 +419,17 @@ class World:
             f"simulation.{self.simulation_id}.agent.{agent_id}",
         )
 
+    def _get_resource_coords(self) -> list[tuple[int, int]]:
+        # Retrieve all resource coordinates from the database
+        resources = self.get_resources()
+        return [(resource["x_coord"], resource["y_coord"]) for resource in resources]
+
+    def _get_agent_coords(self) -> list[tuple[int, int]]:
+        agents = self.get_agents()
+        return [(agent["x_coord"], agent["y_coord"]) for agent in agents]
+
     def _check_coordinates(self, coords: tuple[int, int]):
-        """Check if coordinates are valid"""
+        """Check if coordinates are within the world bounds"""
         if (
             coords[0] < 0
             or coords[0] >= self.size_x
@@ -430,47 +443,103 @@ class World:
     async def move_agent(self, agent_id: str, destination: tuple[int, int]):
         """Move agent to new location in world"""
         # Check if agent is placed in world
-        if agent_id not in self.agent_dict:
+        logger.debug(f"Moving agent {agent_id} to {destination}")
+        agent = self.get_agent(agent_id)
+        if not agent:
             raise ValueError(f"Agent {agent_id} is not placed in the world.")
         # Check if destination is valid
         if not self._check_coordinates(destination):
             raise ValueError(f"Destination {destination} is invalid.")
         # Check if destination is occupied
-        if (
-            destination in self.agent_dict.values()
-            or destination in self.resource_coords
-        ):
-            raise ValueError(f"Destination {destination} is already occupied.")
 
         # Get agent location and distance to destination
-        agent_location = self.agent_dict[agent_id]
+        agent_location = (agent["x_coord"], agent["y_coord"])
         distance = self._compute_distance(agent_location, destination)
         # Get agent speed and range
-        table_agents = self._db.table(settings.tinydb.tables.agent_table)
-        agent = table_agents.search(
-            (Query()["simulation_id"] == self.simulation_id)
-            & (Query()["id"] == agent_id)
-        )
-        agent_range = agent[0]["range_per_move"]
+        agent_range = agent["range_per_move"]
 
-        # Check if agent can move to destination
         if distance > agent_range:
             raise ValueError(
                 f"Agent {agent_id} cannot move to destination {destination}. Distance {distance} is greater than range {agent_range}."
             )
 
-        # Move agent in world and update agent location
-        self.agent_dict[agent_id] = destination
-        self._update_agent_dict()
+        # Set agent field of view and get path
+        # Create map with obstacles
+        obstacles = self._get_agent_obstacles(agent_id)
+        map = Map(self.size_x, self.size_y)
+        map.set_agent_field_of_view(
+            agent_location, agent["visibility_range"], obstacles
+        )
+        # Get shortest path from agent location to destination
+        path, distance = map.get_path(start_int=agent_location, end_int=destination)
+
+        new_location = path[min(agent_range, distance)]
+
         # Update agent location in database
+        table_agents = self._db.table(settings.tinydb.tables.agent_table)
         table_agents.update(
-            {"x_coord": destination[0], "y_coord": destination[1]},
+            {"x_coord": new_location[0], "y_coord": new_location[1]},
             Query()["id"] == agent_id,
         )
 
         agent_moved_message = AgentMovedMessage(
             simulation_id=self.simulation_id,
             id=agent_id,
-            location=destination,
+            start_location=agent_location,
+            new_location=new_location,
+            destination=destination,
+            num_steps=len(path) // agent_range,
         )
         await agent_moved_message.publish(self._nats)
+
+    def _get_agent_properties(self, agent_id: str):
+        """Get agent location, range and field of view from database"""
+        table_agents = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table_agents.search(
+            (Query()["simulation_id"] == self.simulation_id)
+            & (Query()["id"] == agent_id)
+        )
+        if not agent:
+            raise ValueError(
+                f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
+            )
+        return (
+            (agent[0]["x_coord"], agent[0]["y_coord"]),
+            agent[0]["range_per_move"],
+            agent[0]["visibility_range"],
+        )
+
+    def _get_agent_obstacles(self, agent_id: str):
+        """Get obstacles for agent"""
+        agent_location, _, agent_fov = self._get_agent_properties(agent_id)
+
+        # Filter agents based on agents location and visibility range
+        agent_table = self._db.table(settings.tinydb.tables.agent_table)
+        agents = agent_table.search(
+            (Query()["id"] != agent_id)
+            & (Query()["simulation_id"] == self.simulation_id)
+            & (Query()["x_coord"] >= agent_location[0] - agent_fov)
+            & (Query()["x_coord"] <= agent_location[0] + agent_fov)
+            & (Query()["y_coord"] >= agent_location[1] - agent_fov)
+            & (Query()["y_coord"] <= agent_location[1] + agent_fov)
+        )
+
+        table = self._db.table(settings.tinydb.tables.resource_table)
+        # Filter resources based on agents location and visibility range
+        resources = table.search(
+            (Query()["simulation_id"] == self.simulation_id)
+            & (Query()["world_id"] == self.id)
+            & (Query()["x_coord"] >= agent_location[0] - agent_fov)
+            & (Query()["x_coord"] <= agent_location[0] + agent_fov)
+            & (Query()["y_coord"] >= agent_location[1] - agent_fov)
+            & (Query()["y_coord"] <= agent_location[1] + agent_fov)
+        )
+
+        # Create list of obstacles
+        obstacles = []
+        for agent in agents:
+            obstacles.append((agent["x_coord"], agent["y_coord"]))
+        for resource in resources:
+            obstacles.append((resource["x_coord"], resource["y_coord"]))
+
+        return obstacles

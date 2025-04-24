@@ -11,6 +11,7 @@ dependencies = [
     "faststream[nats]>=0.5.37",
     "langfuse>=2.60.3",
     "loguru>=0.7.3",
+    "pathfind>=0.1.2",
     "pydantic>=2.11.0",
     "pydantic-settings>=2.8.1",
     "pymilvus>=2.5.6",
