@@ -255,9 +255,10 @@ class Agent:
         conversation = conversation_table.search(
             (Query().agent_ids.any(self.id)) & (Query().status == "active")
         )
-        self.conversation_id = conversation[0]["id"]  # type: ignore
+          # type: ignore
         if conversation:
             print(conversation)
+            self.conversation_id = conversation[0]["id"]
             self.message = Message(
                 content=conversation[0]["messages"][-1]["content"],
                 sender_id=conversation[0]["messages"][-1]["sender_id"],
