@@ -31,7 +31,6 @@ class Map:
                     self.map[i][j] = 1
 
         # Update the graph with the new map
-        print(self.map)
         self.graph = pathfind.transform.matrix2graph(self.map, diagonal=False)
 
     def _convert_coordinate(self, c: str) -> tuple[int, int]:
@@ -69,8 +68,13 @@ class Map:
             raise ValueError(
                 "Start and End must be either in the format 'x,y' or as tuple [x,y]."
             )
+        if start == end:
+            raise ValueError("Start and End coordinates must be different.")
 
-        print(self.graph)
         path = pathfind.find(self.graph, start, end, method="jps")
+        if not path:
+            raise ValueError(
+                f"No path found from {start} to {end}. The destination is unreachable."
+            )
 
         return self._convert_path(path), len(path)
