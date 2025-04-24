@@ -11,11 +11,11 @@ class Map:
         self.size_y = size_y
 
         self.map = [[0 for _ in range(size_x)] for _ in range(size_y)]
-        for i in range(size_x):
-            for j in range(size_y):
-                # Initialize each cell as unwalkable (-1)
-                # Map is later updated with field of view of agent
-                self.map[i][j] = -1
+        for i in range(size_y):
+            for j in range(size_x):
+                # Initialize each cell as walkable (1)
+                # Map is later updated with field of view of agent, i.e. obstacles (-1)
+                self.map[i][j] = 1
 
         self.graph: pathfind.transform.matrix2graph = None
 
@@ -26,12 +26,11 @@ class Map:
         x, y = agent
         for i in range(max(0, x - fov - 1), min(self.size_x, x + fov)):
             for j in range(max(0, y - fov - 1), min(self.size_y, y + fov)):
-                if (i, j) not in obstacles:
-                    # All cells in field of view that are not an obstacle are walkable (1)
-                    self.map[i][j] = 1
+                if (i, j) in obstacles:
+                    # All cells that are an obstacle are not walkable (-1)
+                    self.map[i][j] = -1
 
         # Update the graph with the new map
-        print(self.map)
         self.graph = pathfind.transform.matrix2graph(self.map, diagonal=False)
 
     def _convert_coordinate(self, c: str) -> tuple[int, int]:
@@ -69,8 +68,13 @@ class Map:
             raise ValueError(
                 "Start and End must be either in the format 'x,y' or as tuple [x,y]."
             )
+        if start == end:
+            raise ValueError("Start and End coordinates must be different.")
 
-        print(self.graph)
         path = pathfind.find(self.graph, start, end, method="jps")
+        if not path:
+            raise ValueError(
+                f"No path found from {start} to {end}. The destination is unreachable."
+            )
 
-        return self._convert_path(path), len(path)
+        return self._convert_path(path), (len(path) - 1)

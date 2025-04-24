@@ -458,9 +458,9 @@ class World:
         # Get agent speed and range
         agent_range = agent["range_per_move"]
 
-        if distance > agent_range:
+        if agent_location == destination:
             raise ValueError(
-                f"Agent {agent_id} cannot move to destination {destination}. Distance {distance} is greater than range {agent_range}."
+                f"Agent {agent_id} is already at the destination {destination}."
             )
 
         # Set agent field of view and get path
@@ -471,7 +471,12 @@ class World:
             agent_location, agent["visibility_range"], obstacles
         )
         # Get shortest path from agent location to destination
-        path, distance = map.get_path(start_int=agent_location, end_int=destination)
+        try:
+            path, distance = map.get_path(start_int=agent_location, end_int=destination)
+        except ValueError:
+            raise ValueError(
+                f"Path from {agent_location} to {destination} not found. Agent may be blocked by obstacles."
+            )
 
         new_location = path[min(agent_range, distance)]
 
@@ -488,7 +493,7 @@ class World:
             start_location=agent_location,
             new_location=new_location,
             destination=destination,
-            num_steps=len(path) // agent_range,
+            num_steps=(len(path) - 1) // agent_range,
         )
         await agent_moved_message.publish(self._nats)
 
