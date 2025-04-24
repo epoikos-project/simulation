@@ -493,7 +493,7 @@ class World:
             start_location=agent_location,
             new_location=new_location,
             destination=destination,
-            num_steps=len(path) // agent_range,
+            num_steps=(len(path) - 1) // agent_range,
         )
         await agent_moved_message.publish(self._nats)
 
