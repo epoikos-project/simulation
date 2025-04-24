@@ -6,9 +6,11 @@ from faststream.nats import NatsBroker
 from loguru import logger
 from messages.world.agent_moved import AgentMovedMessage
 from messages.world.agent_placed import AgentPlacedMessage
+from messages.world.resource_harvested import ResourceHarvestedMessage
 from models.context import AgentObservation, ObservationType, ResourceObservation
 from models.map import Map
 from models.region import Region
+from models.resource import Resource
 from tinydb import Query, TinyDB
 
 from config.base import settings
@@ -170,41 +172,129 @@ class World:
                 f"World {self.id} not found in database. Creating new world."
             )
 
-    async def update(self, time: int):
-        """Update world with all its regions and resources"""
-        logger.info(f"Updating world {self.id}")
+    async def tick(self):
+        """Tick the world"""
+        logger.info(f"Ticking world {self.id}")
+
+        sim_table = self._db.table(settings.tinydb.tables.simulation_table)
+        sim = sim_table.get(Query()["id"] == self.simulation_id)
+        if not sim:
+            raise ValueError(
+                f"Simulation with id {self.simulation_id} not found in database."
+            )
+        tick_counter = sim["tick"]
 
         # Update all regions
-        table_regions = self._db.table(settings.tinydb.tables.region_table)
-        regions = table_regions.search(Query()["world_id"] == self.id)
-        for r in regions:
-            region = Region(
+        resources = self.get_resources()
+        for r in resources:
+            resource = Resource(
                 simulation_id=self.simulation_id,
                 world_id=self.id,
+                resource_id=r["region_id"],
                 db=self._db,
                 nats=self._nats,
                 id=r["id"],
             )
-            region.load(simulation_id=self.simulation_id)
-            region.update(time=time)
+            resource.tick(tick=tick_counter)
 
         await self._nats.publish(
             json.dumps(
                 {
-                    "type": "world_updated",
-                    "message": f"World {self.id} updated",
+                    "type": "world_ticked",
+                    "message": f"World ticked at {tick_counter}",
                 }
             ),
             f"simulation.{self.simulation_id}.world.{self.id}",
         )
 
-    def harvest_resource(
+    async def harvest_resource(
         self,
         coords: tuple[int, int],
         harvester_ids: list[str],
     ):
-        # TODO: Implement resource harvesting
-        pass
+        """Harvest resource at given coordinates"""
+        resource_table = self._db.table(settings.tinydb.tables.resource_table)
+        resource = resource_table.get(
+            Query()["x_coord"]
+            == coords[0] & Query()["y_coord"]
+            == coords[1] & Query()["simulation_id"]
+            == self.simulation_id
+        )
+        if not resource:
+            raise ValueError(
+                f"Resource at coordinates {coords} for simulation {self.simulation_id} not found in database."
+            )
+        # Check for invalid states
+        if resource["availability"] is False:
+            raise ValueError(f"Resource at {coords} is not available for harvesting")
+        if resource["being_harvested"]:
+            raise ValueError(f"Resource at {coords} is already being harvested")
+        if resource["required_agents"] < len(harvester_ids):
+            raise ValueError(
+                f"Resource at {coords} requires {resource['required_agents']} agents for harvesting, but {len(harvester_ids)} agents are provided"
+            )
+
+        # Check if agent(s) is/are in the harvesting area
+        in_range, agent_id = self._check_agent_resource_distance(
+            resource, harvester_ids
+        )
+        if in_range:
+            tick = self._db.table(settings.tinydb.tables.simulation_table).get(
+                Query()["simulation_id"] == self.simulation_id
+            )["tick"]
+            # Update resource in database
+            resource_table.update(
+                {
+                    "being_harvested": True,
+                    "start_harvest": tick,
+                    "time_harvest": tick + resource["mining_time"],
+                    "harvester": harvester_ids,
+                },
+                Query()["x_coord"]
+                == coords[0] & Query()["y_coord"]
+                == coords[1] & Query()["simulation_id"]
+                == self.simulation_id,
+            )
+        else:
+            raise ValueError(
+                f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
+            )
+
+        # Publish resource harvest message
+        resource_harvested_message = ResourceHarvestedMessage(
+            simulation_id=self.simulation_id,
+            resource_id=resource["id"],
+            harvester_ids=harvester_ids,
+            location=(coords[0], coords[1]),
+            start_tick=resource["start_harvest"],
+            end_tick=resource["time_harvest"],
+        )
+        await resource_harvested_message.publish(self.nats)
+
+    def _check_agent_resource_distance(self, resource: dict, agents: list[str]):
+        """Check if agent is within range of resource"""
+        resource_location = (resource["x_coord"], resource["y_coord"])
+        harvesting_area = resource["harvesting_area"]
+
+        for agent_id in agents:
+            agent = self.get_agent(agent_id)
+            if not agent:
+                raise ValueError(
+                    f"Agent with id {agent} for simulation {self.simulation_id} not found in database."
+                )
+
+            agent_location_x = agent["x_coord"]
+            agent_location_y = agent["y_coord"]
+            # Check if agent is within harvesting area of resource
+            if (
+                agent_location_x < resource_location[0] - harvesting_area
+                or agent_location_x > resource_location[0] + harvesting_area
+                or agent_location_y < resource_location[1] - harvesting_area
+                or agent_location_y > resource_location[1] + harvesting_area
+            ):
+                return False, agent_id
+
+        return True
 
     def _compute_distance(
         self, coords: tuple[int, int], resource_coords: tuple[int, int]
