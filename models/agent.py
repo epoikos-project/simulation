@@ -71,7 +71,6 @@ class Agent:
 
         # TODO: a bit of a mix between ids, context objects etc. could maybe be improved
         self.hunger: int = 0
-        self.location: tuple[int, int]
         self.visibilty_range: int = 0
         self.range_per_move: int = 3
 
@@ -80,8 +79,6 @@ class Agent:
         self.observations: list[Observation] = []
         self.message: Message = Message(content="", sender_id="")
         self.conversation_id: str = ""
-        self.plan: str = ""
-        self.plan_tasks: list[str] = []
         self.participating_plans: list[str] = []
         self.assigned_tasks: list[str] = []
         self.memory: str = ""
@@ -134,7 +131,7 @@ class Agent:
             collection_name=self.collection_name, dimension=128
         )
 
-    def _create_in_db(self):
+    def _create_in_db(self, location: tuple[int, int] = (0, 0)):
         table = self._db.table(settings.tinydb.tables.agent_table)
         table.insert(
             {
@@ -144,8 +141,8 @@ class Agent:
                 "name": self.name,
                 "model": self.model,
                 "hunger": self.hunger,
-                "x_coord": self.location[0],
-                "y_coord": self.location[1],
+                "x_coord": location[0],
+                "y_coord": location[1],
                 "visibility_range": self.visibilty_range,
                 "range_per_move": self.range_per_move,
             }
@@ -159,6 +156,14 @@ class Agent:
             raise ValueError(f"Agent with id {self.id} not found in database.")
         return agent[0]
 
+    def get_location(self):
+        """Get the agent's current location."""
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table.get(Query()["id"] == self.id)
+        if not agent:
+            raise ValueError(f"Agent with id {self.id} not found in database.")
+        return (agent["x_coord"], agent["y_coord"])
+
     def load(self):
         logger.debug(f"Loading agent {self.id}")
         try:
@@ -168,7 +173,6 @@ class Agent:
             self.name = result["name"]
             self.model = result["model"]
             self.hunger = result["hunger"]
-            self.location = (result["x_coord"], result["y_coord"])
             self.visibilty_range = result["visibility_range"]
             self.range_per_move = result["range_per_move"]
 
@@ -211,13 +215,13 @@ class Agent:
         self.range_per_move = range_per_move
 
         # Create agent location if not provided
-        self.location = self._create_agent_location()
+        location = self._create_agent_location()
         # Store agent in database
         self._create_collection()
-        self._create_in_db()
+        self._create_in_db(location=location)
 
         # Place agent in the world
-        await self.world.place_agent(self.id, self.location)
+        await self.world.place_agent(self.id, location)
 
         # TODO: extend AgentCreatedMessage to include more information
         agent_created_message = AgentCreatedMessage(
@@ -228,6 +232,12 @@ class Agent:
 
         # Publish the agent created message to NATS
         await agent_created_message.publish(self._nats)
+
+    def get_plan_id(self) -> str:
+        """Get the plan ID of the agent."""
+        table = self._db.table(settings.tinydb.tables.plan_table, cache_size=0)
+        plan = table.get(Query().owner == self.id)
+        return plan["id"] if plan else None
 
     def _create_agent_location(self):
         """Create a random location for the agent in the world."""
@@ -255,30 +265,19 @@ class Agent:
         conversation = conversation_table.search(
             (Query().agent_ids.any(self.id)) & (Query().status == "active")
         )
-        self.conversation_id = conversation[0]["id"]  # type: ignore
         if conversation:
-            print(conversation)
+            self.conversation_id = conversation[0]["id"]
             self.message = Message(
                 content=conversation[0]["messages"][-1]["content"],
                 sender_id=conversation[0]["messages"][-1]["sender_id"],
             )
 
-        # plans owned by this agent
-        plan_table = self._db.table(settings.tinydb.tables.plan_table)
-        plan_db = plan_table.search(Query().owner == self.id)
-        self.plan: str = plan_db[0]["id"] if plan_db else ""
-        plan_obj = (
-            get_plan(self._db, self._nats, self.plan, self.simulation_id)
-            if self.plan
-            else None
-        )
-        self.plan_tasks: list[str] = plan_obj.get_tasks() if plan_obj else []
-
         # plans this agent is participating in
+        plan_table = self._db.table(settings.tinydb.tables.plan_table)
         plan_db = plan_table.search(Query().participants.any(self.id))  # type: ignore
         self.participating_plans = [plan["id"] for plan in plan_db] if plan_db else []
 
-        task_table = self._db.table(settings.tinydb.tables.task_table)
+        task_table = self._db.table(settings.tinydb.tables.task_table, cache_size=0)
         assigned_tasks = task_table.search(Query().worker == self.id)
         self.assigned_tasks = (
             [task["id"] for task in assigned_tasks] if assigned_tasks else []
@@ -298,8 +297,8 @@ class Agent:
         )
 
         plan_obj = (
-            get_plan(self._db, self._nats, self.plan, self.simulation_id)
-            if self.plan
+            get_plan(self._db, self._nats, self.get_plan_id(), self.simulation_id)
+            if self.get_plan_id()
             else None
         )
         plan_context = (
@@ -315,10 +314,13 @@ class Agent:
             else None
         )
 
-        tasks_obj = [
-            get_task(self._db, self._nats, task_id, self.simulation_id)
-            for task_id in self.plan_tasks
-        ]
+        if plan_obj:
+            tasks_obj = [
+                get_task(self._db, self._nats, task_id, self.simulation_id)
+                for task_id in plan_obj.get_tasks()
+            ]
+        else:
+            tasks_obj = []
         tasks_context = [
             TaskContext(
                 id=task.id,
@@ -336,7 +338,7 @@ class Agent:
             f"These are the tasks in detail: "
             + ", ".join(map(str, tasks_context))
             + (
-                " You have 0 tasks in your plan, it might make sense to add tasks."
+                "\n You have 0 tasks in your plan, it might make sense to add tasks using the add_task tool."
                 if not tasks_context
                 else ""
             )
@@ -369,19 +371,33 @@ class Agent:
             else "You do not have any memory about past observations and events. "
         )  # TODO: either pass this in prompt here or use autogen memory field
 
-        context_description = (
-            f"{hunger_description}\n\n"
-            f"{observation_description}\n\n"
-            f"{plans_description}\n\n"
-            # f"{participating_plans_description}"
+        conversation_observation = (
             f"You are currently engaged in a conversation with another agent with ID: {self.conversation_id}. "
             if self.conversation_id
             else ""
+        )
+        has_plan = (
+            "You ALREADY HAVE a plan."
+            if self.get_plan_id()
+            else "You do not have a plan"
+        )
+        has_three_tasks = (
+            "YOU ALREADY HAVE 3 tasks."
+            if plan_obj and len(plan_obj.get_tasks()) >= 3
+            else "You do not have 3 tasks."
+        )
+        context_description = (
+            f"{hunger_description}.\n\n"
+            f"{observation_description}.\n\n"
+            f"{conversation_observation}.\n\n"
+            f"{plans_description}.\n\n"
             f"{message_description}\n\n"
             f"{memory_description}\n\n"
-            f"Your current location is {self.location}. \n\n"
-            f"You can only ever have one plan at a time. If you have a plan always add at least one task. NEVER add more than 5 tasks. Continue."
-            f"If you are close to an agent (distance 5 or less), engage in conversation with them. "
+            f"Your current location is {self.get_location()}. \n\n"
+            f"IMPORTANT: You can ONLY HAVE ONE PLAN {has_plan}.\n"
+            f"If you have a plan always add at least one task, at most 3. {has_three_tasks} \n"
+            f"Once you have a plan and tasks, start moving towards the target of the task. \n"
+            f"If you are close to an agent, engage in conversation with them. \n"
             f"Given this information now decide on your next action by performing a tool call."
         )
         # TODO: improve formatting!
@@ -390,6 +406,9 @@ class Agent:
 
     @observe(as_type="generation", name="Agent Tick")
     async def trigger(self):
+        self._db.clear_cache()
+        logger.debug(f"Ticking agent {self.id}")
+
         langfuse_context.update_current_trace(
             name=f"Agent Tick {self.name}",
             metadata={"agent_id": self.id},
@@ -400,13 +419,13 @@ class Agent:
         # memory = self.get_memory() # TODO: if decided to implement here remove from get_context
         # self.autogen_agent.memory = memory
         # TODO: trigger any other required logic
-        logger.info(f"Ticking agent {self.id}")
 
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
         logger.info(self.autogen_agent._system_messages)
         logger.info(self.autogen_agent._description)
+        logger.info(context)
 
         langfuse_context.update_current_observation(
             usage_details={

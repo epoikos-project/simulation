@@ -34,6 +34,8 @@ async def make_plan(
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 
+    logger.success("Calling tool make_plan")
+
     db = get_client()
     nats = nats_broker()
 
@@ -61,6 +63,8 @@ async def add_task(
     """Create a new task for resource collection and add this task to a plan."""
     from clients.tinydb import get_client
     from clients.nats import nats_broker
+
+    logger.success("Calling tool add_task")
 
     db = get_client()
     nats = nats_broker()

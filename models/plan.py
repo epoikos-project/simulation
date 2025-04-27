@@ -43,7 +43,7 @@ class Plan:
     def _calculate_expected_payoff(self) -> int:
         """Return the total expected payoff for the plan."""
 
-        tasks = self._db.table(settings.tinydb.tables.task_table).search(
+        tasks = self._db.table(settings.tinydb.tables.task_table, cache_size=0).search(
             Query().plan_id == self.id
         )
         total_payoff = sum(task["payoff"] for task in tasks)
@@ -82,14 +82,13 @@ class Plan:
 
     def get_tasks(self) -> list[str]:
         """Get the tasks of the plan."""
-        tasks = self._db.table(settings.tinydb.tables.task_table).search(
-            Query().plan_id == self.id
-        )
+        table = self._db.table(settings.tinydb.tables.task_table, cache_size=0)
+        tasks = table.search(Query().plan_id == self.id)
         return [task["id"] for task in tasks]
 
     def get_unassigned_agents(self) -> list[str]:
         """Get the agents that are not assigned to any task of the plan."""
-        tasks = self._db.table(settings.tinydb.tables.task_table).search(
+        tasks = self._db.table(settings.tinydb.tables.task_table, cache_size=0).search(
             Query().plan_id == self.id
         )
         assigned_agents = {task["worker"] for task in tasks if task["worker"]}
@@ -99,7 +98,7 @@ class Plan:
 
     def get_unassigned_tasks(self) -> list[str]:
         """Get the tasks of the plan that are not assigned to any agent."""
-        tasks = self._db.table(settings.tinydb.tables.task_table).search(
+        tasks = self._db.table(settings.tinydb.tables.task_table, cache_size=0).search(
             Query().plan_id == self.id
         )
         unassigned_tasks = [task["id"] for task in tasks if not task["worker"]]

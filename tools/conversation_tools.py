@@ -26,6 +26,8 @@ async def start_conversation(
     db = get_client()
     nats = nats_broker()
 
+    logger.success("Calling tool engage_conversation")
+
     # Allow participant_ids passed as JSON string
     if isinstance(participant_ids, str):
         try:
@@ -51,6 +53,8 @@ async def engage_conversation(
     simulation_id: str,
 ) -> dict:
     """Process the agent’s turn in an existing conversation, advance or end it, and return the response."""
+
+    logger.success("Calling tool engage_conversation")
     db = get_client()
     nats = nats_broker()
 
