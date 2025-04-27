@@ -124,6 +124,11 @@ class Orchestrator:
                 subject=f"simulation.{sim_id}.agent.created",
             )
 
+    async def tick(self, sim_id: str):
+        sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)
+        await sim.tick()
+        logger.info(f"Orchestrator: ticked simulation {sim_id}")
+
     async def start(self, sim_id: str):
         sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)
         await sim.start()

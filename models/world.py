@@ -254,7 +254,6 @@ class World:
     ):
         """Load agent observation from database given coordinates and visibility range of an agent"""
         table = self._db.table(settings.tinydb.tables.agent_table)
-        print(agent_location)
         # Filter agents based on agents location and visibility range
         agents = table.search(
             (Query()["id"] != agent_id)
@@ -267,7 +266,6 @@ class World:
 
         # Create AgentObservation for each nearby agent
         agent_observations = []
-        print(agents)
         for agent in agents:
             next_agent_location = (agent["x_coord"], agent["y_coord"])
             agent_distance = self._compute_distance(agent_location, next_agent_location)

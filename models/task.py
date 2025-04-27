@@ -50,7 +50,7 @@ class Task:
         }
 
     def _save_to_db(self):
-        table = self._db.table(settings.tinydb.tables.task_table)
+        table = self._db.table(settings.tinydb.tables.task_table, cache_size=0)
         task = self._get_task_dict()
         table.upsert(task, Query().id == self.id)
 
@@ -60,7 +60,7 @@ class Task:
 
     def delete(self):
         """Delete the task."""
-        table = self._db.table(settings.tinydb.tables.task_table)
+        table = self._db.table(settings.tinydb.tables.task_table, cache_size=0)
         table.remove(Query().id == self.id)
         logger.info(f"Deleted task {self.id}")
 
@@ -84,7 +84,7 @@ class Task:
 
 
 def get_task(db: DB, nats: Nats, task_id: str, simulation_id: str) -> Task:
-    task_table = db.table(settings.tinydb.tables.task_table)
+    task_table = db.table(settings.tinydb.tables.task_table, cache_size=0)
     task_data = task_table.get(
         (Query().id == task_id)
         # & (Query().plan_id == plan_id)

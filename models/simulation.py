@@ -134,6 +134,7 @@ class Simulation:
 
         This method is called by the SimulationRunner for every tick.
         """
+        self._db.clear_cache()
         self._tick_counter += 1
         logger.debug(f"[SIM {self.id}] Tick {self._tick_counter}")
 
@@ -160,7 +161,6 @@ class Simulation:
         # ---------- agents ----------
         agent_table = self._db.table(settings.tinydb.tables.agent_table)
         agent_rows = agent_table.search(Query().simulation_id == self.id)
-        logger.debug(f"[SIM {self.id}] Found {len(agent_rows)} agents for this tick")
 
         async def run_agent(row):
             agent = Agent(
@@ -171,7 +171,6 @@ class Simulation:
                 id=row["id"],
             )
             agent.load()
-            logger.debug(f"[SIM {self.id}] Triggering agent {agent.id}")
             await agent.trigger()
 
         tasks = [run_agent(row) for row in agent_rows]

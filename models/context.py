@@ -98,9 +98,9 @@ class PlanContext(BaseModel):
 
     def __str__(self) -> str:
         return (
-            f"Plan with ID: {self.id}, owner: {self.owner}, goal: {self.goal}, total expected payoff: {self.total_payoff}. "
-            f"This plan has the following participants: {', '.join(self.participants)}. "
-            f"This plan has the following tasks: {', '.join(self.tasks)}. "
+            f"Plan with ID: {self.id}, owner: {self.owner}, goal: {self.goal}, total expected payoff: {self.total_payoff}. \n"
+            f"This plan has the following participants: {', '.join(self.participants)}. \n"
+            f"This plan has the following tasks: {', '.join(self.tasks)}. \n"
         )
 
 
