@@ -36,6 +36,7 @@ from models.context import (
 from models.prompting import SYSTEM_MESSAGE, DESCRIPTION
 from models.world import World
 from tools import available_tools
+from models.relationship import RelationshipManager, RelationshipType
 from models.utils import extract_tool_call_info
 
 from loguru import logger
@@ -85,6 +86,8 @@ class Agent:
         self.memory: str = ""
         # objective: str # could be some sort of description to guide the agents actions
         # personality: str # might want to use that later
+
+        self.relationship_manager = RelationshipManager()
 
     def _initialize_llm(self, model_name: ModelName):
         model = AvailableModels.get(model_name)
@@ -442,7 +445,7 @@ class Agent:
 
     #### === Turn-based communication -> TODO: consider to rework this! === ###
     async def send_message_to_agent(self, target_agent_id: str, content: str) -> str:
-        """Send a message to another agent"""
+        """Send a message to another agent and update relationship based on interaction."""
         await self._nats.publish(
             message=json.dumps(
                 {
@@ -454,7 +457,12 @@ class Agent:
             ),
             subject=f"simulation.{self.simulation_id}.agent.{target_agent_id}",
         )
-        return content
+        # Update relationship based on message content
+        # This is a simple implementation - in a real system, you might want to analyze
+        # the message content to determine the sentiment change
+        self.relationship_manager.update_relationship(self.id, target_agent_id, 0.1)
+
+        return target_agent_id
 
     def receive_conversation_context(self, conversation_id: str):
         table = self._db.table("agent_conversations")
@@ -463,44 +471,101 @@ class Agent:
 
     async def process_turn(self, conversation_id: str):
         """Process the agent's turn in a conversation"""
+        logger.info(
+            f"Agent {self.id} processing turn for conversation {conversation_id}"
+        )
         # Get conversation context
 
         conversation = self.receive_conversation_context(conversation_id)
+        logger.info(f"Conversation context: {conversation}")
 
-        logger.debug(f"Conversation: {conversation}")
-        logger.debug(f"Conversation ID: {conversation_id}")
-
+        if not conversation:
+            logger.warning(f"No conversation context found for {conversation_id}")
+            return "I'm ready to start the conversation.", True
         # Format conversation for the LLM
         formatted_conversation = self._format_conversation_for_llm(conversation)
+        logger.info(f"Formatted conversation for LLM: {formatted_conversation}")
 
-        logger.debug(f"Formatted Conversation: {conversation}")
+        try:
+            logger.info("Calling LLM for response")
 
-        # TODO:
-        # Get response from LLM
-        # response = await self.autogen_agent.run(task=formatted_conversation)
-        # content = response.messages[-1].content
+            chat_agent = AssistantAgent(
+                name=f"{self.name}",
+                model_client=self._client,
+                system_message=SYSTEM_MESSAGE,
+                description=DESCRIPTION.format(
+                    id=self.id,
+                    name=self.name,
+                    # personality=self.personality
+                ),
+                reflect_on_tool_use=False,  # False as our current tools do not return text
+                model_client_stream=False,
+                # memory=[]
+            )
+            response = await chat_agent.run(task=formatted_conversation)
+            logger.info(f"LLM response: {response}")
 
-        content = "Hello, this is a test message from the agent."
+            if not response or not response.messages:
+                logger.error("No messages in LLM response")
+                content = "I'm thinking about how to respond..."
+            else:
+                content = response.messages[-1].content
+                logger.info(f"Extracted content: {content}")
+        except Exception as e:
+            logger.error(f"Error processing turn for agent {self.id}: {str(e)}")
+            content = "I encountered an error while processing my turn."
         # Check if the agent wants to end the conversation
-        should_continue = "END_CONVERSATION" not in content
+        should_continue = "END_CONVERSATION" not in content.upper()
+        logger.info(f"Should continue conversation: {should_continue}")
 
         # Store the message
-        self._store_message_in_conversation(conversation_id, content)
+        try:
+            await self._store_message_in_conversation(conversation_id, content)
+            logger.info("Message stored successfully")
+        except Exception as e:
+            logger.error(f"Error storing message: {str(e)}")
 
         return content, should_continue
 
     def _format_conversation_for_llm(self, conversation):
         """Format the conversation history for the LLM"""
-        context = """You are in a conversation with another agent. Review the conversation history below and respond appropriately.
-        Your response should be to the point and concise \n\n"""
+        logger.info("Formatting conversation for LLM")
+        context = """You are in a conversation with another agent. Your goal is to engage in meaningful dialogue.
+        Review the conversation history below and respond appropriately.
+        Your response should be natural and conversational.
+        If you want to end the conversation, include 'END_CONVERSATION' in your response.\n\n"""
+
+        if not conversation.get("messages"):
+            logger.info("No previous messages, starting new conversation")
+            context += "This is the start of the conversation. Please introduce yourself and start the discussion."
+
+            return context
+        logger.info(f"Formatting {len(conversation['messages'])} previous messages")
+
         for msg in conversation["messages"]:
             sender = (
                 "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
             )
             context += f"{sender}: {msg['content']}\n\n"
 
-        context += "Your turn. You can include END_CONVERSATION in your response if you want to end the conversation. But make sure to talk 2 to 3 steps"
+        context += "Your turn to respond. Make sure to be engaging and continue the conversation naturally."
+        logger.info("Conversation formatted successfully")
         return context
+
+    def get_relationship_status(self, target_agent_id: str) -> str:
+        """Get the relationship status with another agent."""
+        relationship = self.relationship_manager.get_relationship(
+            self.id, target_agent_id
+        )
+        return relationship.relationship_type.value
+
+    def update_relationship(
+        self, target_agent_id: str, sentiment_change: float
+    ) -> None:
+        """Update the relationship with another agent."""
+        self.relationship_manager.update_relationship(
+            self.id, target_agent_id, sentiment_change
+        )
 
     def _store_message_in_conversation(self, conversation_id: str, content: str):
         """Store a message in the conversation"""
