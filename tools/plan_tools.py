@@ -103,6 +103,8 @@ async def take_on_task(
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 
+    logger.success("Calling tool take_on_task")
+
     db = get_client()
     nats = nats_broker()
 
