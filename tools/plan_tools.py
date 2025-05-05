@@ -50,6 +50,7 @@ async def make_plan(
         plan.create()
     except Exception as e:
         logger.error(f"Error creating plan: {e}")
+        raise e
 
 
 @observe()
@@ -89,6 +90,7 @@ async def add_task(
         task.create()
     except Exception as e:
         logger.error(f"Error creating task: {e}")
+        raise e
 
 
 @observe()
@@ -101,6 +103,8 @@ async def take_on_task(
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 
+    logger.success("Calling tool take_on_task")
+
     db = get_client()
     nats = nats_broker()
 
@@ -110,7 +114,7 @@ async def take_on_task(
         plan = get_plan(db, nats, plan_id, simulation_id)
     except ValueError as e:
         logger.error(f"Error getting task: {e}")
-        return
+        raise e
         # raise HTTPException(status_code=404, detail=str(e))
 
     plan.add_participant(agent_id)

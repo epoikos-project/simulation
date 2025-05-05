@@ -37,6 +37,8 @@ from models.prompting import SYSTEM_MESSAGE, DESCRIPTION
 from models.world import World
 from tools import available_tools
 from models.relationship import RelationshipManager, RelationshipType
+from models.utils import extract_tool_call_info
+
 from loguru import logger
 
 
@@ -425,15 +427,19 @@ class Agent:
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
-        logger.info(self.autogen_agent._system_messages)
-        logger.info(self.autogen_agent._description)
-        logger.info(context)
 
         langfuse_context.update_current_observation(
             usage_details={
                 "input_tokens": self._client.actual_usage().prompt_tokens,
                 "output_tokens": self._client.actual_usage().completion_tokens,
-            }
+            },
+            input={
+                "system_message": self.autogen_agent._system_messages[0].content,
+                "description": self.autogen_agent._description,
+                "context": context,
+                "tools": [tool.schema for tool in self.autogen_agent._tools],
+            },
+            metadata=extract_tool_call_info(output),
         )
         return output
 
@@ -465,7 +471,9 @@ class Agent:
 
     async def process_turn(self, conversation_id: str):
         """Process the agent's turn in a conversation"""
-        logger.info(f"Agent {self.id} processing turn for conversation {conversation_id}")
+        logger.info(
+            f"Agent {self.id} processing turn for conversation {conversation_id}"
+        )
         # Get conversation context
 
         conversation = self.receive_conversation_context(conversation_id)
@@ -535,7 +543,9 @@ class Agent:
         logger.info(f"Formatting {len(conversation['messages'])} previous messages")
 
         for msg in conversation["messages"]:
-            sender = "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
+            sender = (
+                "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
+            )
             context += f"{sender}: {msg['content']}\n\n"
 
         context += "Your turn to respond. Make sure to be engaging and continue the conversation naturally."
@@ -544,12 +554,18 @@ class Agent:
 
     def get_relationship_status(self, target_agent_id: str) -> str:
         """Get the relationship status with another agent."""
-        relationship = self.relationship_manager.get_relationship(self.id, target_agent_id)
+        relationship = self.relationship_manager.get_relationship(
+            self.id, target_agent_id
+        )
         return relationship.relationship_type.value
 
-    def update_relationship(self, target_agent_id: str, sentiment_change: float) -> None:
+    def update_relationship(
+        self, target_agent_id: str, sentiment_change: float
+    ) -> None:
         """Update the relationship with another agent."""
-        self.relationship_manager.update_relationship(self.id, target_agent_id, sentiment_change)
+        self.relationship_manager.update_relationship(
+            self.id, target_agent_id, sentiment_change
+        )
 
     def _store_message_in_conversation(self, conversation_id: str, content: str):
         """Store a message in the conversation"""

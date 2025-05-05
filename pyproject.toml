@@ -10,6 +10,7 @@ dependencies = [
     "fastapi[standard]>=0.115.12",
     "faststream[nats]>=0.5.37",
     "langfuse>=2.60.3",
+    "ipykernel>=6.29.5",
     "loguru>=0.7.3",
     "pathfind>=0.1.2",
     "pydantic>=2.11.0",

@@ -41,3 +41,4 @@ async def move(
         await world.move_agent(agent_id=agent_id, destination=(x, y))
     except Exception as e:
         logger.error(f"Error moving agent: {e}")
+        raise e
