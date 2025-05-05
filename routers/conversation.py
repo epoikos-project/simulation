@@ -30,7 +30,7 @@ async def create_conversation(
     broker: Nats = None,
 ):
     """Create a new conversation between agents
-    
+
     Args:
         simulation_id: ID of the simulation
         conversation_data: Contains:
@@ -51,7 +51,7 @@ async def create_conversation(
             status_code=400,
             detail="At least two agents are required for a conversation"
         )
-        
+
     # Verify all agents exist
     table = db.table("agents")
     for agent_id in conversation_data.agent_ids:
@@ -130,7 +130,7 @@ async def advance_conversation(
     # Get the current agent
     current_agent_id = conversation.get_next_agent_id()
     logger.info(f"Current agent: {current_agent_id}")
-    
+
     try:
         agent = Agent(
             id=current_agent_id,
@@ -146,9 +146,9 @@ async def advance_conversation(
         raise HTTPException(status_code=500, detail=f"Error loading agent: {str(e)}")
 
     # Get the conversation context
-    conversation_context = await agent.receive_conversation_context(conversation_id)
+    conversation_context = agent.receive_conversation_context(conversation_id)
     logger.info(f"Conversation context: {conversation_context}")
-    
+
     if not conversation_context:
         logger.warning(f"No conversation context found for {conversation_id}")
         # Initialize conversation with initial prompt if it's the first turn
@@ -162,7 +162,7 @@ async def advance_conversation(
     logger.info("Processing agent's turn")
     response, should_continue = await agent.process_turn(conversation_id)
     logger.info(f"Agent response: {response}")
-    
+
     if response is None:
         logger.warning("Received None response from agent")
         if conversation.messages:
@@ -241,17 +241,17 @@ async def get_relationship_status(
     conversation = Conversation.load(db, conversation_id)
     if not conversation or conversation.simulation_id != simulation_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     # Verify both agents are in the conversation
     if agent1_id not in conversation.agent_ids or agent2_id not in conversation.agent_ids:
         raise HTTPException(
             status_code=400,
             detail="One or both agents are not participants in this conversation"
         )
-    
+
     # Get relationship status
     relationship_status = conversation.get_relationship_status(agent1_id, agent2_id)
-    
+
     return {
         "conversation_id": conversation_id,
         "agent1_id": agent1_id,
