@@ -84,7 +84,7 @@ class Agent:
         self.memory: str = ""
         # objective: str # could be some sort of description to guide the agents actions
         # personality: str # might want to use that later
-        
+
         self.relationship_manager = RelationshipManager()
 
     def _initialize_llm(self, model_name: ModelName):
@@ -468,7 +468,7 @@ class Agent:
         logger.info(f"Agent {self.id} processing turn for conversation {conversation_id}")
         # Get conversation context
 
-        conversation = await self.receive_conversation_context(conversation_id)
+        conversation = self.receive_conversation_context(conversation_id)
         logger.info(f"Conversation context: {conversation}")
 
         if not conversation:
@@ -477,12 +477,26 @@ class Agent:
         # Format conversation for the LLM
         formatted_conversation = self._format_conversation_for_llm(conversation)
         logger.info(f"Formatted conversation for LLM: {formatted_conversation}")
-                
+
         try:
             logger.info("Calling LLM for response")
-            response = await self.autogen_agent.run(task=formatted_conversation)
+
+            chat_agent = AssistantAgent(
+                name=f"{self.name}",
+                model_client=self._client,
+                system_message=SYSTEM_MESSAGE,
+                description=DESCRIPTION.format(
+                    id=self.id,
+                    name=self.name,
+                    # personality=self.personality
+                ),
+                reflect_on_tool_use=False,  # False as our current tools do not return text
+                model_client_stream=False,
+                # memory=[]
+            )
+            response = await chat_agent.run(task=formatted_conversation)
             logger.info(f"LLM response: {response}")
-            
+
             if not response or not response.messages:
                 logger.error("No messages in LLM response")
                 content = "I'm thinking about how to respond..."
@@ -509,17 +523,17 @@ class Agent:
         """Format the conversation history for the LLM"""
         logger.info("Formatting conversation for LLM")
         context = """You are in a conversation with another agent. Your goal is to engage in meaningful dialogue.
-        Review the conversation history below and respond appropriately. 
+        Review the conversation history below and respond appropriately.
         Your response should be natural and conversational.
         If you want to end the conversation, include 'END_CONVERSATION' in your response.\n\n"""
 
-        if not conversation.get("messages"): 
+        if not conversation.get("messages"):
             logger.info("No previous messages, starting new conversation")
             context += "This is the start of the conversation. Please introduce yourself and start the discussion."
-            
+
             return context
         logger.info(f"Formatting {len(conversation['messages'])} previous messages")
-        
+
         for msg in conversation["messages"]:
             sender = "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
             context += f"{sender}: {msg['content']}\n\n"
@@ -536,7 +550,7 @@ class Agent:
     def update_relationship(self, target_agent_id: str, sentiment_change: float) -> None:
         """Update the relationship with another agent."""
         self.relationship_manager.update_relationship(self.id, target_agent_id, sentiment_change)
-        
+
     def _store_message_in_conversation(self, conversation_id: str, content: str):
         """Store a message in the conversation"""
         table = self._db.table("agent_conversations")
