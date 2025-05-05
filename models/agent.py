@@ -36,6 +36,7 @@ from models.context import (
 from models.prompting import SYSTEM_MESSAGE, DESCRIPTION
 from models.world import World
 from tools import available_tools
+from models.utils import extract_tool_call_info
 
 from loguru import logger
 
@@ -423,15 +424,19 @@ class Agent:
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
-        logger.info(self.autogen_agent._system_messages)
-        logger.info(self.autogen_agent._description)
-        logger.info(context)
 
         langfuse_context.update_current_observation(
             usage_details={
                 "input_tokens": self._client.actual_usage().prompt_tokens,
                 "output_tokens": self._client.actual_usage().completion_tokens,
-            }
+            },
+            input={
+                "system_message": self.autogen_agent._system_messages[0].content,
+                "description": self.autogen_agent._description,
+                "context": context,
+                "tools": [tool.schema for tool in self.autogen_agent._tools],
+            },
+            metadata=extract_tool_call_info(output),
         )
         return output
 
