@@ -22,17 +22,7 @@ from functools import partial
 
 # from models.plan import get_plan
 # from models.task import get_task
-from models.context import (
-    Observation,
-    # AgentObservation,
-    # ResourceObservation,
-    # ObstacleObservation,
-    # OtherObservation,
-    Message,
-    # ObservationType,
-    # PlanContext,
-    # TaskContext,
-)
+from models.context import Observation, Message
 from models.prompting import (
     SYSTEM_MESSAGE,
     DESCRIPTION,
@@ -81,7 +71,7 @@ class Agent:
 
         # TODO: a bit of a mix between ids, context objects etc. could maybe be improved
         self.hunger: int = 0
-        self.visibilty_range: int = 0
+        self.visibility_range: int = 0
         self.range_per_move: int = 3
 
         self.world: World = None
@@ -136,7 +126,6 @@ class Agent:
             description=description or (func.__doc__ or ""),
             func=bound,
         )
-        # TODO: if needed adopt this to use more/ flexible arguments
 
     def _create_collection(self):
         self._milvus.create_collection(
@@ -155,7 +144,7 @@ class Agent:
                 "hunger": self.hunger,
                 "x_coord": location[0],
                 "y_coord": location[1],
-                "visibility_range": self.visibilty_range,
+                "visibility_range": self.visibility_range,
                 "range_per_move": self.range_per_move,
             }
         )
@@ -185,7 +174,7 @@ class Agent:
             self.name = result["name"]
             self.model = result["model"]
             self.hunger = result["hunger"]
-            self.visibilty_range = result["visibility_range"]
+            self.visibility_range = result["visibility_range"]
             self.range_per_move = result["range_per_move"]
 
             self.world = World(
@@ -201,9 +190,6 @@ class Agent:
         except Exception as e:
             logger.error(f"Error initializing LLM for agent {self.id}: {e}")
             raise ValueError(f"Error initializing LLM for agent {self.id}: {e}")
-
-        # could maybe also use autogen native functionalities to dump and load agents from database, but I guess this is fine
-        # https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/serialize-components.html#agent-example
 
     def delete(self):
         logger.info(f"Deleting agent {self.id}")
@@ -223,7 +209,7 @@ class Agent:
 
         # TODO: initialize with function parameters
         self.hunger = hunger
-        self.visibilty_range = visibility_range
+        self.visibility_range = visibility_range
         self.range_per_move = range_per_move
 
         # Create agent location if not provided
@@ -255,22 +241,19 @@ class Agent:
         """Create a random location for the agent in the world."""
         return self.world.get_random_agent_location()
 
-    # TODO: consider if this can be moved elsewhere and broken up into smaller parts
     def _load_context(self):
         """Load the context from the database or other storage."""
-        # TODO: most of this is just mocked for now. replace with actual loading logic!
 
-        # current hunger level
+        # hunger level
         table = self._db.table(settings.tinydb.tables.agent_table)
         docs = table.search(Query().id == self.id)
         self.hunger = docs[0].get("hunger", 0) if docs else 0
 
-        # observations from the world
-        # TODO: get other observations apart from resources and agents
-        # TODO: improve formatting
+        # observations
         self.observations.extend(self.world.load_agent_context(self.id))
+        # TODO: check if extend is correct here. duplicates? how do we handle overflow after a while?
 
-        # messages by other agents
+        # messages
         conversation_table = self._db.table(
             settings.tinydb.tables.agent_conversation_table
         )
@@ -284,7 +267,7 @@ class Agent:
                 sender_id=conversation[0]["messages"][-1]["sender_id"],
             )
 
-        # plans this agent is participating in
+        # plans and tasks
         plan_table = self._db.table(settings.tinydb.tables.plan_table)
         plan_db = plan_table.search(Query().participants.any(self.id))  # type: ignore
         self.participating_plans = [plan["id"] for plan in plan_db] if plan_db else []
@@ -295,7 +278,7 @@ class Agent:
             [task["id"] for task in assigned_tasks] if assigned_tasks else []
         )
 
-    def get_context(self) -> str:
+    def build_context(self) -> str:
         """Get the context for the agent."""
         self._load_context()
 
@@ -321,10 +304,7 @@ class Agent:
             session_id=self.simulation_id,
         )
         langfuse_context.update_current_observation(model=self.model, name="Agent Call")
-        context = self.get_context()
-        # memory = self.get_memory() # TODO: if decided to implement here remove from get_context
-        # self.autogen_agent.memory = memory
-        # TODO: trigger any other required logic
+        context = self.build_context()
 
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
