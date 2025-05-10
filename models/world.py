@@ -171,6 +171,23 @@ class World:
             logger.warning(
                 f"World {self.id} not found in database. Creating new world."
             )
+            raise ValueError(
+                f"World {self.id} not found in database. Creating new world."
+            )
+
+    # This function is not used for the actual simulation
+    # but is used to tick the world via the endpoint
+    # and update the tick counter in the database
+    async def update(self, tick: int):
+        """Update world in via endpoint"""
+        sim_table = self._db.table(settings.tinydb.tables.simulation_table)
+        sim_table.update(
+            {"tick": tick},
+            Query()["id"] == self.simulation_id,
+        )
+
+        # Tick world
+        await self.tick()
 
     async def tick(self):
         """Tick the world"""
@@ -190,12 +207,12 @@ class World:
             resource = Resource(
                 simulation_id=self.simulation_id,
                 world_id=self.id,
-                resource_id=r["region_id"],
+                region_id=r["region_id"],
                 db=self._db,
                 nats=self._nats,
-                id=r["id"],
+                id_=r["id"],
             )
-            resource.tick(tick=tick_counter)
+            await resource.tick(tick=tick_counter)
 
         await self._nats.publish(
             json.dumps(
@@ -209,92 +226,97 @@ class World:
 
     async def harvest_resource(
         self,
-        coords: tuple[int, int],
-        harvester_ids: list[str],
+        x_coord: int,
+        y_coord: int,
+        harvester_id: str,
     ):
         """Harvest resource at given coordinates"""
         resource_table = self._db.table(settings.tinydb.tables.resource_table)
         resource = resource_table.get(
-            Query()["x_coord"]
-            == coords[0] & Query()["y_coord"]
-            == coords[1] & Query()["simulation_id"]
-            == self.simulation_id
+            (Query()["simulation_id"] == self.simulation_id)
+            & (Query()["x_coord"] == x_coord)
+            & (Query()["y_coord"] == y_coord)
         )
+
         if not resource:
             raise ValueError(
-                f"Resource at coordinates {coords} for simulation {self.simulation_id} not found in database."
+                f"Resource at coordinates {(x_coord, y_coord)} for simulation {self.simulation_id} not found in database."
             )
         # Check for invalid states
         if resource["availability"] is False:
-            raise ValueError(f"Resource at {coords} is not available for harvesting")
-        if resource["being_harvested"]:
-            raise ValueError(f"Resource at {coords} is already being harvested")
-        if resource["required_agents"] < len(harvester_ids):
             raise ValueError(
-                f"Resource at {coords} requires {resource['required_agents']} agents for harvesting, but {len(harvester_ids)} agents are provided"
+                f"Resource at {(x_coord, y_coord)} is not available for harvesting"
+            )
+        if resource["being_harvested"]:
+            raise ValueError(
+                f"Resource at {(x_coord, y_coord)} is already being harvested"
             )
 
         # Check if agent(s) is/are in the harvesting area
-        in_range, agent_id = self._check_agent_resource_distance(
-            resource, harvester_ids
-        )
+        in_range, agent_id = self._check_agent_resource_distance(resource, harvester_id)
         if in_range:
             tick = self._db.table(settings.tinydb.tables.simulation_table).get(
-                Query()["simulation_id"] == self.simulation_id
+                Query()["id"] == self.simulation_id
             )["tick"]
+
+            # Extend harvester list of resource
+            if len(resource["harvester"]) == 0:
+                harvester = [harvester_id]
+            else:
+                harvester = resource["harvester"].append(harvester_id)
+
             # Update resource in database
             resource_table.update(
                 {
                     "being_harvested": True,
                     "start_harvest": tick,
                     "time_harvest": tick + resource["mining_time"],
-                    "harvester": harvester_ids,
+                    "harvester": harvester,
                 },
-                Query()["x_coord"]
-                == coords[0] & Query()["y_coord"]
-                == coords[1] & Query()["simulation_id"]
-                == self.simulation_id,
+                (Query()["simulation_id"] == self.simulation_id)
+                & (Query()["x_coord"] == x_coord)
+                & (Query()["y_coord"] == y_coord),
             )
         else:
-            raise ValueError(
-                f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
+            logger.warning(
+                f"Agent {agent_id} is not in harvesting range for the resource at {(x_coord, y_coord)}."
             )
+            return
 
         # Publish resource harvest message
         resource_harvested_message = ResourceHarvestedMessage(
             simulation_id=self.simulation_id,
-            resource_id=resource["id"],
-            harvester_ids=harvester_ids,
-            location=(coords[0], coords[1]),
-            start_tick=resource["start_harvest"],
-            end_tick=resource["time_harvest"],
+            id=resource["id"],
+            harvester_id=harvester_id,
+            location=(x_coord, y_coord),
+            start_tick=tick,
+            end_tick=tick + resource["mining_time"],
         )
-        await resource_harvested_message.publish(self.nats)
+        await resource_harvested_message.publish(self._nats)
 
-    def _check_agent_resource_distance(self, resource: dict, agents: list[str]):
+    def _check_agent_resource_distance(self, resource: dict, agent_id: str):
         """Check if agent is within range of resource"""
         resource_location = (resource["x_coord"], resource["y_coord"])
         harvesting_area = resource["harvesting_area"]
 
-        for agent_id in agents:
-            agent = self.get_agent(agent_id)
-            if not agent:
-                raise ValueError(
-                    f"Agent with id {agent} for simulation {self.simulation_id} not found in database."
-                )
+        agent = self.get_agent(agent_id)
+        if not agent:
+            raise ValueError(
+                f"Agent with id {agent} for simulation {self.simulation_id} not found in database."
+            )
 
-            agent_location_x = agent["x_coord"]
-            agent_location_y = agent["y_coord"]
-            # Check if agent is within harvesting area of resource
-            if (
-                agent_location_x < resource_location[0] - harvesting_area
-                or agent_location_x > resource_location[0] + harvesting_area
-                or agent_location_y < resource_location[1] - harvesting_area
-                or agent_location_y > resource_location[1] + harvesting_area
-            ):
-                return False, agent_id
+        agent_location_x = agent["x_coord"]
+        agent_location_y = agent["y_coord"]
+        # Check if agent is within harvesting area of resource
+        if (
+            agent_location_x < resource_location[0] - harvesting_area
+            or agent_location_x > resource_location[0] + harvesting_area
+            or agent_location_y < resource_location[1] - harvesting_area
+            or agent_location_y > resource_location[1] + harvesting_area
+        ):
+            return False, agent_id
 
-        return True
+        return True, agent_id
 
     def _compute_distance(
         self, coords: tuple[int, int], resource_coords: tuple[int, int]
@@ -440,9 +462,6 @@ class World:
         )
         return agent if agent else None
 
-    async def tick(self):
-        """Tick the world"""
-
     async def place_agent(self, agent_id: str, agent_location: tuple[int, int]):
         """Place agent in world"""
         table_agents = self._db.table(settings.tinydb.tables.agent_table)
@@ -549,6 +568,9 @@ class World:
         agent_range = agent["range_per_move"]
 
         if agent_location == destination:
+            logger.warning(
+                f"Agent {agent_id} is already at the destination {destination}."
+            )
             raise ValueError(
                 f"Agent {agent_id} is already at the destination {destination}."
             )
