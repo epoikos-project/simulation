@@ -251,7 +251,6 @@ class Agent:
 
         # observations
         self.observations.extend(self.world.load_agent_context(self.id))
-        # TODO: check if extend is correct here. duplicates? how do we handle overflow after a while?
 
         # messages
         conversation_table = self._db.table(
