@@ -585,14 +585,20 @@ class Agent:
         if not conversation.get("messages"):
             logger.info("No previous messages, starting new conversation")
             context += "This is the start of the conversation. Please introduce yourself and start the discussion."
-
             return context
+
         logger.info(f"Formatting {len(conversation['messages'])} previous messages")
 
+        # Include relationship information
+        relationship_info = "Relationship Information:\n"
+        for agent_id in conversation.get("agent_ids", []):
+            if agent_id != self.id:
+                relationship_status = self.get_relationship_status(agent_id)
+                relationship_info += f"Your relationship with Agent {agent_id}: {relationship_status}\n"
+        context += relationship_info + "\n"
+
         for msg in conversation["messages"]:
-            sender = (
-                "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
-            )
+            sender = "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
             context += f"{sender}: {msg['content']}\n\n"
 
         context += "Your turn to respond. Make sure to be engaging and continue the conversation naturally."
