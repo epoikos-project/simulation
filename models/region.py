@@ -29,6 +29,7 @@ class Region:
         self._db = db
         self._nats = nats
 
+        # check if needed
         self.resource_coords = []
 
     def _create_in_db(self, simulation_id: str):
@@ -130,6 +131,11 @@ class Region:
                 nats=self._nats,
             )
             await resource.create(coords=coordinate)
+
+    # --------------------------------------------------------------------------------------------#
+    # --------------------------------------------------------------------------------------------#
+    # --------------------------------------------------------------------------------------------#
+    # TODO: everything not needed from here on
 
     def get_resources(self):
         """Get all resources in the region"""

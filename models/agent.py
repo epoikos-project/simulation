@@ -72,6 +72,7 @@ class Agent:
         self.collection_name = f"agent_{self.id}"
 
         # TODO: a bit of a mix between ids, context objects etc. could maybe be improved
+        self.energy_level: int = 0
         self.hunger: int = 0
         self.visibilty_range: int = 0
         self.range_per_move: int = 3
@@ -144,6 +145,7 @@ class Agent:
                 "simulation_id": self.simulation_id,
                 "name": self.name,
                 "model": self.model,
+                "energy_level": self.energy_level,
                 "hunger": self.hunger,
                 "x_coord": location[0],
                 "y_coord": location[1],
@@ -176,6 +178,7 @@ class Agent:
             self.simulation_id = result["simulation_id"]
             self.name = result["name"]
             self.model = result["model"]
+            self.energy_level = result["energy_level"]
             self.hunger = result["hunger"]
             self.visibilty_range = result["visibility_range"]
             self.range_per_move = result["range_per_move"]
@@ -204,7 +207,12 @@ class Agent:
         self._milvus.drop_collection(self.collection_name)
 
     async def create(
-        self, *, hunger: int = 20, visibility_range: int = 5, range_per_move: int = 1
+        self,
+        *,
+        energy_level: int = 20,
+        hunger: int = 20,
+        visibility_range: int = 5,
+        range_per_move: int = 1,
     ):
         logger.info(f"Creating agent {self.id}")
 
@@ -214,6 +222,7 @@ class Agent:
         self.world.load()
 
         # TODO: initialize with function parameters
+        self.energy_level = energy_level
         self.hunger = hunger
         self.visibilty_range = visibility_range
         self.range_per_move = range_per_move
@@ -255,6 +264,7 @@ class Agent:
         # current hunger level
         table = self._db.table(settings.tinydb.tables.agent_table)
         docs = table.search(Query().id == self.id)
+        self.energy_level = docs[0].get("energy_level", 0) if docs else 0
         self.hunger = docs[0].get("hunger", 0) if docs else 0
 
         # observations from the world
@@ -291,7 +301,10 @@ class Agent:
         """Get the context for the agent."""
         self._load_context()
 
-        hunger_description = f"Your current hunger level is {self.hunger}.  "
+        if self.energy_level < self.hunger:
+            hunger_description = f"Your current energy level is {self.energy_level}. You are starving and NEED to eat something. For this you need to find and harvest a resource. "
+        else:
+            hunger_description = f"Your current energy level is {self.energy_level}. "
 
         observation_description = (
             "You have made the following observations in your surroundings: "
@@ -408,6 +421,38 @@ class Agent:
 
         return context_description
 
+    def _get_energy(self) -> int:
+        """Get the agent's energy level."""
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table.get(
+            Query().id == self.id & Query().simulation_id == self.simulation_id
+        )
+        return agent.get("energy_level", 0) if agent else 0
+
+    def update_agent_energy(self, energy_delta: int):
+        """Update the agent's energy level."""
+        self.energy_level = self._get_energy() + energy_delta
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        table.update(
+            {"energy_level": self.energy_level},
+            Query().id == self.id,
+            Query().simulation_id == self.simulation_id,
+        )
+
+    def _get_energy_consumption(self) -> int:
+        """Get the energy consumption of the agent with regard to the region."""
+        table = self._db.table(settings.tinydb.tables.region_table)
+        region = table.get(
+            Query().simulation_id
+            == self.simulation_id & Query().x_1
+            <= self.location[0] & Query().x_2
+            >= self.location[0] & Query().y_1
+            <= self.location[1] & Query().y_2
+            >= self.location[1]
+        )
+        energy_cost = region["region_energy_cost"] if region else 0
+        return energy_cost
+
     @observe(as_type="generation", name="Agent Tick")
     async def trigger(self):
         self._db.clear_cache()
@@ -419,6 +464,8 @@ class Agent:
             session_id=self.simulation_id,
         )
         langfuse_context.update_current_observation(model=self.model, name="Agent Call")
+        # update agent energy
+        self.update_agent_energy(self._get_energy_consumption())
         context = self.get_context()
         # memory = self.get_memory() # TODO: if decided to implement here remove from get_context
         # self.autogen_agent.memory = memory
