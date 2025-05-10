@@ -72,6 +72,6 @@ async def harvest_resource(
     try:
         world = World(simulation_id=simulation_id, db=db, nats=nats)
         world.load()
-        await world.harvest_resource(coords=(x, y), harvester_ids=agent_id)
+        await world.harvest_resource(x_coord=x, y_coord=y, harvester_id=agent_id)
     except Exception as e:
         logger.error(f"Error harvesting resource: {e}")
