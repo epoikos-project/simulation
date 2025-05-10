@@ -11,8 +11,8 @@ class Map:
         self.size_y = size_y
 
         self.map = [[0 for _ in range(size_x)] for _ in range(size_y)]
-        for i in range(size_x):
-            for j in range(size_y):
+        for i in range(size_y):
+            for j in range(size_x):
                 # Initialize each cell as walkable (1)
                 # Map is later updated with field of view of agent, i.e. obstacles (-1)
                 self.map[i][j] = 1

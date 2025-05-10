@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from enum import Enum
 from typing import Annotated, Union, Literal
+from models.relationship import RelationshipType
 
 # from typing import Optional
 
@@ -35,7 +36,7 @@ class ResourceObservation(_BaseObs):
 class AgentObservation(_BaseObs):
     type: Literal[ObservationType.AGENT]
     name: str
-    relationship_status: str
+    relationship_status: str = RelationshipType.STRANGER.value
 
     def __str__(self) -> str:
         return (
@@ -98,9 +99,9 @@ class PlanContext(BaseModel):
 
     def __str__(self) -> str:
         return (
-            f"Plan with ID: {self.id}, owner: {self.owner}, goal: {self.goal}, total expected payoff: {self.total_payoff}. "
-            f"This plan has the following participants: {', '.join(self.participants)}. "
-            f"This plan has the following tasks: {', '.join(self.tasks)}. "
+            f"Plan with ID: {self.id}, owner: {self.owner}, goal: {self.goal}, total expected payoff: {self.total_payoff}. \n"
+            f"This plan has the following participants: {', '.join(self.participants)}. \n"
+            f"This plan has the following tasks: {', '.join(self.tasks)}. \n"
         )
 
 

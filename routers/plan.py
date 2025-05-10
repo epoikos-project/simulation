@@ -179,7 +179,7 @@ async def remove_task(
     if task_id not in plan.get_tasks():
         raise HTTPException(status_code=404, detail="Task not found in plan")
     # delete task from database
-    table = db.table(settings.tinydb.tables.task_table)
+    table = db.table(settings.tinydb.tables.task_table, cache_size=0)
     query = (Query().id == task_id) & (Query().plan_id == plan_id)
     table.remove(query)
     return {"message": "Task removed successfully"}

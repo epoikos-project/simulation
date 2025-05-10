@@ -36,6 +36,8 @@ from models.context import (
 from models.prompting import SYSTEM_MESSAGE, DESCRIPTION
 from models.world import World
 from tools import available_tools
+from models.relationship import RelationshipManager, RelationshipType
+from models.utils import extract_tool_call_info
 
 from loguru import logger
 
@@ -72,7 +74,6 @@ class Agent:
         # TODO: a bit of a mix between ids, context objects etc. could maybe be improved
         self.energy_level: int = 0
         self.hunger: int = 0
-        self.location: tuple[int, int]
         self.visibilty_range: int = 0
         self.range_per_move: int = 3
 
@@ -81,13 +82,13 @@ class Agent:
         self.observations: list[Observation] = []
         self.message: Message = Message(content="", sender_id="")
         self.conversation_id: str = ""
-        self.plan: str = ""
-        self.plan_tasks: list[str] = []
         self.participating_plans: list[str] = []
         self.assigned_tasks: list[str] = []
         self.memory: str = ""
         # objective: str # could be some sort of description to guide the agents actions
         # personality: str # might want to use that later
+
+        self.relationship_manager = RelationshipManager()
 
     def _initialize_llm(self, model_name: ModelName):
         model = AvailableModels.get(model_name)
@@ -135,7 +136,7 @@ class Agent:
             collection_name=self.collection_name, dimension=128
         )
 
-    def _create_in_db(self):
+    def _create_in_db(self, location: tuple[int, int] = (0, 0)):
         table = self._db.table(settings.tinydb.tables.agent_table)
         table.insert(
             {
@@ -146,8 +147,8 @@ class Agent:
                 "model": self.model,
                 "energy_level": self.energy_level,
                 "hunger": self.hunger,
-                "x_coord": self.location[0],
-                "y_coord": self.location[1],
+                "x_coord": location[0],
+                "y_coord": location[1],
                 "visibility_range": self.visibilty_range,
                 "range_per_move": self.range_per_move,
             }
@@ -161,6 +162,14 @@ class Agent:
             raise ValueError(f"Agent with id {self.id} not found in database.")
         return agent[0]
 
+    def get_location(self):
+        """Get the agent's current location."""
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table.get(Query()["id"] == self.id)
+        if not agent:
+            raise ValueError(f"Agent with id {self.id} not found in database.")
+        return (agent["x_coord"], agent["y_coord"])
+
     def load(self):
         logger.debug(f"Loading agent {self.id}")
         try:
@@ -171,7 +180,6 @@ class Agent:
             self.model = result["model"]
             self.energy_level = result["energy_level"]
             self.hunger = result["hunger"]
-            self.location = (result["x_coord"], result["y_coord"])
             self.visibilty_range = result["visibility_range"]
             self.range_per_move = result["range_per_move"]
 
@@ -220,13 +228,13 @@ class Agent:
         self.range_per_move = range_per_move
 
         # Create agent location if not provided
-        self.location = self._create_agent_location()
+        location = self._create_agent_location()
         # Store agent in database
         self._create_collection()
-        self._create_in_db()
+        self._create_in_db(location=location)
 
         # Place agent in the world
-        await self.world.place_agent(self.id, self.location)
+        await self.world.place_agent(self.id, location)
 
         # TODO: extend AgentCreatedMessage to include more information
         agent_created_message = AgentCreatedMessage(
@@ -237,6 +245,12 @@ class Agent:
 
         # Publish the agent created message to NATS
         await agent_created_message.publish(self._nats)
+
+    def get_plan_id(self) -> str:
+        """Get the plan ID of the agent."""
+        table = self._db.table(settings.tinydb.tables.plan_table, cache_size=0)
+        plan = table.get(Query().owner == self.id)
+        return plan["id"] if plan else None
 
     def _create_agent_location(self):
         """Create a random location for the agent in the world."""
@@ -265,30 +279,19 @@ class Agent:
         conversation = conversation_table.search(
             (Query().agent_ids.any(self.id)) & (Query().status == "active")
         )
-        self.conversation_id = conversation[0]["id"]  # type: ignore
         if conversation:
-            print(conversation)
+            self.conversation_id = conversation[0]["id"]
             self.message = Message(
                 content=conversation[0]["messages"][-1]["content"],
                 sender_id=conversation[0]["messages"][-1]["sender_id"],
             )
 
-        # plans owned by this agent
-        plan_table = self._db.table(settings.tinydb.tables.plan_table)
-        plan_db = plan_table.search(Query().owner == self.id)
-        self.plan: str = plan_db[0]["id"] if plan_db else ""
-        plan_obj = (
-            get_plan(self._db, self._nats, self.plan, self.simulation_id)
-            if self.plan
-            else None
-        )
-        self.plan_tasks: list[str] = plan_obj.get_tasks() if plan_obj else []
-
         # plans this agent is participating in
+        plan_table = self._db.table(settings.tinydb.tables.plan_table)
         plan_db = plan_table.search(Query().participants.any(self.id))  # type: ignore
         self.participating_plans = [plan["id"] for plan in plan_db] if plan_db else []
 
-        task_table = self._db.table(settings.tinydb.tables.task_table)
+        task_table = self._db.table(settings.tinydb.tables.task_table, cache_size=0)
         assigned_tasks = task_table.search(Query().worker == self.id)
         self.assigned_tasks = (
             [task["id"] for task in assigned_tasks] if assigned_tasks else []
@@ -311,8 +314,8 @@ class Agent:
         )
 
         plan_obj = (
-            get_plan(self._db, self._nats, self.plan, self.simulation_id)
-            if self.plan
+            get_plan(self._db, self._nats, self.get_plan_id(), self.simulation_id)
+            if self.get_plan_id()
             else None
         )
         plan_context = (
@@ -328,10 +331,13 @@ class Agent:
             else None
         )
 
-        tasks_obj = [
-            get_task(self._db, self._nats, task_id, self.simulation_id)
-            for task_id in self.plan_tasks
-        ]
+        if plan_obj:
+            tasks_obj = [
+                get_task(self._db, self._nats, task_id, self.simulation_id)
+                for task_id in plan_obj.get_tasks()
+            ]
+        else:
+            tasks_obj = []
         tasks_context = [
             TaskContext(
                 id=task.id,
@@ -349,7 +355,7 @@ class Agent:
             f"These are the tasks in detail: "
             + ", ".join(map(str, tasks_context))
             + (
-                " You have 0 tasks in your plan, it might make sense to add tasks."
+                "\n You have 0 tasks in your plan, it might make sense to add tasks using the add_task tool."
                 if not tasks_context
                 else ""
             )
@@ -382,19 +388,33 @@ class Agent:
             else "You do not have any memory about past observations and events. "
         )  # TODO: either pass this in prompt here or use autogen memory field
 
-        context_description = (
-            f"{hunger_description}\n\n"
-            f"{observation_description}\n\n"
-            f"{plans_description}\n\n"
-            # f"{participating_plans_description}"
+        conversation_observation = (
             f"You are currently engaged in a conversation with another agent with ID: {self.conversation_id}. "
             if self.conversation_id
             else ""
+        )
+        has_plan = (
+            "You ALREADY HAVE a plan."
+            if self.get_plan_id()
+            else "You do not have a plan"
+        )
+        has_three_tasks = (
+            "YOU ALREADY HAVE 3 tasks."
+            if plan_obj and len(plan_obj.get_tasks()) >= 3
+            else "You do not have 3 tasks."
+        )
+        context_description = (
+            f"{hunger_description}.\n\n"
+            f"{observation_description}.\n\n"
+            f"{conversation_observation}.\n\n"
+            f"{plans_description}.\n\n"
             f"{message_description}\n\n"
             f"{memory_description}\n\n"
-            f"Your current location is {self.location}. \n\n"
-            f"You can only ever have one plan at a time. If you have a plan always add at least one task. NEVER add more than 5 tasks. Continue."
-            f"If you are close to an agent (distance 5 or less), engage in conversation with them. "
+            f"Your current location is {self.get_location()}. \n\n"
+            f"IMPORTANT: You can ONLY HAVE ONE PLAN {has_plan}.\n"
+            f"If you have a plan always add at least one task, at most 3. {has_three_tasks} \n"
+            f"Once you have a plan and tasks, start moving towards the target of the task. \n"
+            f"If you are close to an agent, engage in conversation with them. \n"
             f"Given this information now decide on your next action by performing a tool call."
         )
         # TODO: improve formatting!
@@ -435,6 +455,9 @@ class Agent:
 
     @observe(as_type="generation", name="Agent Tick")
     async def trigger(self):
+        self._db.clear_cache()
+        logger.debug(f"Ticking agent {self.id}")
+
         langfuse_context.update_current_trace(
             name=f"Agent Tick {self.name}",
             metadata={"agent_id": self.id},
@@ -447,25 +470,29 @@ class Agent:
         # memory = self.get_memory() # TODO: if decided to implement here remove from get_context
         # self.autogen_agent.memory = memory
         # TODO: trigger any other required logic
-        logger.info(f"Ticking agent {self.id}")
 
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
-        logger.info(self.autogen_agent._system_messages)
-        logger.info(self.autogen_agent._description)
 
         langfuse_context.update_current_observation(
             usage_details={
                 "input_tokens": self._client.actual_usage().prompt_tokens,
                 "output_tokens": self._client.actual_usage().completion_tokens,
-            }
+            },
+            input={
+                "system_message": self.autogen_agent._system_messages[0].content,
+                "description": self.autogen_agent._description,
+                "context": context,
+                "tools": [tool.schema for tool in self.autogen_agent._tools],
+            },
+            metadata=extract_tool_call_info(output),
         )
         return output
 
     #### === Turn-based communication -> TODO: consider to rework this! === ###
     async def send_message_to_agent(self, target_agent_id: str, content: str) -> str:
-        """Send a message to another agent"""
+        """Send a message to another agent and update relationship based on interaction."""
         await self._nats.publish(
             message=json.dumps(
                 {
@@ -477,7 +504,12 @@ class Agent:
             ),
             subject=f"simulation.{self.simulation_id}.agent.{target_agent_id}",
         )
-        return content
+        # Update relationship based on message content
+        # This is a simple implementation - in a real system, you might want to analyze
+        # the message content to determine the sentiment change
+        self.relationship_manager.update_relationship(self.id, target_agent_id, 0.1)
+
+        return target_agent_id
 
     def receive_conversation_context(self, conversation_id: str):
         table = self._db.table("agent_conversations")
@@ -486,44 +518,101 @@ class Agent:
 
     async def process_turn(self, conversation_id: str):
         """Process the agent's turn in a conversation"""
+        logger.info(
+            f"Agent {self.id} processing turn for conversation {conversation_id}"
+        )
         # Get conversation context
 
         conversation = self.receive_conversation_context(conversation_id)
+        logger.info(f"Conversation context: {conversation}")
 
-        logger.debug(f"Conversation: {conversation}")
-        logger.debug(f"Conversation ID: {conversation_id}")
-
+        if not conversation:
+            logger.warning(f"No conversation context found for {conversation_id}")
+            return "I'm ready to start the conversation.", True
         # Format conversation for the LLM
         formatted_conversation = self._format_conversation_for_llm(conversation)
+        logger.info(f"Formatted conversation for LLM: {formatted_conversation}")
 
-        logger.debug(f"Formatted Conversation: {conversation}")
+        try:
+            logger.info("Calling LLM for response")
 
-        # TODO:
-        # Get response from LLM
-        # response = await self.autogen_agent.run(task=formatted_conversation)
-        # content = response.messages[-1].content
+            chat_agent = AssistantAgent(
+                name=f"{self.name}",
+                model_client=self._client,
+                system_message=SYSTEM_MESSAGE,
+                description=DESCRIPTION.format(
+                    id=self.id,
+                    name=self.name,
+                    # personality=self.personality
+                ),
+                reflect_on_tool_use=False,  # False as our current tools do not return text
+                model_client_stream=False,
+                # memory=[]
+            )
+            response = await chat_agent.run(task=formatted_conversation)
+            logger.info(f"LLM response: {response}")
 
-        content = "Hello, this is a test message from the agent."
+            if not response or not response.messages:
+                logger.error("No messages in LLM response")
+                content = "I'm thinking about how to respond..."
+            else:
+                content = response.messages[-1].content
+                logger.info(f"Extracted content: {content}")
+        except Exception as e:
+            logger.error(f"Error processing turn for agent {self.id}: {str(e)}")
+            content = "I encountered an error while processing my turn."
         # Check if the agent wants to end the conversation
-        should_continue = "END_CONVERSATION" not in content
+        should_continue = "END_CONVERSATION" not in content.upper()
+        logger.info(f"Should continue conversation: {should_continue}")
 
         # Store the message
-        self._store_message_in_conversation(conversation_id, content)
+        try:
+            await self._store_message_in_conversation(conversation_id, content)
+            logger.info("Message stored successfully")
+        except Exception as e:
+            logger.error(f"Error storing message: {str(e)}")
 
         return content, should_continue
 
     def _format_conversation_for_llm(self, conversation):
         """Format the conversation history for the LLM"""
-        context = """You are in a conversation with another agent. Review the conversation history below and respond appropriately.
-        Your response should be to the point and concise \n\n"""
+        logger.info("Formatting conversation for LLM")
+        context = """You are in a conversation with another agent. Your goal is to engage in meaningful dialogue.
+        Review the conversation history below and respond appropriately.
+        Your response should be natural and conversational.
+        If you want to end the conversation, include 'END_CONVERSATION' in your response.\n\n"""
+
+        if not conversation.get("messages"):
+            logger.info("No previous messages, starting new conversation")
+            context += "This is the start of the conversation. Please introduce yourself and start the discussion."
+
+            return context
+        logger.info(f"Formatting {len(conversation['messages'])} previous messages")
+
         for msg in conversation["messages"]:
             sender = (
                 "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
             )
             context += f"{sender}: {msg['content']}\n\n"
 
-        context += "Your turn. You can include END_CONVERSATION in your response if you want to end the conversation. But make sure to talk 2 to 3 steps"
+        context += "Your turn to respond. Make sure to be engaging and continue the conversation naturally."
+        logger.info("Conversation formatted successfully")
         return context
+
+    def get_relationship_status(self, target_agent_id: str) -> str:
+        """Get the relationship status with another agent."""
+        relationship = self.relationship_manager.get_relationship(
+            self.id, target_agent_id
+        )
+        return relationship.relationship_type.value
+
+    def update_relationship(
+        self, target_agent_id: str, sentiment_change: float
+    ) -> None:
+        """Update the relationship with another agent."""
+        self.relationship_manager.update_relationship(
+            self.id, target_agent_id, sentiment_change
+        )
 
     def _store_message_in_conversation(self, conversation_id: str, content: str):
         """Store a message in the conversation"""

@@ -30,19 +30,18 @@ async def move(
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 
-    logger.debug(f"Moving agent {agent_id} to {(x,y)}")
+    logger.success("Calling tool move")
 
     db = get_client()
     nats = nats_broker()
 
     try:
-
         world = World(simulation_id=simulation_id, db=db, nats=nats)
         world.load()
         await world.move_agent(agent_id=agent_id, destination=(x, y))
     except Exception as e:
         logger.error(f"Error moving agent: {e}")
-
+        raise e
 
 @observe()
 async def harvest_resource(

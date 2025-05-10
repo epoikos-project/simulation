@@ -14,6 +14,7 @@ from models.agent import Agent
 from models.simulation_runner import SimulationRunner
 from models.world import World
 import asyncio
+import shutil
 
 
 class Simulation:
@@ -69,6 +70,15 @@ class Simulation:
                 name=f"simulation-{self.id}", subjects=[f"simulation.{self.id}.>"]
             )
         )
+
+    def _backup_file(self, src: str, dst: str) -> None:
+        try:
+            shutil.copy(src, dst)
+            logger.debug(f"Backup from {src} to {dst} successful.")
+        except FileNotFoundError:
+            logger.error(f"Error creating backup: {src} not found.")
+        except Exception as e:
+            logger.error(f"Error creating backup: {e}")
 
     async def delete(self, milvus: MilvusClient):
         logger.info(f"Deleting Simulation {self.id}")
@@ -138,6 +148,10 @@ class Simulation:
 
         This method is called by the SimulationRunner for every tick.
         """
+        # backup db of the current tick
+        self._backup_file("data/tinydb/db.json", "data/tinydb/db_backup_tick-1.json")
+
+        self._db.clear_cache()
         self._tick_counter += 1
         logger.debug(f"[SIM {self.id}] Tick {self._tick_counter}")
 
@@ -164,7 +178,6 @@ class Simulation:
         # ---------- agents ----------
         agent_table = self._db.table(settings.tinydb.tables.agent_table)
         agent_rows = agent_table.search(Query().simulation_id == self.id)
-        logger.debug(f"[SIM {self.id}] Found {len(agent_rows)} agents for this tick")
 
         async def run_agent(row):
             agent = Agent(
@@ -175,8 +188,15 @@ class Simulation:
                 id=row["id"],
             )
             agent.load()
-            logger.debug(f"[SIM {self.id}] Triggering agent {agent.id}")
             await agent.trigger()
 
         tasks = [run_agent(row) for row in agent_rows]
+        # backup db once every agent was ticked and keep the last two backups
+        if agent_rows and (self._tick_counter % len(agent_rows) == 0):
+            self._backup_file(
+                "data/tinydb/db_backup_step-1.json", "data/tinydb/db_backup_step-2.json"
+            )
+            self._backup_file(
+                "data/tinydb/db.json", "data/tinydb/db_backup_step-1.json"
+            )
         await asyncio.gather(*tasks)

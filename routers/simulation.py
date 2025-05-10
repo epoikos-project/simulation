@@ -23,7 +23,7 @@ class CreateWorldInput(BaseModel):
 
 
 @router.post("")
-async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):   
+async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):
     try:
         simulation = Simulation(db=db, nats=broker, milvus=milvus, id=name)
         await simulation.create()
@@ -71,7 +71,9 @@ async def delete_simulation(id: str, db: DB, milvus: Milvus, nats: Nats):
 @router.post("/{simulation_id}/start")
 async def start_simulation(simulation_id: str, broker: Nats, db: DB, milvus: Milvus):
     try:
-        simulation = simulation = Simulation(db=db, nats=broker, milvus=milvus, id=simulation_id)
+        simulation = simulation = Simulation(
+            db=db, nats=broker, milvus=milvus, id=simulation_id
+        )
         await simulation.start()
     except Exception as e:
         logger.error(f"Error starting simulation: {e}")
