@@ -14,10 +14,11 @@ class ModelEntry:
     name: str
     info: ModelInfo
 
+
 ModelName = Literal[
-        "llama-3.1-8b-instruct",
-        "llama-3.3-70b-instruct",
-    ]
+    "llama-3.1-8b-instruct",
+    "llama-3.3-70b-instruct",
+]
 
 
 class AvailableModels:

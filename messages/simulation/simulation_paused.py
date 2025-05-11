@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 from typing import Literal
 
+
 class SimulationPausedMessage(BaseModel):
     type: Literal["simulation_paused"] = "simulation_paused"
     id: str

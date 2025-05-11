@@ -6,7 +6,6 @@ from messages.world import WorldBase
 class AgentPlacedMessage(WorldBase):
     """Message sent when an agent is placed in world."""
 
-
     location: tuple[int, int]
     name: str
 

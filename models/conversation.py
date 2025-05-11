@@ -87,40 +87,41 @@ class Conversation:
         table = self._db.table("agent_conversations")
         table.update({"status": "completed"}, Query().id == self.id)
 
-
     def add_message(self, sender_id: str, content: str, sentiment_score: float = 0.0):
         """Add a message to the conversation and track relationship changes"""
         message = {
             "sender_id": sender_id,
             "content": content,
             "timestamp": str(datetime.now()),
-            "sentiment_score": sentiment_score
+            "sentiment_score": sentiment_score,
         }
         self.messages.append(message)
-        
+
         # Update relationship changes for all other agents in the conversation
         for agent_id in self.agent_ids:
             if agent_id != sender_id:
-                self.relationship_changes.append({
-                    "source_agent_id": sender_id,
-                    "target_agent_id": agent_id,
-                    "sentiment_change": sentiment_score,
-                    "timestamp": str(datetime.now())
-                })
-        
+                self.relationship_changes.append(
+                    {
+                        "source_agent_id": sender_id,
+                        "target_agent_id": agent_id,
+                        "sentiment_change": sentiment_score,
+                        "timestamp": str(datetime.now()),
+                    }
+                )
+
         # Save the updated conversation
         table = self._db.table("agent_conversations")
         table.update(
             {
                 "messages": self.messages,
-                "relationship_changes": self.relationship_changes
+                "relationship_changes": self.relationship_changes,
             },
-            Query().id == self.id
+            Query().id == self.id,
         )
 
     def get_relationship_status(self, agent1_id: str, agent2_id: str) -> Dict:
         """Get the relationship status between two specific agents in the conversation.
-        
+
         Returns:
             Dict containing:
             - total_sentiment: float (cumulative sentiment score)
@@ -130,22 +131,29 @@ class Conversation:
         """
         # Filter relationship changes between the two agents
         relevant_changes = [
-            change for change in self.relationship_changes
-            if (change["source_agent_id"] == agent1_id and change["target_agent_id"] == agent2_id) or
-               (change["source_agent_id"] == agent2_id and change["target_agent_id"] == agent1_id)
+            change
+            for change in self.relationship_changes
+            if (
+                change["source_agent_id"] == agent1_id
+                and change["target_agent_id"] == agent2_id
+            )
+            or (
+                change["source_agent_id"] == agent2_id
+                and change["target_agent_id"] == agent1_id
+            )
         ]
-        
+
         if not relevant_changes:
             return {
                 "total_sentiment": 0.0,
                 "relationship_type": RelationshipType.STRANGER.value,
                 "interaction_count": 0,
-                "last_interaction": None
+                "last_interaction": None,
             }
-        
+
         # Calculate total sentiment
         total_sentiment = sum(change["sentiment_change"] for change in relevant_changes)
-        
+
         # Determine relationship type based on total sentiment
         if total_sentiment >= 0.5:
             relationship_type = RelationshipType.FRIEND.value
@@ -153,13 +161,13 @@ class Conversation:
             relationship_type = RelationshipType.ENEMY.value
         else:
             relationship_type = RelationshipType.NEUTRAL.value
-        
+
         # Get last interaction timestamp
         last_interaction = max(change["timestamp"] for change in relevant_changes)
-        
+
         return {
             "total_sentiment": total_sentiment,
             "relationship_type": relationship_type,
             "interaction_count": len(relevant_changes),
-            "last_interaction": last_interaction
+            "last_interaction": last_interaction,
         }

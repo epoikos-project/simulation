@@ -15,6 +15,8 @@ router = APIRouter(
 )
 
 logger = logging.getLogger(__name__)
+
+
 # Create a model for the request
 class ConversationCreate(BaseModel):
     agent_ids: List[str]
@@ -42,14 +44,13 @@ async def create_conversation(
     """
     if not conversation_data.agent_ids:
         raise HTTPException(
-            status_code=400,
-            detail="At least one agent ID must be provided"
+            status_code=400, detail="At least one agent ID must be provided"
         )
 
     if len(conversation_data.agent_ids) < 2:
         raise HTTPException(
             status_code=400,
-            detail="At least two agents are required for a conversation"
+            detail="At least two agents are required for a conversation",
         )
 
     # Verify all agents exist
@@ -61,7 +62,7 @@ async def create_conversation(
         if not agent:
             raise HTTPException(
                 status_code=404,
-                detail=f"Agent {agent_id} not found in simulation {simulation_id}"
+                detail=f"Agent {agent_id} not found in simulation {simulation_id}",
             )
     # Create the conversation
     conversation = Conversation(
@@ -79,7 +80,7 @@ async def create_conversation(
             {
                 "conversation_id": conversation_id,
                 "type": "conversation_turn",
-                "initial_prompt": conversation_data.initial_prompt
+                "initial_prompt": conversation_data.initial_prompt,
             }
         ),
         subject=f"simulation.{simulation_id}.agent.{first_agent_id}.turn",
@@ -116,7 +117,9 @@ async def advance_conversation(
     broker: Nats,
 ):
     """Process the current agent's turn and advance to the next agent"""
-    logger.info(f"Advancing conversation {conversation_id} in simulation {simulation_id}")
+    logger.info(
+        f"Advancing conversation {conversation_id} in simulation {simulation_id}"
+    )
     # Load the conversation
     conversation = Conversation.load(db, conversation_id)
     if not conversation or conversation.simulation_id != simulation_id:
@@ -153,10 +156,13 @@ async def advance_conversation(
         logger.warning(f"No conversation context found for {conversation_id}")
         # Initialize conversation with initial prompt if it's the first turn
         if not conversation.messages:
-            initial_prompt = conversation_context.get("initial_prompt", "Let's start a conversation.")
+            initial_prompt = conversation_context.get(
+                "initial_prompt", "Let's start a conversation."
+            )
             conversation.add_message("system", initial_prompt)
-            conversation_context = await agent.receive_conversation_context(conversation_id)
-
+            conversation_context = await agent.receive_conversation_context(
+                conversation_id
+            )
 
     # Process the agent's turn
     logger.info("Processing agent's turn")
@@ -190,7 +196,6 @@ async def advance_conversation(
         if agent_id != current_agent_id:
             agent.update_relationship(agent_id, sentiment_score)
 
-
     # Check if we should end the conversation
     if not should_continue:
         logger.info("Ending conversation as requested by agent")
@@ -198,7 +203,7 @@ async def advance_conversation(
         return {
             "status": "completed",
             "message": "Conversation ended by agent",
-            "response": response
+            "response": response,
         }
 
     # Advance to the next agent's turn
@@ -214,7 +219,7 @@ async def advance_conversation(
             {
                 "conversation_id": conversation_id,
                 "type": "conversation_turn",
-                "previous_message": response
+                "previous_message": response,
             }
         ),
         subject=f"simulation.{simulation_id}.agent.{next_agent_id}.turn",
@@ -225,8 +230,9 @@ async def advance_conversation(
         "current_agent_id": current_agent_id,
         "next_agent_id": next_agent_id,
         "message": "Turn processed successfully",
-        "response": response
+        "response": response,
     }
+
 
 @router.get("/{conversation_id}/relationship/{agent1_id}/{agent2_id}")
 async def get_relationship_status(
@@ -243,10 +249,13 @@ async def get_relationship_status(
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Verify both agents are in the conversation
-    if agent1_id not in conversation.agent_ids or agent2_id not in conversation.agent_ids:
+    if (
+        agent1_id not in conversation.agent_ids
+        or agent2_id not in conversation.agent_ids
+    ):
         raise HTTPException(
             status_code=400,
-            detail="One or both agents are not participants in this conversation"
+            detail="One or both agents are not participants in this conversation",
         )
 
     # Get relationship status
@@ -256,5 +265,5 @@ async def get_relationship_status(
         "conversation_id": conversation_id,
         "agent1_id": agent1_id,
         "agent2_id": agent2_id,
-        "relationship_status": relationship_status
+        "relationship_status": relationship_status,
     }
