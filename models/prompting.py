@@ -92,13 +92,13 @@ class PlanContextPrompt:
             plan_ownership_context = "You do not own any plans. "
 
         # participation
-        if (
-            plan_participation
-        ):  # TODO: do not prompt ownership in participation also automatically join plan if owner
+        if plan_participation and not (plan_participation == [plan_ownership]):
             plan_participation_context = (
-                "You are participating in the following plans: "
+                "You are participating in the following plans owned by other people: "
             )
             for plan_id in plan_participation:
+                if plan_id == plan_ownership:
+                    continue
                 plan_obj = get_plan(self.db, self.nats, plan_id, simulation_id)
                 plan_context = PlanContext(
                     id=plan_obj.id,
@@ -134,7 +134,9 @@ class PlanContextPrompt:
                     plan_participation_context += "This plan has no tasks associated with it. Wait for the owner to add tasks. "
 
         else:
-            plan_participation_context = "You are not participating in any plans. "
+            plan_participation_context = (
+                "You are not participating in any plans owned by other people. "
+            )
             if not plan_ownership:
                 plan_participation_context += "As you also do not own any plans, consider to either former a new plan or join an existing one. "
 
