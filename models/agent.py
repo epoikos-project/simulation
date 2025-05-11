@@ -425,7 +425,7 @@ class Agent:
         """Get the agent's energy level."""
         table = self._db.table(settings.tinydb.tables.agent_table)
         agent = table.get(
-            Query().id == self.id & Query().simulation_id == self.simulation_id
+            (Query().id == self.id) & (Query().simulation_id == self.simulation_id)
         )
         return agent.get("energy_level", 0) if agent else 0
 
@@ -435,20 +435,19 @@ class Agent:
         table = self._db.table(settings.tinydb.tables.agent_table)
         table.update(
             {"energy_level": self.energy_level},
-            Query().id == self.id,
-            Query().simulation_id == self.simulation_id,
+            (Query().id == self.id) & (Query().simulation_id == self.simulation_id),
         )
 
     def _get_energy_consumption(self) -> int:
         """Get the energy consumption of the agent with regard to the region."""
+        location = self.get_location()
         table = self._db.table(settings.tinydb.tables.region_table)
         region = table.get(
-            Query().simulation_id
-            == self.simulation_id & Query().x_1
-            <= self.location[0] & Query().x_2
-            >= self.location[0] & Query().y_1
-            <= self.location[1] & Query().y_2
-            >= self.location[1]
+            (Query().simulation_id == self.simulation_id)
+            & (Query().x_1 <= location[0])
+            & (Query().x_2 >= location[0])
+            & (Query().y_1 <= location[1])
+            & (Query().y_2 >= location[1])
         )
         energy_cost = region["region_energy_cost"] if region else 0
         return energy_cost
