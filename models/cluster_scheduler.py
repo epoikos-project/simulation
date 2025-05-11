@@ -1,12 +1,15 @@
-# cluster_scheduler.py
+# models/cluster_scheduler.py
 
 import asyncio
 from typing import Dict, FrozenSet, Set, Tuple, List
 
+from config.base import settings
 from models.cluster_manager import ClusterManager
 from models.cluster_executor import ClusterExecutor
 from messages.simulation.simulation_clusters import SimulationClustersMessage
+import logging
 
+_logger = logging.getLogger(__name__)
 
 
 class ClusterScheduler:
@@ -22,7 +25,7 @@ class ClusterScheduler:
         self._cluster_tasks: Dict[FrozenSet[str], Tuple[asyncio.Task, asyncio.Event]] = {}
         # Last tick executed per cluster
         self._cluster_ticks: Dict[FrozenSet[str], int] = {}
-        # Queue for cluster‐finished notifications
+        # Queue for cluster-finished notifications
         self._finished_queue: asyncio.Queue = asyncio.Queue()
         # Controller task handle
         self._controller_task: asyncio.Task | None = None
@@ -42,7 +45,14 @@ class ClusterScheduler:
         self._controller_task = asyncio.create_task(self._controller_loop())
 
     async def stop(self):
-        # 1) cancel controller; we manage catch-up ourselves
+        # 1) If no clusters ran yet, nothing to do.
+        if not self._cluster_ticks:
+            return
+
+        # 2) Figure out how far ahead the fastest cluster got.
+        max_tick = max(self._cluster_ticks.values())
+
+        # 3) Cancel the controller loop (if running) and all cluster tasks
         if self._controller_task:
             self._controller_task.cancel()
             try:
@@ -50,49 +60,24 @@ class ClusterScheduler:
             except asyncio.CancelledError:
                 pass
 
-        # 2) determine the highest tick any cluster reached
-        if not self._cluster_ticks:
-            return
-        max_tick = max(self._cluster_ticks.values())
-
-        # 3) block clusters at max, unblock slower ones
-        for c, (_task, unblock) in self._cluster_tasks.items():
-            if self._cluster_ticks[c] >= max_tick:
-                unblock.clear()
-            else:
-                unblock.set()
-
-        # 4) wait for all clusters to catch up
-        while True:
-            # check if all clusters at max
-            if all(tick >= max_tick for tick in self._cluster_ticks.values()):
-                break
-            # wait for any cluster to finish another tick
-            try:
-                finished_cluster, tick = await asyncio.wait_for(
-                    self._finished_queue.get(),
-                    timeout=5.0  # avoid hanging indefinitely
-                )
-            except asyncio.TimeoutError:
-                raise RuntimeError("Timed out waiting for clusters to catch up on stop()")
-            # update tick (cluster_loop already did, but ensure consistency)
-            self._cluster_ticks[finished_cluster] = tick
-            # re-block any that reached max
-            if tick >= max_tick:
-                _, ev = self._cluster_tasks[finished_cluster]
-                ev.clear()
-            else:
-                # ensure slower clusters remain unblocked
-                _, ev = self._cluster_tasks[finished_cluster]
-                ev.set()
-
-        # 5) now cancel all cluster tasks
         for task, _ in self._cluster_tasks.values():
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 pass
+
+        # 4) Now “flush” each lagging cluster by running exactly
+        #    (max_tick – current_tick) more ticks in-line:
+        for cluster, current in list(self._cluster_ticks.items()):
+            delta = max_tick - current
+            for i in range(delta):
+                # note: using the same executor you passed in
+                await self.executor.run(cluster, current + i)
+            # set it to the final tick
+            self._cluster_ticks[cluster] = max_tick
+
+        # Shutdown is complete.
 
     async def _cluster_loop(self, cluster: FrozenSet[str], unblock: asyncio.Event):
         """One dedicated task per cluster."""
@@ -114,7 +99,7 @@ class ClusterScheduler:
             return
 
     async def _controller_loop(self):
-        """Recompute clusters on each cluster finish, merge/split, publish, and unblock."""
+        """Recompute clusters on each cluster finish, save snapshot, publish, and unblock."""
         try:
             while True:
                 finished_cluster, finished_tick = await self._finished_queue.get()
@@ -123,7 +108,43 @@ class ClusterScheduler:
                 raw = self.cluster_manager.compute_clusters()
                 new_clusters = {frozenset(c) for c in raw}
 
-                # 2) publish updated clusters
+                # 2) load all agent positions for this snapshot
+                all_agents = self.cluster_manager._load_agents()
+                positions = {a["id"]: (a["x"], a["y"]) for a in all_agents}
+
+                # 3) compute dependency edges between clusters
+                edges = []
+                for c1 in new_clusters:
+                    t1 = self._cluster_ticks.get(c1, 0)
+                    for c2 in new_clusters:
+                        if c1 is c2:
+                            continue
+                        t2 = self._cluster_ticks.get(c2, 0)
+                        if t2 < t1:
+                            for u in c1:
+                                for v in c2:
+                                    a = next(filter(lambda x: x["id"] == u, all_agents))
+                                    b = next(filter(lambda x: x["id"] == v, all_agents))
+                                    dist = abs(a["x"] - b["x"]) + abs(a["y"] - b["y"])
+                                    threshold = a["vis_range"] + a["max_move"]
+                                    if dist <= threshold:
+                                        edges.append((u, v))
+                                        break
+                                else:
+                                    continue
+                                break
+
+                # 4) save snapshot into TinyDB
+                table = self.db.table(settings.tinydb.tables.cluster_snapshot_table)
+                table.insert({
+                    "simulation_id": self.simulation_id,
+                    "tick":          finished_tick,
+                    "nodes":         [a["id"] for a in all_agents],
+                    "positions":     positions,
+                    "edges":         edges,
+                })
+
+                # 5) publish updated clusters
                 msg = SimulationClustersMessage(
                     id=self.simulation_id,
                     tick=finished_tick,
@@ -134,14 +155,13 @@ class ClusterScheduler:
                     message=msg.model_dump_json(),
                 )
 
-                # 3) sync tasks to new clusters (merge/split)
+                # 6) sync tasks to new clusters (merge/split)
                 self._sync_tasks_to_clusters(new_clusters)
 
-                # 4) unblock any clusters not blocked by others
+                # 7) unblock any clusters not blocked by others
                 for c, (_t, unblock) in self._cluster_tasks.items():
                     if not self._is_blocked(c):
                         unblock.set()
-
         except asyncio.CancelledError:
             return
 
@@ -154,19 +174,29 @@ class ClusterScheduler:
                 task.cancel()
                 self._cluster_ticks.pop(old, None)
 
+        existing = set(self._cluster_ticks.keys())
+        to_cancel = existing - new_clusters
+
         # spawn new clusters
-        for c in new_clusters:
-            if c not in self._cluster_tasks:
-                # inherit the max tick of any subset clusters
-                inherited = max(
-                    (self._cluster_ticks.get(old, 0) for old in self._cluster_ticks if old.issubset(c)),
-                    default=0
-                )
-                self._cluster_ticks[c] = inherited
-                evt = asyncio.Event()
-                evt.clear()  # will be unblocked by controller if ready
-                task = asyncio.create_task(self._cluster_loop(c, evt))
-                self._cluster_tasks[c] = (task, evt)
+        for new_c in new_clusters - existing:
+            # merge if any old ⊆ new_c, else split if new_c ⊆ old
+            if any(old.issubset(new_c) for old in existing):
+                sources = [self._cluster_ticks[old] for old in existing if old.issubset(new_c)]
+            else:
+                sources = [self._cluster_ticks[old] for old in existing if new_c.issubset(old)]
+            inherited = max(sources, default=0)
+
+            self._cluster_ticks[new_c] = inherited
+            evt = asyncio.Event()
+            evt.clear()  # initially blocked until controller_step 7
+            task = asyncio.create_task(self._cluster_loop(new_c, evt))
+            self._cluster_tasks[new_c] = (task, evt)
+
+        # finally cancel truly departed
+        for old in to_cancel:
+            task, _ = self._cluster_tasks.pop(old)
+            task.cancel()
+            self._cluster_ticks.pop(old, None)
 
     def _is_blocked(self, cluster: FrozenSet[str]) -> bool:
         """Return True if `cluster` must wait on a slower cluster in range."""
@@ -176,7 +206,6 @@ class ClusterScheduler:
         for other, other_tick in self._cluster_ticks.items():
             if other is cluster or other_tick >= my_tick:
                 continue
-            # check any agent pairs across clusters
             for aid in cluster:
                 for bid in other:
                     a = agent_map[aid]

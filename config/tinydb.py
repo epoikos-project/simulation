@@ -11,6 +11,7 @@ class TableSettings(BaseSettings):
     plan_table: str = "plans"
     task_table: str = "tasks"
     agent_conversation_table: str = "agent_conversations"
+    cluster_snapshot_table: str = "cluster_snapshots"
 
 
 class TinyDBSettings(BaseSettings):

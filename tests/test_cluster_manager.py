@@ -56,3 +56,49 @@ def test_isolated_agents_make_separate_clusters(make_world):
     clusters = cm.compute_clusters()
     expected = {frozenset({"A"}), frozenset({"B"})}
     assert set(sort_clusters(clusters)) == expected
+
+def test_agent_movement_affects_clustering(make_world):
+    """
+    Start with A and B in one cluster, C far away:
+       A—B    C
+    Then move C near B (within threshold), all three should merge.
+    Finally, move C back out, and clusters split again.
+    """
+    # 1) Initial setup: A at (0,0), B at (2,0), C at (10,10)
+    #    vis_range=1, max_move=1 → threshold=2
+    world = make_world([
+        ("A", 0, 0, 1, 1),
+        ("B", 2, 0, 1, 1),
+        ("C", 10, 10, 1, 1),
+    ])
+    cm = ClusterManager(world)
+    clusters = cm.compute_clusters()
+    # A–B are at distance 2 → connected; C is isolated
+    assert set(sort_clusters(clusters)) == {
+        frozenset({"A", "B"}),
+        frozenset({"C"}),
+    }
+
+    # 2) Move C to (3,0) → dist(B,C)=1, so now {A,B,C} should all cluster
+    #    make_world stores into world._agents, so we can mutate directly:
+    world._agents[2] = {
+        "id":       "C",
+        "x":        3,
+        "y":        0,
+        "vis_range":1,
+        "max_move": 1,
+    }
+    clusters = cm.compute_clusters()
+    assert set(sort_clusters(clusters)) == {
+        frozenset({"A", "B", "C"}),
+    }
+
+    # 3) Move C back to (10,10) → splits again
+    world._agents[2]["x"] = 10
+    world._agents[2]["y"] = 10
+    clusters = cm.compute_clusters()
+    assert set(sort_clusters(clusters)) == {
+        frozenset({"A", "B"}),
+        frozenset({"C"}),
+    }
+

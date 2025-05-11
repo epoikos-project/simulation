@@ -6,6 +6,8 @@ from tinydb import Query, TinyDB
 
 from config import settings
 from typing import Optional, TYPE_CHECKING
+from models.cluster_executor import ClusterExecutor
+from models.cluster_scheduler import ClusterScheduler
 
 # This import is only for type checking to avoid circular imports
 if TYPE_CHECKING:
@@ -59,12 +61,21 @@ class SimulationRunner:
         asyncio.run(self._run_tick_loop())
 
     async def _run_tick_loop(self):
-        while self.simulation.is_running():
-            try:
-                # Perform simulation tick
-                await self.simulation.tick()
+        sim = self.simulation
+        # 1) make world once
+        await sim._initialize_world()
+        # 2) create our out-of-order scheduler just once
+        executor  = ClusterExecutor(sim.get_db(), sim.get_nats(), sim._milvus)
+        scheduler = ClusterScheduler(sim.world, executor)
 
-            except Exception as e:
-                logger.exception(f"Error during tick: {e}")
+        # 3) start the scheduler (spawns all cluster tasks + controller)
+        await scheduler.start()
 
+        # 4) keep going until someone calls SimulationRunner.stop()
+        while sim.is_running():
+            # nothing else to do here: scheduler is ticking clusters as fast
+            # as dependencies allow, across multiple global‐ticks.
             await asyncio.sleep(self._tick_interval)
+
+        # 5) tear it down when they stop()
+        await scheduler.stop()

@@ -9,7 +9,7 @@ class ClusterManager:
     """
 
     def __init__(self, world):
-        # world must implement get_agents() → List[dict]
+        # to get agent positions from world
         self.world = world
 
     def _load_agents(self) -> List[Dict]:
@@ -25,12 +25,17 @@ class ClusterManager:
         raw = self.world.get_agents()
         agents = []
         for r in raw:
+            # support both real-world fields and test-shorthand fields
+            x = r.get("x_coord", r.get("x"))
+            y = r.get("y_coord", r.get("y"))
+            vis = r.get("visibility_range", r.get("vis_range"))
+            mv  = r.get("range_per_move",    r.get("max_move"))
             agents.append({
                 "id":        r["id"],
-                "x":         r["x_coord"],
-                "y":         r["y_coord"],
-                "vis_range": r["visibility_range"],
-                "max_move":  r["range_per_move"],
+                "x":         x,
+                "y":         y,
+                "vis_range": vis,
+                "max_move":  mv,
             })
         return agents
 
