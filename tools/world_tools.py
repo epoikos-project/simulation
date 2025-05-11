@@ -26,7 +26,7 @@ async def move(
     agent_id: str,
     simulation_id: str,
 ):
-    """Move in the world"""
+    """Move in the world. You can only move one coordinate at a time and have to choose a location different to your current location."""
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 

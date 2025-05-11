@@ -25,12 +25,8 @@ class ResourceObservation(_BaseObs):
     available: bool
 
     def __str__(self) -> str:
-        return (
-            f"{self.type.value} with ID {self.id} "
-            f"at location {self.location} with a distance of {self.distance}. "
-            f"Its energy yield is {self.energy_yield} and it is currently "
-            f"{'available' if self.available else 'unavailable'}. "
-        )
+        availability = "available" if self.available else "unavailable"
+        return f"[ID: {self.id}; type: {self.type.value}; location: {self.location}; distance: {self.distance}; energy yield: {self.energy_yield}; {availability}]"
 
 
 class AgentObservation(_BaseObs):
@@ -39,11 +35,7 @@ class AgentObservation(_BaseObs):
     relationship_status: str = RelationshipType.STRANGER.value
 
     def __str__(self) -> str:
-        return (
-            f"{self.type.value} with ID {self.id} and name {self.name} "
-            f"at location {self.location} with a distance of {self.distance}. "
-            f"Your relationship status to this person is {self.relationship_status}. "
-        )
+        return f"[ID: {self.id}; type: {self.type.value}; location: {self.location}; distance: {self.distance}; name: {self.name}; relationship status: {self.relationship_status}]"
 
 
 class ObstacleObservation(_BaseObs):
@@ -51,10 +43,7 @@ class ObstacleObservation(_BaseObs):
     # no extra fields
 
     def __str__(self) -> str:
-        return (
-            f"{self.type.value} with ID {self.id} "
-            f"Location {self.location}, distance {self.distance}. "
-        )
+        return f"[ID: {self.id}; type: {self.type.value}; location: {self.location}; distance: {self.distance}]"
 
 
 class OtherObservation(_BaseObs):
@@ -62,10 +51,7 @@ class OtherObservation(_BaseObs):
     # no extra fields
 
     def __str__(self) -> str:
-        return (
-            f"{self.type.value} with ID {self.id} "
-            f"Location {self.location}, distance {self.distance}. "
-        )
+        return f"[ID: {self.id}; type: {self.type.value}; location: {self.location}; distance: {self.distance}]"
 
 
 Observation = Annotated[
@@ -86,7 +72,6 @@ class Message(BaseModel):
     sender_id: str
 
 
-# TODO: consider if the following would make more sense to be part of their actual classes. In general it can be considered if the context classes can be combined with the actual ones, if the exist.
 class PlanContext(BaseModel):
     """A plan for resource acquisition."""
 
@@ -98,11 +83,7 @@ class PlanContext(BaseModel):
     total_payoff: int = 0
 
     def __str__(self) -> str:
-        return (
-            f"Plan with ID: {self.id}, owner: {self.owner}, goal: {self.goal}, total expected payoff: {self.total_payoff}. \n"
-            f"This plan has the following participants: {', '.join(self.participants)}. \n"
-            f"This plan has the following tasks: {', '.join(self.tasks)}. \n"
-        )
+        return f"[ID: {self.id}; owner: {self.owner}; goal: {self.goal}; total expected payoff: {self.total_payoff}; participants: {', '.join(self.participants)}; tasks: {', '.join(self.tasks)}]"
 
 
 class TaskContext(BaseModel):
@@ -116,10 +97,4 @@ class TaskContext(BaseModel):
     worker: str | None = None
 
     def __str__(self) -> str:
-        return (
-            f"Task with ID: {self.id}, target: {self.target}, payoff: {self.payoff}. "
-            f"This task is part of plan: {self.plan_id}. "
-            f"This task is assigned to agent: {self.worker}. "
-        )
-
-    # TODO: this probably needs improvement
+        return f"[ID: {self.id}; target: {self.target}; payoff: {self.payoff}; plan_id: {self.plan_id}; worker: {self.worker}]"

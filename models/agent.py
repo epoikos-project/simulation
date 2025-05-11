@@ -20,8 +20,6 @@ from datetime import datetime
 from typing import cast, Callable, List
 from functools import partial
 
-# from models.plan import get_plan
-# from models.task import get_task
 from models.context import Observation, Message
 from models.prompting import (
     SYSTEM_MESSAGE,
@@ -79,7 +77,7 @@ class Agent:
         self.observations: list[Observation] = []
         self.message: Message = Message(content="", sender_id="")
         self.conversation_id: str = ""
-        self.participating_plans: list[str] = []
+        self.plan_participation: list[str] = []
         self.assigned_tasks: list[str] = []
         self.memory: str = ""
         # objective: str # could be some sort of description to guide the agents actions
@@ -97,6 +95,7 @@ class Agent:
         )
 
         tools: List[BaseTool] = [self.make_bound_tool(tool) for tool in available_tools]
+        # TODO: make tools adaptive to current context: eg. make plan only if no plan exists
 
         self.autogen_agent = AssistantAgent(
             name=f"{self.name}",
@@ -231,12 +230,6 @@ class Agent:
         # Publish the agent created message to NATS
         await agent_created_message.publish(self._nats)
 
-    def get_plan_id(self) -> str:
-        """Get the plan ID of the agent."""
-        table = self._db.table(settings.tinydb.tables.plan_table, cache_size=0)
-        plan = table.get(Query().owner == self.id)
-        return plan["id"] if plan else None
-
     def _create_agent_location(self):
         """Create a random location for the agent in the world."""
         return self.world.get_random_agent_location()
@@ -267,9 +260,13 @@ class Agent:
             )
 
         # plans and tasks
+        table = self._db.table(settings.tinydb.tables.plan_table, cache_size=0)
+        plan_ownership = table.get(Query().owner == self.id)
+        self.plan_ownership = plan_ownership["id"] if plan_ownership else None  # type: ignore
+
         plan_table = self._db.table(settings.tinydb.tables.plan_table)
         plan_db = plan_table.search(Query().participants.any(self.id))  # type: ignore
-        self.participating_plans = [plan["id"] for plan in plan_db] if plan_db else []
+        self.plan_participation = [plan["id"] for plan in plan_db] if plan_db else []
 
         task_table = self._db.table(settings.tinydb.tables.task_table, cache_size=0)
         assigned_tasks = task_table.search(Query().worker == self.id)
@@ -284,12 +281,17 @@ class Agent:
         parts = [
             HungerContextPrompt().build(self.hunger),
             ObservationContextPrompt().build(self.observations),
-            PlanContextPrompt().build(self.get_plan_id(), self.simulation_id),
+            PlanContextPrompt().build(
+                self.plan_ownership,
+                self.plan_participation,
+                self.assigned_tasks,
+                self.simulation_id,
+            ),
             ConversationContextPrompt().build(self.message, self.conversation_id),
             MemoryContextPrompt().build(self.memory),
         ]
-        context = "\n\n".join(parts)
-        context += "\n Given this information now decide on your next action by performing a tool call."
+        context = "\n".join(parts)
+        context += "\nGiven this information now decide on your next action by performing a tool call."
         return context
 
     @observe(as_type="generation", name="Agent Tick")
@@ -325,6 +327,7 @@ class Agent:
         return output
 
     #### === Turn-based communication -> TODO: consider to rework this! === ###
+    # TODO: check if conversation has id/ name of other agent so llm know who its talking to
     async def send_message_to_agent(self, target_agent_id: str, content: str) -> str:
         """Send a message to another agent and update relationship based on interaction."""
         await self._nats.publish(
