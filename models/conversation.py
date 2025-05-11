@@ -87,79 +87,114 @@ class Conversation:
         table = self._db.table("agent_conversations")
         table.update({"status": "completed"}, Query().id == self.id)
 
-
     def add_message(self, sender_id: str, content: str, sentiment_score: float = 0.0):
         """Add a message to the conversation and track relationship changes"""
         message = {
             "sender_id": sender_id,
             "content": content,
             "timestamp": str(datetime.now()),
-            "sentiment_score": sentiment_score
+            "sentiment_score": sentiment_score,
         }
         self.messages.append(message)
-        
+
         # Update relationship changes for all other agents in the conversation
         for agent_id in self.agent_ids:
             if agent_id != sender_id:
-                self.relationship_changes.append({
-                    "source_agent_id": sender_id,
-                    "target_agent_id": agent_id,
-                    "sentiment_change": sentiment_score,
-                    "timestamp": str(datetime.now())
-                })
-        
+                self.relationship_changes.append(
+                    {
+                        "source_agent_id": sender_id,
+                        "target_agent_id": agent_id,
+                        "sentiment_change": sentiment_score,
+                        "timestamp": str(datetime.now()),
+                    }
+                )
+
         # Save the updated conversation
         table = self._db.table("agent_conversations")
         table.update(
             {
                 "messages": self.messages,
-                "relationship_changes": self.relationship_changes
+                "relationship_changes": self.relationship_changes,
             },
-            Query().id == self.id
+            Query().id == self.id,
         )
 
     def get_relationship_status(self, agent1_id: str, agent2_id: str) -> Dict:
         """Get the relationship status between two specific agents in the conversation.
-        
+
         Returns:
             Dict containing:
             - total_sentiment: float (cumulative sentiment score)
-            - relationship_type: str (friend/enemy/neutral/stranger)
+            - total_trust: float (cumulative trust score)
+            - total_respect: float (cumulative respect score)
+            - relationship_type: str (computed from new logic)
             - interaction_count: int (number of interactions)
             - last_interaction: str (timestamp of last interaction)
         """
+        from models.relationship import Relationship, RelationshipType
+
         # Filter relationship changes between the two agents
         relevant_changes = [
-            change for change in self.relationship_changes
-            if (change["source_agent_id"] == agent1_id and change["target_agent_id"] == agent2_id) or
-               (change["source_agent_id"] == agent2_id and change["target_agent_id"] == agent1_id)
+            change
+            for change in self.relationship_changes
+            if (
+                change["source_agent_id"] == agent1_id
+                and change["target_agent_id"] == agent2_id
+            )
+            or (
+                change["source_agent_id"] == agent2_id
+                and change["target_agent_id"] == agent1_id
+            )
         ]
-        
+
         if not relevant_changes:
             return {
                 "total_sentiment": 0.0,
+                "total_trust": 0.0,
+                "total_respect": 0.0,
                 "relationship_type": RelationshipType.STRANGER.value,
                 "interaction_count": 0,
-                "last_interaction": None
+                "last_interaction": None,
             }
-        
-        # Calculate total sentiment
-        total_sentiment = sum(change["sentiment_change"] for change in relevant_changes)
-        
-        # Determine relationship type based on total sentiment
-        if total_sentiment >= 0.5:
-            relationship_type = RelationshipType.FRIEND.value
-        elif total_sentiment <= -0.5:
-            relationship_type = RelationshipType.ENEMY.value
-        else:
-            relationship_type = RelationshipType.NEUTRAL.value
-        
-        # Get last interaction timestamp
+
+        # Aggregate scores
+        total_sentiment = sum(
+            change.get("sentiment_change", 0.0) for change in relevant_changes
+        )
+        # For backward compatibility, trust and respect may not be present in all changes
+        total_trust = sum(
+            change.get("trust_change", 0.0) for change in relevant_changes
+        )
+        total_respect = sum(
+            change.get("respect_change", 0.0) for change in relevant_changes
+        )
+        interaction_count = len(relevant_changes)
         last_interaction = max(change["timestamp"] for change in relevant_changes)
-        
+
+        # Create a temporary Relationship object to use its logic
+        relationship = Relationship(
+            source_agent_id=agent1_id,
+            target_agent_id=agent2_id,
+            relationship_type=RelationshipType.STRANGER,
+            sentiment_score=0.0,
+            trust_score=0.0,
+            respect_score=0.0,
+            interaction_count=0,
+        )
+        relationship.sentiment_score = max(-1.0, min(1.0, total_sentiment))
+        relationship.trust_score = max(0.0, min(1.0, total_trust))
+        relationship.respect_score = max(0.0, min(1.0, total_respect))
+        relationship.interaction_count = interaction_count
+        # Use the update logic to set the relationship type
+        relationship.update_sentiment(
+            0.0
+        )  # This will update the type based on current scores
+
         return {
-            "total_sentiment": total_sentiment,
-            "relationship_type": relationship_type,
-            "interaction_count": len(relevant_changes),
-            "last_interaction": last_interaction
+            "total_sentiment": relationship.sentiment_score,
+            "total_trust": relationship.trust_score,
+            "total_respect": relationship.respect_score,
+            "relationship_type": relationship.relationship_type.value,
+            "interaction_count": relationship.interaction_count,
+            "last_interaction": last_interaction,
         }

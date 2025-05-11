@@ -68,6 +68,7 @@ class Agent:
         self.collection_name = f"agent_{self.id}"
 
         # TODO: a bit of a mix between ids, context objects etc. could maybe be improved
+        self.energy_level: int = 0
         self.hunger: int = 0
         self.visibility_range: int = 0
         self.range_per_move: int = 3
@@ -140,6 +141,7 @@ class Agent:
                 "simulation_id": self.simulation_id,
                 "name": self.name,
                 "model": self.model,
+                "energy_level": self.energy_level,
                 "hunger": self.hunger,
                 "x_coord": location[0],
                 "y_coord": location[1],
@@ -172,6 +174,7 @@ class Agent:
             self.simulation_id = result["simulation_id"]
             self.name = result["name"]
             self.model = result["model"]
+            self.energy_level = result["energy_level"]
             self.hunger = result["hunger"]
             self.visibility_range = result["visibility_range"]
             self.range_per_move = result["range_per_move"]
@@ -197,7 +200,12 @@ class Agent:
         self._milvus.drop_collection(self.collection_name)
 
     async def create(
-        self, *, hunger: int = 20, visibility_range: int = 5, range_per_move: int = 1
+        self,
+        *,
+        energy_level: int = 20,
+        hunger: int = 20,
+        visibility_range: int = 5,
+        range_per_move: int = 1,
     ):
         logger.info(f"Creating agent {self.id}")
 
@@ -207,6 +215,7 @@ class Agent:
         self.world.load()
 
         # TODO: initialize with function parameters
+        self.energy_level = energy_level
         self.hunger = hunger
         self.visibility_range = visibility_range
         self.range_per_move = range_per_move
@@ -240,6 +249,7 @@ class Agent:
         # hunger level
         table = self._db.table(settings.tinydb.tables.agent_table)
         docs = table.search(Query().id == self.id)
+        self.energy_level = docs[0].get("energy_level", 0) if docs else 0
         self.hunger = docs[0].get("hunger", 0) if docs else 0
 
         # observations
@@ -293,6 +303,38 @@ class Agent:
         context = "\n".join(parts)
         context += "\nGiven this information now decide on your next action by performing a tool call."
         return context
+    
+    def _get_energy(self) -> int:
+        """Get the agent's energy level."""
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table.get(
+            Query().id == self.id & Query().simulation_id == self.simulation_id
+        )
+        return agent.get("energy_level", 0) if agent else 0
+
+    def update_agent_energy(self, energy_delta: int):
+        """Update the agent's energy level."""
+        self.energy_level = self._get_energy() + energy_delta
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        table.update(
+            {"energy_level": self.energy_level},
+            Query().id == self.id,
+            Query().simulation_id == self.simulation_id,
+        )
+
+    def _get_energy_consumption(self) -> int:
+        """Get the energy consumption of the agent with regard to the region."""
+        table = self._db.table(settings.tinydb.tables.region_table)
+        region = table.get(
+            Query().simulation_id
+            == self.simulation_id & Query().x_1
+            <= self.location[0] & Query().x_2
+            >= self.location[0] & Query().y_1
+            <= self.location[1] & Query().y_2
+            >= self.location[1]
+        )
+        energy_cost = region["region_energy_cost"] if region else 0
+        return energy_cost
 
     @observe(as_type="generation", name="Agent Tick")
     async def trigger(self):
@@ -305,6 +347,8 @@ class Agent:
             session_id=self.simulation_id,
         )
         langfuse_context.update_current_observation(model=self.model, name="Agent Call")
+        # update agent energy
+        self.update_agent_energy(self._get_energy_consumption())
         context = self.build_context()
 
         output = await self.autogen_agent.run(
@@ -422,9 +466,19 @@ class Agent:
         if not conversation.get("messages"):
             logger.info("No previous messages, starting new conversation")
             context += "This is the start of the conversation. Please introduce yourself and start the discussion."
-
             return context
+
         logger.info(f"Formatting {len(conversation['messages'])} previous messages")
+
+        # Include relationship information
+        relationship_info = "Relationship Information:\n"
+        for agent_id in conversation.get("agent_ids", []):
+            if agent_id != self.id:
+                relationship_status = self.get_relationship_status(agent_id)
+                relationship_info += (
+                    f"Your relationship with Agent {agent_id}: {relationship_status}\n"
+                )
+        context += relationship_info + "\n"
 
         for msg in conversation["messages"]:
             sender = (

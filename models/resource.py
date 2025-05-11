@@ -30,31 +30,13 @@ class Resource:
         self._db = db
         self._nats = nats
 
-    # construcutor for loading resource from db given simulation_id and coords
-    # def __init__(
-    #     self, simulation_id: str, db: TinyDB, nats: NatsBroker, coords: tuple[int, int]
-    # ):
-    #     table = db.table(settings.tinydb.tables.resource_table)
-    #     resource = table.search(
-    #         Query()["simulation_id"] == simulation_id
-    #         and Query()["x_coord"] == coords[0]
-    #         and Query()["y_coord"] == coords[1]
-    #     )
-    #     if not resource:
-    #         raise ValueError(
-    #             f"Resource with coordinates {coords} not found in database."
-    #         )
-    #     self.id = resource[0]["id"]
-    #     self._db = db
-    #     self._nats = nats
-
     async def create(
         self,
         coords: tuple[int, int],
         availability: bool = True,
-        energy_yield: int = 100,
-        mining_time: int = 10,
-        regrow_time: int = 10,
+        energy_yield: int = 10,
+        mining_time: int = 2,
+        regrow_time: int = 5,
         harvesting_area: int = 1,
         required_agents: int = 1,
         energy_yield_var: float = 1.0,
@@ -96,76 +78,7 @@ class Resource:
             f"simulation.{self.simulation_id}.world.{self.world_id}.region.{self.region_id}.resource",
         )
 
-    # TODO add functionality where harvesting is connected to a task and agent
-    async def start_harvest(self, time: int, harvester: list[str]):
-        """Start harvesting the resource"""
-        table = self._db.table(settings.tinydb.tables.resource_table)
-        resource_data = table.search(Query()["id"] == self.id)[0]
-
-        # Check for invalid states
-        if resource_data["availability"] is False:
-            raise ValueError(f"Resource {self.id} is not available for harvesting")
-        if resource_data["being_harvested"]:
-            raise ValueError(f"Resource {self.id} is already being harvested")
-        if resource_data["required_agents"] < len(harvester):
-            raise ValueError(
-                f"Resource {self.id} requires {resource_data['required_agents']} agents for harvesting, but {len(harvester)} agents are provided"
-            )
-        # TODO Check if agent(s) is/are in the harvesting area
-        # for agent in harvester:
-        #     agent_pos = self._db.table(settings.tinydb.tables.agent_table).search(
-        #         Query()["id"] == agent
-        #     )[0]
-        #     if (
-        #         agent_pos[0] < resource_data["x_coord"] - resource_data["harvesting_area"]
-        #         or agent_pos[0]
-        #         > resource_data["x_coord"] + resource_data["harvesting_area"]
-        #         or agent_pos[1]
-        #         < resource_data["y_coord"] - resource_data["harvesting_area"]
-        #         or agent_pos[1]
-        #         > resource_data["y_coord"] + resource_data["harvesting_area"]
-        #     ):
-        #         raise ValueError(
-        #             f"Agent(s) are not in the harvesting area of resource {self.id}"
-        #         )
-
-        table.update(
-            {
-                "being_harvested": True,
-                "start_harvest": time,
-                "time_harvest": time + resource_data["mining_time"],
-                "harvester": harvester,
-            },
-            Query()["id"] == self.id,
-        )
-
-        await self._nats.publish(
-            json.dumps(
-                {
-                    "type": "harvest",
-                    "message": f"Resource {self.id} is now harvested by agent(s) {harvester}",
-                }
-            ),
-            f"simulation.{self.simulation_id}.world.{self.world_id}.region.{self.region_id}.resource",
-        )
-
-    def _harvesting_finished(self, time: int):
-        """Finish harvesting the resource"""
-        table = self._db.table(settings.tinydb.tables.resource_table)
-        # resource_data = table.search(Query()["id"] == self.id)[0]
-
-        table.update(
-            {
-                "availability": False,
-                "being_harvested": False,
-                "start_harvest": -1,
-                "time_harvest": time,
-                "harvester": [],
-            },
-            Query()["id"] == self.id,
-        )
-
-    async def update(self, time: int):
+    async def tick(self, tick: int):
         """Update the resource"""
         table = self._db.table(settings.tinydb.tables.resource_table)
         resource_data = table.search(Query()["id"] == self.id)[0]
@@ -182,7 +95,7 @@ class Resource:
             not available
             and not being_harvested
             and last_harvest != -1
-            and last_harvest + regrow_time <= time
+            and last_harvest + regrow_time <= tick
         ):
             table.update(
                 {
@@ -201,9 +114,15 @@ class Resource:
                 f"simulation.{self.simulation_id}.world.{self.world_id}.region.{self.region_id}.resource",
             )
 
-        # Resource is being harvested and the harvest is finished
-        if available and being_harvested and start_harvest + mining_time <= time:
-            self.harvesting_finished(time)
+        # Resource is being harvested by enough agents and the harvest is finished
+        harvester = resource_data["harvester"]
+        if (
+            available
+            and being_harvested
+            and len(harvester) >= resource_data["required_agents"]
+            and start_harvest + mining_time <= tick
+        ):
+            self._harvesting_finished(tick, harvester)
             await self._nats.publish(
                 json.dumps(
                     {
@@ -212,6 +131,37 @@ class Resource:
                     }
                 ),
                 f"simulation.{self.simulation_id}.world.{self.world_id}.region.{self.region_id}.resource",
+            )
+
+    def _harvesting_finished(self, tick: int, list_harvester: list[str]):
+        """Finish harvesting the resource"""
+        table = self._db.table(settings.tinydb.tables.resource_table)
+        resource_data = table.get(Query()["id"] == self.id)
+
+        table.update(
+            {
+                "availability": False,
+                "being_harvested": False,
+                "start_harvest": -1,
+                "time_harvest": tick,
+                "harvester": [],
+            },
+            Query()["id"] == self.id,
+        )
+        # TODO add logic to distribute energy to agents
+        for harvester in list_harvester:
+            agent_table = self._db.table(settings.tinydb.tables.agent_table)
+            agent_data = agent_table.get(
+                (Query()["id"] == harvester)
+                & (Query()["simulation_id"] == self.simulation_id)
+            )
+            agent_table.update(
+                {
+                    "energy_level": agent_data["energy_level"]
+                    + resource_data["energy_yield"],
+                },
+                (Query()["id"] == harvester)
+                & (Query()["simulation_id"] == self.simulation_id),
             )
 
     def _load_from_db(self):

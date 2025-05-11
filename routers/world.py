@@ -32,8 +32,8 @@ class UpdateWorldInput(BaseModel):
 class HarvestResourceInput(BaseModel):
     """Input model for harvesting a resource"""
 
-    time: int = 1  # Time step for the harvest
-    coords: tuple[int, int]  # coordinates of the resource to harvest
+    x_coord: int  # X-coordinate of the resource to harvest
+    y_coord: int  # Y-coordinate of the resource to harvest
 
 
 @router.post("/publish")
@@ -71,22 +71,26 @@ async def get_world(simulation_id: str, db: DB, broker: Nats):
     }
 
 
-@router.post("/regions{region_id}/resources")
+@router.post("/{agent_id}/harvest")
 async def harvest_resource(
     simulation_id: str,
-    # world_id: str,
-    region_id: str,
     db: DB,
     nats: Nats,
+    agent_id: str,
+    harvest_resource_input: HarvestResourceInput,
 ):
     """Harvest a resource from the world"""
 
     world = World(simulation_id=simulation_id, db=db, nats=nats)
     world.load()
-    world.harvest_resource(region_id=region_id)
+    x_coord = harvest_resource_input.x_coord
+    y_coord = harvest_resource_input.y_coord
+    await world.harvest_resource(
+        x_coord=x_coord, y_coord=y_coord, harvester_id=agent_id
+    )
 
     return {
-        "message": f"Resource harvested from region {region_id} in simulation {simulation_id}",
+        "message": f"Resource at location {(x_coord, y_coord)} is harvested by agent {agent_id}",
     }
 
 
@@ -102,7 +106,8 @@ async def update_world(
 
     world = World(simulation_id=simulation_id, db=db, nats=nats)
     world.load()
-    world.update(time=update_world_input.time)
+
+    await world.update(tick=update_world_input.time)
 
     return {
         "message": f"World updated for simulation {simulation_id}",
