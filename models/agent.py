@@ -20,23 +20,19 @@ from datetime import datetime
 from typing import cast, Callable, List
 from functools import partial
 
-from models.plan import get_plan
-from models.task import get_task
-from models.context import (
-    Observation,
-    AgentObservation,
-    ResourceObservation,
-    ObstacleObservation,
-    # OtherObservation,
-    Message,
-    ObservationType,
-    PlanContext,
-    TaskContext,
+from models.context import Observation, Message
+from models.prompting import (
+    SYSTEM_MESSAGE,
+    DESCRIPTION,
+    HungerContextPrompt,
+    ObservationContextPrompt,
+    PlanContextPrompt,
+    ConversationContextPrompt,
+    MemoryContextPrompt,
 )
-from models.prompting import SYSTEM_MESSAGE, DESCRIPTION
 from models.world import World
 from tools import available_tools
-from models.relationship import RelationshipManager, RelationshipType
+from models.relationship import RelationshipManager  # , RelationshipType
 from models.utils import extract_tool_call_info
 
 from loguru import logger
@@ -75,7 +71,7 @@ class Agent:
         self.energy_level: int = 0
         self.energy_level: int = 0
         self.hunger: int = 0
-        self.visibilty_range: int = 0
+        self.visibility_range: int = 0
         self.range_per_move: int = 3
 
         self.world: World = None
@@ -83,7 +79,7 @@ class Agent:
         self.observations: list[Observation] = []
         self.message: Message = Message(content="", sender_id="")
         self.conversation_id: str = ""
-        self.participating_plans: list[str] = []
+        self.plan_participation: list[str] = []
         self.assigned_tasks: list[str] = []
         self.memory: str = ""
         # objective: str # could be some sort of description to guide the agents actions
@@ -101,6 +97,7 @@ class Agent:
         )
 
         tools: List[BaseTool] = [self.make_bound_tool(tool) for tool in available_tools]
+        # TODO: make tools adaptive to current context: eg. make plan only if no plan exists
 
         self.autogen_agent = AssistantAgent(
             name=f"{self.name}",
@@ -130,7 +127,6 @@ class Agent:
             description=description or (func.__doc__ or ""),
             func=bound,
         )
-        # TODO: if needed adopt this to use more/ flexible arguments
 
     def _create_collection(self):
         self._milvus.create_collection(
@@ -150,7 +146,7 @@ class Agent:
                 "hunger": self.hunger,
                 "x_coord": location[0],
                 "y_coord": location[1],
-                "visibility_range": self.visibilty_range,
+                "visibility_range": self.visibility_range,
                 "range_per_move": self.range_per_move,
             }
         )
@@ -181,7 +177,7 @@ class Agent:
             self.model = result["model"]
             self.energy_level = result["energy_level"]
             self.hunger = result["hunger"]
-            self.visibilty_range = result["visibility_range"]
+            self.visibility_range = result["visibility_range"]
             self.range_per_move = result["range_per_move"]
 
             self.world = World(
@@ -197,9 +193,6 @@ class Agent:
         except Exception as e:
             logger.error(f"Error initializing LLM for agent {self.id}: {e}")
             raise ValueError(f"Error initializing LLM for agent {self.id}: {e}")
-
-        # could maybe also use autogen native functionalities to dump and load agents from database, but I guess this is fine
-        # https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/serialize-components.html#agent-example
 
     def delete(self):
         logger.info(f"Deleting agent {self.id}")
@@ -225,7 +218,7 @@ class Agent:
         # TODO: initialize with function parameters
         self.energy_level = energy_level
         self.hunger = hunger
-        self.visibilty_range = visibility_range
+        self.visibility_range = visibility_range
         self.range_per_move = range_per_move
 
         # Create agent location if not provided
@@ -247,33 +240,23 @@ class Agent:
         # Publish the agent created message to NATS
         await agent_created_message.publish(self._nats)
 
-    def get_plan_id(self) -> str:
-        """Get the plan ID of the agent."""
-        table = self._db.table(settings.tinydb.tables.plan_table, cache_size=0)
-        plan = table.get(Query().owner == self.id)
-        return plan["id"] if plan else None
-
     def _create_agent_location(self):
         """Create a random location for the agent in the world."""
         return self.world.get_random_agent_location()
 
-    # TODO: consider if this can be moved elsewhere and broken up into smaller parts
     def _load_context(self):
         """Load the context from the database or other storage."""
-        # TODO: most of this is just mocked for now. replace with actual loading logic!
 
-        # current hunger level
+        # hunger level
         table = self._db.table(settings.tinydb.tables.agent_table)
         docs = table.search(Query().id == self.id)
         self.energy_level = docs[0].get("energy_level", 0) if docs else 0
         self.hunger = docs[0].get("hunger", 0) if docs else 0
 
-        # observations from the world
-        # TODO: get other observations apart from resources and agents
-        # TODO: improve formatting
+        # observations
         self.observations.extend(self.world.load_agent_context(self.id))
 
-        # messages by other agents
+        # messages
         conversation_table = self._db.table(
             settings.tinydb.tables.agent_conversation_table
         )
@@ -287,10 +270,14 @@ class Agent:
                 sender_id=conversation[0]["messages"][-1]["sender_id"],
             )
 
-        # plans this agent is participating in
+        # plans and tasks
+        table = self._db.table(settings.tinydb.tables.plan_table, cache_size=0)
+        plan_ownership = table.get(Query().owner == self.id)
+        self.plan_ownership = plan_ownership["id"] if plan_ownership else None  # type: ignore
+
         plan_table = self._db.table(settings.tinydb.tables.plan_table)
         plan_db = plan_table.search(Query().participants.any(self.id))  # type: ignore
-        self.participating_plans = [plan["id"] for plan in plan_db] if plan_db else []
+        self.plan_participation = [plan["id"] for plan in plan_db] if plan_db else []
 
         task_table = self._db.table(settings.tinydb.tables.task_table, cache_size=0)
         assigned_tasks = task_table.search(Query().worker == self.id)
@@ -298,130 +285,26 @@ class Agent:
             [task["id"] for task in assigned_tasks] if assigned_tasks else []
         )
 
-    def get_context(self) -> str:
+    def build_context(self) -> str:
         """Get the context for the agent."""
         self._load_context()
 
-        if self.energy_level < self.hunger:
-            hunger_description = f"Your current energy level is {self.energy_level}. You are starving and NEED to eat something. For this you need to find and harvest a resource. "
-        else:
-            hunger_description = f"Your current energy level is {self.energy_level}. "
-
-        observation_description = (
-            "You have made the following observations in your surroundings: "
-            + "; ".join([str(obs) for obs in self.observations])
-            if self.observations
-            else "You have not made any observations yet. "
-        )
-
-        plan_obj = (
-            get_plan(self._db, self._nats, self.get_plan_id(), self.simulation_id)
-            if self.get_plan_id()
-            else None
-        )
-        plan_context = (
-            PlanContext(
-                id=plan_obj.id,
-                owner=plan_obj.owner if plan_obj.owner else "",
-                goal=plan_obj.goal if plan_obj.goal else "",
-                participants=plan_obj.get_participants(),
-                tasks=plan_obj.get_tasks(),
-                total_payoff=plan_obj.total_payoff,
-            )
-            if plan_obj
-            else None
-        )
-
-        if plan_obj:
-            tasks_obj = [
-                get_task(self._db, self._nats, task_id, self.simulation_id)
-                for task_id in plan_obj.get_tasks()
-            ]
-        else:
-            tasks_obj = []
-        tasks_context = [
-            TaskContext(
-                id=task.id,
-                plan_id=task.plan_id,
-                target=task.target,
-                payoff=task.payoff,
-                # status=task.status,
-                worker=task.worker,
-            )
-            for task in tasks_obj
+        parts = [
+            HungerContextPrompt().build(self.hunger),
+            ObservationContextPrompt().build(self.observations),
+            PlanContextPrompt().build(
+                self.plan_ownership,
+                self.plan_participation,
+                self.assigned_tasks,
+                self.simulation_id,
+            ),
+            ConversationContextPrompt().build(self.message, self.conversation_id),
+            MemoryContextPrompt().build(self.memory),
         ]
-
-        plans_description = (
-            f"You are the owner of the following plan: {plan_context}. "
-            f"These are the tasks in detail: "
-            + ", ".join(map(str, tasks_context))
-            + (
-                "\n You have 0 tasks in your plan, it might make sense to add tasks using the add_task tool."
-                if not tasks_context
-                else ""
-            )
-            if plan_context
-            else "You do not own any plans. "
-        )
-
-        # TODO
-        # participating_plans_description = (
-        #     "You are currently participating in the following plans: "
-        #     + "; ".join(self.participating_plans)
-        #     + "As part of these plans you are assigned to the following tasks: "
-        #     + ", ".join(self.assigned_tasks)
-        #     if self.participating_plans
-        #     else "You are not currently participating in any plans and are not assigned to any tasks. "
-        # )
-
-        message_description = (
-            f"There is a new message from: {self.message.sender_id}. If appropriate consider replying. If you do not reply the conversation will be terminated. <Message start> {self.message.content} <Message end> "
-            if self.message.content
-            else "There are no current messages from other people. "
-        )  # TODO: add termination logic or reconsider how this should work. Consider how message history is handled.
-        # Should not overflow the context. Maybe have summary of conversation and newest message.
-        # Then if decide to reply this is handled by other agent (MessageAgent) that gets the entire history and sends the message.
-        # While this MessageAgent would also need quite the same context as here, its task would only be the reply and not deciding on a tool call.
-
-        memory_description = (
-            "You have the following memory: " + self.memory
-            if self.memory
-            else "You do not have any memory about past observations and events. "
-        )  # TODO: either pass this in prompt here or use autogen memory field
-
-        conversation_observation = (
-            f"You are currently engaged in a conversation with another agent with ID: {self.conversation_id}. "
-            if self.conversation_id
-            else ""
-        )
-        has_plan = (
-            "You ALREADY HAVE a plan."
-            if self.get_plan_id()
-            else "You do not have a plan"
-        )
-        has_three_tasks = (
-            "YOU ALREADY HAVE 3 tasks."
-            if plan_obj and len(plan_obj.get_tasks()) >= 3
-            else "You do not have 3 tasks."
-        )
-        context_description = (
-            f"{hunger_description}.\n\n"
-            f"{observation_description}.\n\n"
-            f"{conversation_observation}.\n\n"
-            f"{plans_description}.\n\n"
-            f"{message_description}\n\n"
-            f"{memory_description}\n\n"
-            f"Your current location is {self.get_location()}. \n\n"
-            f"IMPORTANT: You can ONLY HAVE ONE PLAN {has_plan}.\n"
-            f"If you have a plan always add at least one task, at most 3. {has_three_tasks} \n"
-            f"Once you have a plan and tasks, start moving towards the target of the task. \n"
-            f"If you are close to an agent, engage in conversation with them. \n"
-            f"Given this information now decide on your next action by performing a tool call."
-        )
-        # TODO: improve formatting!
-
-        return context_description
-
+        context = "\n".join(parts)
+        context += "\nGiven this information now decide on your next action by performing a tool call."
+        return context
+    
     def _get_energy(self) -> int:
         """Get the agent's energy level."""
         table = self._db.table(settings.tinydb.tables.agent_table)
@@ -466,10 +349,7 @@ class Agent:
         langfuse_context.update_current_observation(model=self.model, name="Agent Call")
         # update agent energy
         self.update_agent_energy(self._get_energy_consumption())
-        context = self.get_context()
-        # memory = self.get_memory() # TODO: if decided to implement here remove from get_context
-        # self.autogen_agent.memory = memory
-        # TODO: trigger any other required logic
+        context = self.build_context()
 
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
@@ -491,6 +371,7 @@ class Agent:
         return output
 
     #### === Turn-based communication -> TODO: consider to rework this! === ###
+    # TODO: check if conversation has id/ name of other agent so llm know who its talking to
     async def send_message_to_agent(self, target_agent_id: str, content: str) -> str:
         """Send a message to another agent and update relationship based on interaction."""
         await self._nats.publish(

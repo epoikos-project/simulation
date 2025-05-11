@@ -7,7 +7,12 @@ from loguru import logger
 from messages.world.agent_moved import AgentMovedMessage
 from messages.world.agent_placed import AgentPlacedMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
-from models.context import AgentObservation, ObservationType, ResourceObservation
+from models.context import (
+    AgentObservation,
+    ObservationType,
+    ResourceObservation,
+    Observation,
+)
 from models.map import Map
 from models.region import Region
 from models.resource import Resource
@@ -18,7 +23,6 @@ from messages.world import WorldCreatedMessage
 
 
 class World:
-
     def __init__(self, simulation_id: str, db: TinyDB, nats: NatsBroker):
         self.id = None
         self.simulation_id = simulation_id
@@ -327,7 +331,7 @@ class World:
 
     def _load_resource_observation(
         self, agent_location: tuple[int, int], visibility_range: int
-    ):
+    ) -> list[ResourceObservation]:
         """Load resource observation from database given coordinates and visibility range of an agent"""
         table = self._db.table(settings.tinydb.tables.resource_table)
 
@@ -363,7 +367,7 @@ class World:
 
     def _load_agent_observation(
         self, agent_id: str, agent_location: tuple[int, int], visibility_range: int
-    ):
+    ) -> list[AgentObservation]:
         """Load agent observation from database given coordinates and visibility range of an agent"""
         table = self._db.table(settings.tinydb.tables.agent_table)
         # Filter agents based on agents location and visibility range
@@ -394,7 +398,7 @@ class World:
 
         return agent_observations
 
-    def load_agent_context(self, agent_id: str):
+    def load_agent_context(self, agent_id: str) -> list[Observation]:
         """Load agent context from database"""
         context = []
 
@@ -405,13 +409,13 @@ class World:
             )
 
         # Load agent's resource observations
-        context.append(
+        context.extend(
             self._load_resource_observation(
                 (agent["x_coord"], agent["y_coord"]), agent["visibility_range"]
             )
         )
         # Load agent's agent observations
-        context.append(
+        context.extend(
             self._load_agent_observation(
                 agent["id"],
                 (agent["x_coord"], agent["y_coord"]),
