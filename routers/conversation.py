@@ -15,6 +15,8 @@ router = APIRouter(
 )
 
 logger = logging.getLogger(__name__)
+
+
 # Create a model for the request
 class ConversationCreate(BaseModel):
     agent_ids: List[str]
@@ -42,14 +44,13 @@ async def create_conversation(
     """
     if not conversation_data.agent_ids:
         raise HTTPException(
-            status_code=400,
-            detail="At least one agent ID must be provided"
+            status_code=400, detail="At least one agent ID must be provided"
         )
 
     if len(conversation_data.agent_ids) < 2:
         raise HTTPException(
             status_code=400,
-            detail="At least two agents are required for a conversation"
+            detail="At least two agents are required for a conversation",
         )
 
     # Verify all agents exist
@@ -61,7 +62,7 @@ async def create_conversation(
         if not agent:
             raise HTTPException(
                 status_code=404,
-                detail=f"Agent {agent_id} not found in simulation {simulation_id}"
+                detail=f"Agent {agent_id} not found in simulation {simulation_id}",
             )
     # Create the conversation
     conversation = Conversation(
@@ -79,7 +80,7 @@ async def create_conversation(
             {
                 "conversation_id": conversation_id,
                 "type": "conversation_turn",
-                "initial_prompt": conversation_data.initial_prompt
+                "initial_prompt": conversation_data.initial_prompt,
             }
         ),
         subject=f"simulation.{simulation_id}.agent.{first_agent_id}.turn",
@@ -116,7 +117,9 @@ async def advance_conversation(
     broker: Nats,
 ):
     """Process the current agent's turn and advance to the next agent"""
-    logger.info(f"Advancing conversation {conversation_id} in simulation {simulation_id}")
+    logger.info(
+        f"Advancing conversation {conversation_id} in simulation {simulation_id}"
+    )
     # Load the conversation
     conversation = Conversation.load(db, conversation_id)
     if not conversation or conversation.simulation_id != simulation_id:
@@ -153,10 +156,13 @@ async def advance_conversation(
         logger.warning(f"No conversation context found for {conversation_id}")
         # Initialize conversation with initial prompt if it's the first turn
         if not conversation.messages:
-            initial_prompt = conversation_context.get("initial_prompt", "Let's start a conversation.")
+            initial_prompt = conversation_context.get(
+                "initial_prompt", "Let's start a conversation."
+            )
             conversation.add_message("system", initial_prompt)
-            conversation_context = await agent.receive_conversation_context(conversation_id)
-
+            conversation_context = await agent.receive_conversation_context(
+                conversation_id
+            )
 
     # Process the agent's turn
     logger.info("Processing agent's turn")
@@ -174,80 +180,138 @@ async def advance_conversation(
 
     # Analyze sentiment and relationship dynamics
     logger.info("Analyzing sentiment and relationship dynamics")
-    
+
     # Get conversation history for context
-    conversation_history = conversation.messages[-5:] if len(conversation.messages) > 5 else conversation.messages
-    
+    conversation_history = (
+        conversation.messages[-5:]
+        if len(conversation.messages) > 5
+        else conversation.messages
+    )
+
     # Prepare context for sentiment analysis
     context = {
         "current_message": response,
         "conversation_history": conversation_history,
         "current_agent_id": current_agent_id,
-        "other_agents": [aid for aid in conversation.agent_ids if aid != current_agent_id]
+        "other_agents": [
+            aid for aid in conversation.agent_ids if aid != current_agent_id
+        ],
     }
-    
+
     # Calculate sentiment score based on conversation context
     sentiment_score = 0.0
     trust_change = 0.0
     respect_change = 0.0
-    
+
     if isinstance(response, str):
         # Analyze message content and context
         message_lower = response.lower()
-        
+
         # Positive indicators
         positive_phrases = [
-            "thank", "please", "appreciate", "great", "excellent", "wonderful",
-            "agree", "support", "help", "collaborate", "together", "team",
-            "trust", "rely", "depend", "respect", "admire", "value"
+            "thank",
+            "please",
+            "appreciate",
+            "great",
+            "excellent",
+            "wonderful",
+            "agree",
+            "support",
+            "help",
+            "collaborate",
+            "together",
+            "team",
+            "trust",
+            "rely",
+            "depend",
+            "respect",
+            "admire",
+            "value",
         ]
-        
+
         # Negative indicators
         negative_phrases = [
-            "no", "can't", "won't", "disagree", "against", "oppose",
-            "wrong", "bad", "terrible", "hate", "dislike", "refuse",
-            "doubt", "suspicious", "untrustworthy", "disrespect"
+            "no",
+            "can't",
+            "won't",
+            "disagree",
+            "against",
+            "oppose",
+            "wrong",
+            "bad",
+            "terrible",
+            "hate",
+            "dislike",
+            "refuse",
+            "doubt",
+            "suspicious",
+            "untrustworthy",
+            "disrespect",
         ]
-        
+
         # Trust indicators
         trust_phrases = [
-            "trust", "rely", "depend", "confident", "sure", "certain",
-            "guarantee", "promise", "commit", "dedicated", "loyal"
+            "trust",
+            "rely",
+            "depend",
+            "confident",
+            "sure",
+            "certain",
+            "guarantee",
+            "promise",
+            "commit",
+            "dedicated",
+            "loyal",
         ]
-        
+
         # Respect indicators
         respect_phrases = [
-            "respect", "admire", "value", "appreciate", "honor", "esteem",
-            "regard", "consider", "acknowledge", "recognize", "praise"
+            "respect",
+            "admire",
+            "value",
+            "appreciate",
+            "honor",
+            "esteem",
+            "regard",
+            "consider",
+            "acknowledge",
+            "recognize",
+            "praise",
         ]
-        
+
         # Calculate base sentiment
         for phrase in positive_phrases:
             if phrase in message_lower:
                 sentiment_score += 0.1
-                
+
         for phrase in negative_phrases:
             if phrase in message_lower:
                 sentiment_score -= 0.1
-                
+
         # Calculate trust and respect changes
         for phrase in trust_phrases:
             if phrase in message_lower:
                 trust_change += 0.1
-                
+
         for phrase in respect_phrases:
             if phrase in message_lower:
                 respect_change += 0.1
-        
+
         # Consider conversation history
         if conversation_history:
             # Check for consistency in sentiment
-            recent_sentiment = sum(msg.get("sentiment_score", 0) for msg in conversation_history)
-            if (sentiment_score > 0 and recent_sentiment > 0) or (sentiment_score < 0 and recent_sentiment < 0):
+            recent_sentiment = sum(
+                msg.get("sentiment_score", 0) for msg in conversation_history
+            )
+            if (sentiment_score > 0 and recent_sentiment > 0) or (
+                sentiment_score < 0 and recent_sentiment < 0
+            ):
                 sentiment_score *= 1.2  # Amplify consistent sentiment
-            elif (sentiment_score > 0 and recent_sentiment < 0) or (sentiment_score < 0 and recent_sentiment > 0):
+            elif (sentiment_score > 0 and recent_sentiment < 0) or (
+                sentiment_score < 0 and recent_sentiment > 0
+            ):
                 sentiment_score *= 0.8  # Reduce inconsistent sentiment
-        
+
         # Normalize scores
         sentiment_score = max(-1.0, min(1.0, sentiment_score))
         trust_change = max(-0.2, min(0.2, trust_change))
@@ -261,11 +325,12 @@ async def advance_conversation(
     logger.info("Updating relationships")
     for agent_id in conversation.agent_ids:
         if agent_id != current_agent_id:
-            relationship = agent.relationship_manager.get_relationship(current_agent_id, agent_id)
+            relationship = agent.relationship_manager.get_relationship(
+                current_agent_id, agent_id
+            )
             relationship.update_sentiment(sentiment_score)
             relationship.update_trust(trust_change)
             relationship.update_respect(respect_change)
-
 
     # Check if we should end the conversation
     if not should_continue:
@@ -274,7 +339,7 @@ async def advance_conversation(
         return {
             "status": "completed",
             "message": "Conversation ended by agent",
-            "response": response
+            "response": response,
         }
 
     # Advance to the next agent's turn
@@ -290,7 +355,7 @@ async def advance_conversation(
             {
                 "conversation_id": conversation_id,
                 "type": "conversation_turn",
-                "previous_message": response
+                "previous_message": response,
             }
         ),
         subject=f"simulation.{simulation_id}.agent.{next_agent_id}.turn",
@@ -301,8 +366,9 @@ async def advance_conversation(
         "current_agent_id": current_agent_id,
         "next_agent_id": next_agent_id,
         "message": "Turn processed successfully",
-        "response": response
+        "response": response,
     }
+
 
 @router.get("/{conversation_id}/relationship/{agent1_id}/{agent2_id}")
 async def get_relationship_status(
@@ -319,10 +385,13 @@ async def get_relationship_status(
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Verify both agents are in the conversation
-    if agent1_id not in conversation.agent_ids or agent2_id not in conversation.agent_ids:
+    if (
+        agent1_id not in conversation.agent_ids
+        or agent2_id not in conversation.agent_ids
+    ):
         raise HTTPException(
             status_code=400,
-            detail="One or both agents are not participants in this conversation"
+            detail="One or both agents are not participants in this conversation",
         )
 
     # Get relationship status
@@ -332,5 +401,5 @@ async def get_relationship_status(
         "conversation_id": conversation_id,
         "agent1_id": agent1_id,
         "agent2_id": agent2_id,
-        "relationship_status": relationship_status
+        "relationship_status": relationship_status,
     }

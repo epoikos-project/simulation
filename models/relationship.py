@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Dict
 from pydantic import BaseModel
 
+
 class RelationshipType(str, Enum):
     FRIEND = "friend"
     ENEMY = "enemy"
@@ -20,12 +21,16 @@ class RelationshipType(str, Enum):
     SUPPORTER = "supporter"
     CRITIC = "critic"
 
+
 class Relationship(BaseModel):
     """Represents a relationship between two agents."""
+
     source_agent_id: str
     target_agent_id: str
     relationship_type: RelationshipType
-    sentiment_score: float  # -1.0 to 1.0, where -1.0 is very negative, 1.0 is very positive
+    sentiment_score: (
+        float  # -1.0 to 1.0, where -1.0 is very negative, 1.0 is very positive
+    )
     trust_score: float = 0.0  # 0.0 to 1.0, representing trust level
     respect_score: float = 0.0  # 0.0 to 1.0, representing respect level
     interaction_count: int = 0  # Number of interactions between agents
@@ -34,7 +39,7 @@ class Relationship(BaseModel):
         """Update the sentiment score with a change value."""
         self.sentiment_score = max(-1.0, min(1.0, self.sentiment_score + change))
         self.interaction_count += 1
-        
+
         # Update relationship type based on sentiment and other factors
         if self.sentiment_score >= 0.8 and self.trust_score >= 0.8:
             self.relationship_type = RelationshipType.FRIEND
@@ -65,28 +70,34 @@ class Relationship(BaseModel):
         """Update the respect score with a change value."""
         self.respect_score = max(0.0, min(1.0, self.respect_score + change))
 
+
 class RelationshipManager:
     """Manages relationships between agents."""
+
     def __init__(self):
         self.relationships: Dict[str, Dict[str, Relationship]] = {}
-    
-    def get_relationship(self, source_agent_id: str, target_agent_id: str) -> Relationship:
+
+    def get_relationship(
+        self, source_agent_id: str, target_agent_id: str
+    ) -> Relationship:
         """Get the relationship between two agents."""
         if source_agent_id not in self.relationships:
             self.relationships[source_agent_id] = {}
-        
+
         if target_agent_id not in self.relationships[source_agent_id]:
             # Initialize a new relationship if it doesn't exist
             self.relationships[source_agent_id][target_agent_id] = Relationship(
                 source_agent_id=source_agent_id,
                 target_agent_id=target_agent_id,
                 relationship_type=RelationshipType.STRANGER,
-                sentiment_score=0.0
+                sentiment_score=0.0,
             )
-        
+
         return self.relationships[source_agent_id][target_agent_id]
-    
-    def update_relationship(self, source_agent_id: str, target_agent_id: str, sentiment_change: float) -> None:
+
+    def update_relationship(
+        self, source_agent_id: str, target_agent_id: str, sentiment_change: float
+    ) -> None:
         """Update the relationship between two agents."""
         relationship = self.get_relationship(source_agent_id, target_agent_id)
-        relationship.update_sentiment(sentiment_change) 
+        relationship.update_sentiment(sentiment_change)

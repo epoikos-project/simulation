@@ -594,11 +594,15 @@ class Agent:
         for agent_id in conversation.get("agent_ids", []):
             if agent_id != self.id:
                 relationship_status = self.get_relationship_status(agent_id)
-                relationship_info += f"Your relationship with Agent {agent_id}: {relationship_status}\n"
+                relationship_info += (
+                    f"Your relationship with Agent {agent_id}: {relationship_status}\n"
+                )
         context += relationship_info + "\n"
 
         for msg in conversation["messages"]:
-            sender = "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
+            sender = (
+                "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
+            )
             context += f"{sender}: {msg['content']}\n\n"
 
         context += "Your turn to respond. Make sure to be engaging and continue the conversation naturally."
