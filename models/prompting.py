@@ -6,6 +6,5 @@ SYSTEM_MESSAGE = (
     "(3) talk and cooperate with other agents to execute more favourable plans and collect more resources. "
     "\nTo guide your actions, you should use the information about your environment and talk to other people that are around. If you just meet them and this is a new conversation, start a conversation. Else if it is ongoing engage in that conversation. "
     "You can only move one coordinate at a time and for moving you have to choose a location different to your current location."
-
 )
 DESCRIPTION = "These are your personal attributes: Agent ID: {id}, Name: {name}"  # , Personality: {personality}. "

@@ -43,6 +43,7 @@ async def move(
         logger.error(f"Error moving agent: {e}")
         raise e
 
+
 @observe()
 async def harvest_resource(
     x: Annotated[
