@@ -43,6 +43,7 @@ async def move(
         logger.error(f"Error moving agent: {e}")
         raise e
 
+
 @observe()
 async def harvest_resource(
     x: Annotated[
@@ -64,7 +65,7 @@ async def harvest_resource(
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 
-    logger.debug(f"Agent {agent_id} starts harvesting resource at {(x,y)}")
+    logger.debug(f"Agent {agent_id} starts harvesting resource at {(x, y)}")
 
     db = get_client()
     nats = nats_broker()

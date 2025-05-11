@@ -10,5 +10,4 @@ available_tools = [
     harvest_resource,
     start_conversation,
     engage_conversation,
-    make_plan,
 ]

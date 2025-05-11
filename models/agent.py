@@ -73,6 +73,7 @@ class Agent:
 
         # TODO: a bit of a mix between ids, context objects etc. could maybe be improved
         self.energy_level: int = 0
+        self.energy_level: int = 0
         self.hunger: int = 0
         self.visibilty_range: int = 0
         self.range_per_move: int = 3
@@ -584,9 +585,19 @@ class Agent:
         if not conversation.get("messages"):
             logger.info("No previous messages, starting new conversation")
             context += "This is the start of the conversation. Please introduce yourself and start the discussion."
-
             return context
+
         logger.info(f"Formatting {len(conversation['messages'])} previous messages")
+
+        # Include relationship information
+        relationship_info = "Relationship Information:\n"
+        for agent_id in conversation.get("agent_ids", []):
+            if agent_id != self.id:
+                relationship_status = self.get_relationship_status(agent_id)
+                relationship_info += (
+                    f"Your relationship with Agent {agent_id}: {relationship_status}\n"
+                )
+        context += relationship_info + "\n"
 
         for msg in conversation["messages"]:
             sender = (

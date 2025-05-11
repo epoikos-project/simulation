@@ -12,6 +12,7 @@ from models.world import World
 from models.agent import Agent
 from messages.simulation import SimulationCreatedMessage
 
+
 class Orchestrator:
     def __init__(self, db: TinyDB, nats: NatsBroker, milvus: MilvusClient):
         self._db = db
@@ -28,20 +29,21 @@ class Orchestrator:
         # 2. Create a new Simulation
         sim_id = uuid.uuid4().hex
         simulation = Simulation(
-                        db=self._db,
-                        nats=self._nats,
-                        milvus=self._milvus,
-                        id=sim_id,
-                    )
+            db=self._db,
+            nats=self._nats,
+            milvus=self._milvus,
+            id=sim_id,
+        )
         await simulation.create()
 
         # Publish a SimulationCreated event (you’ll need to define it)
         created_msg = SimulationCreatedMessage(id=sim_id, config_name=cfg["name"])
         await self._nats.publish(
-            created_msg.model_dump_json(),
-            created_msg.get_channel_name()
+            created_msg.model_dump_json(), created_msg.get_channel_name()
         )
-        logger.info(f"Orchestrator: simulation {sim_id} created from config {config_name}")
+        logger.info(
+            f"Orchestrator: simulation {sim_id} created from config {config_name}"
+        )
 
         # 3. Create a World
         world = World(db=self._db, nats=self._nats)
@@ -70,6 +72,8 @@ class Orchestrator:
                 agent.name = agent_cfg["name"]
                 # you could also store traits/attributes on the Agent object
                 await agent.create()
-                logger.info(f"Orchestrator: agent {agent.id} ({agent_cfg['name']}) created in {sim_id}")
+                logger.info(
+                    f"Orchestrator: agent {agent.id} ({agent_cfg['name']}) created in {sim_id}"
+                )
 
         return sim_id
