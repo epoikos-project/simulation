@@ -178,13 +178,86 @@ async def advance_conversation(
             response = "Starting conversation..."
         logger.info(f"Using fallback response: {response}")
 
-    # Analyze sentiment of the response
+    # Analyze sentiment and relationship dynamics
+    logger.info("Analyzing sentiment and relationship dynamics")
+    
+    # Get conversation history for context
+    conversation_history = conversation.messages[-5:] if len(conversation.messages) > 5 else conversation.messages
+    
+    # Prepare context for sentiment analysis
+    context = {
+        "current_message": response,
+        "conversation_history": conversation_history,
+        "current_agent_id": current_agent_id,
+        "other_agents": [aid for aid in conversation.agent_ids if aid != current_agent_id]
+    }
+    
+    # Calculate sentiment score based on conversation context
     sentiment_score = 0.0
+    trust_change = 0.0
+    respect_change = 0.0
+    
     if isinstance(response, str):
-        if "thank" in response.lower() or "please" in response.lower():
-            sentiment_score = 0.1
-        elif "no" in response.lower() or "can't" in response.lower():
-            sentiment_score = -0.1
+        # Analyze message content and context
+        message_lower = response.lower()
+        
+        # Positive indicators
+        positive_phrases = [
+            "thank", "please", "appreciate", "great", "excellent", "wonderful",
+            "agree", "support", "help", "collaborate", "together", "team",
+            "trust", "rely", "depend", "respect", "admire", "value"
+        ]
+        
+        # Negative indicators
+        negative_phrases = [
+            "no", "can't", "won't", "disagree", "against", "oppose",
+            "wrong", "bad", "terrible", "hate", "dislike", "refuse",
+            "doubt", "suspicious", "untrustworthy", "disrespect"
+        ]
+        
+        # Trust indicators
+        trust_phrases = [
+            "trust", "rely", "depend", "confident", "sure", "certain",
+            "guarantee", "promise", "commit", "dedicated", "loyal"
+        ]
+        
+        # Respect indicators
+        respect_phrases = [
+            "respect", "admire", "value", "appreciate", "honor", "esteem",
+            "regard", "consider", "acknowledge", "recognize", "praise"
+        ]
+        
+        # Calculate base sentiment
+        for phrase in positive_phrases:
+            if phrase in message_lower:
+                sentiment_score += 0.1
+                
+        for phrase in negative_phrases:
+            if phrase in message_lower:
+                sentiment_score -= 0.1
+                
+        # Calculate trust and respect changes
+        for phrase in trust_phrases:
+            if phrase in message_lower:
+                trust_change += 0.1
+                
+        for phrase in respect_phrases:
+            if phrase in message_lower:
+                respect_change += 0.1
+        
+        # Consider conversation history
+        if conversation_history:
+            # Check for consistency in sentiment
+            recent_sentiment = sum(msg.get("sentiment_score", 0) for msg in conversation_history)
+            if (sentiment_score > 0 and recent_sentiment > 0) or (sentiment_score < 0 and recent_sentiment < 0):
+                sentiment_score *= 1.2  # Amplify consistent sentiment
+            elif (sentiment_score > 0 and recent_sentiment < 0) or (sentiment_score < 0 and recent_sentiment > 0):
+                sentiment_score *= 0.8  # Reduce inconsistent sentiment
+        
+        # Normalize scores
+        sentiment_score = max(-1.0, min(1.0, sentiment_score))
+        trust_change = max(-0.2, min(0.2, trust_change))
+        respect_change = max(-0.2, min(0.2, respect_change))
 
     # Add the message to the conversation with sentiment
     logger.info("Adding message to conversation")
@@ -194,7 +267,10 @@ async def advance_conversation(
     logger.info("Updating relationships")
     for agent_id in conversation.agent_ids:
         if agent_id != current_agent_id:
-            agent.update_relationship(agent_id, sentiment_score)
+            relationship = agent.relationship_manager.get_relationship(current_agent_id, agent_id)
+            relationship.update_sentiment(sentiment_score)
+            relationship.update_trust(trust_change)
+            relationship.update_respect(respect_change)
 
     # Check if we should end the conversation
     if not should_continue:

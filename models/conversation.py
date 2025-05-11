@@ -125,10 +125,14 @@ class Conversation:
         Returns:
             Dict containing:
             - total_sentiment: float (cumulative sentiment score)
-            - relationship_type: str (friend/enemy/neutral/stranger)
+            - total_trust: float (cumulative trust score)
+            - total_respect: float (cumulative respect score)
+            - relationship_type: str (computed from new logic)
             - interaction_count: int (number of interactions)
             - last_interaction: str (timestamp of last interaction)
         """
+        from models.relationship import Relationship, RelationshipType
+
         # Filter relationship changes between the two agents
         relevant_changes = [
             change
@@ -146,28 +150,51 @@ class Conversation:
         if not relevant_changes:
             return {
                 "total_sentiment": 0.0,
+                "total_trust": 0.0,
+                "total_respect": 0.0,
                 "relationship_type": RelationshipType.STRANGER.value,
                 "interaction_count": 0,
                 "last_interaction": None,
             }
 
-        # Calculate total sentiment
-        total_sentiment = sum(change["sentiment_change"] for change in relevant_changes)
-
-        # Determine relationship type based on total sentiment
-        if total_sentiment >= 0.5:
-            relationship_type = RelationshipType.FRIEND.value
-        elif total_sentiment <= -0.5:
-            relationship_type = RelationshipType.ENEMY.value
-        else:
-            relationship_type = RelationshipType.NEUTRAL.value
-
-        # Get last interaction timestamp
+        # Aggregate scores
+        total_sentiment = sum(
+            change.get("sentiment_change", 0.0) for change in relevant_changes
+        )
+        # For backward compatibility, trust and respect may not be present in all changes
+        total_trust = sum(
+            change.get("trust_change", 0.0) for change in relevant_changes
+        )
+        total_respect = sum(
+            change.get("respect_change", 0.0) for change in relevant_changes
+        )
+        interaction_count = len(relevant_changes)
         last_interaction = max(change["timestamp"] for change in relevant_changes)
 
+        # Create a temporary Relationship object to use its logic
+        relationship = Relationship(
+            source_agent_id=agent1_id,
+            target_agent_id=agent2_id,
+            relationship_type=RelationshipType.STRANGER,
+            sentiment_score=0.0,
+            trust_score=0.0,
+            respect_score=0.0,
+            interaction_count=0,
+        )
+        relationship.sentiment_score = max(-1.0, min(1.0, total_sentiment))
+        relationship.trust_score = max(0.0, min(1.0, total_trust))
+        relationship.respect_score = max(0.0, min(1.0, total_respect))
+        relationship.interaction_count = interaction_count
+        # Use the update logic to set the relationship type
+        relationship.update_sentiment(
+            0.0
+        )  # This will update the type based on current scores
+
         return {
-            "total_sentiment": total_sentiment,
-            "relationship_type": relationship_type,
-            "interaction_count": len(relevant_changes),
+            "total_sentiment": relationship.sentiment_score,
+            "total_trust": relationship.trust_score,
+            "total_respect": relationship.respect_score,
+            "relationship_type": relationship.relationship_type.value,
+            "interaction_count": relationship.interaction_count,
             "last_interaction": last_interaction,
         }
