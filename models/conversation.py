@@ -17,7 +17,7 @@ class Conversation:
     def __init__(
         self, db, simulation_id: str, agent_ids: List[str], initial_prompt: str = None
     ):
-        self.id = uuid.uuid4().hex
+        self.id = uuid.uuid4().hex[:8]
         self._db = db
         self.simulation_id = simulation_id
         self.agent_ids = agent_ids
