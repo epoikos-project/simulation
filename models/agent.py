@@ -87,6 +87,17 @@ class Agent:
 
         self.relationship_manager = RelationshipManager()
 
+    def set_last_error(self, msg: str):
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        table.update({"last_error": msg}, Query()["id"] == self.id)
+
+    def get_last_error(self):
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table.get(Query()["id"] == self.id)
+        if not agent:
+            raise ValueError(f"Agent with id {self.id} not found in database.")
+        return agent.get("last_error", "")
+
     def _initialize_llm(self, model_name: ModelName):
         model = AvailableModels.get(model_name)
         self._client = OpenAIChatCompletionClient(
@@ -143,6 +154,7 @@ class Agent:
                 "name": self.name,
                 "model": self.model,
                 "energy_level": self.energy_level,
+                "last_error": "",
                 "hunger": self.hunger,
                 "x_coord": location[0],
                 "y_coord": location[1],
@@ -302,9 +314,15 @@ class Agent:
             MemoryContextPrompt().build(self.memory),
         ]
         context = "\n".join(parts)
-        context += "\nGiven this information now decide on your next action by performing a tool call."
+        context += "YOU CANNOT move to an already occupied location. Only x - 1 to it"
+        error = self.get_last_error()
+
+        if error:
+            context += "Last turn you experienced the following error: " + error
+
+        context += "\nGiven this information now decide on your next action by performing a tool call. (harvest or move)"
         return context
-    
+
     def _get_energy(self) -> int:
         """Get the agent's energy level."""
         table = self._db.table(settings.tinydb.tables.agent_table)
@@ -354,6 +372,17 @@ class Agent:
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
+
+        error = ""
+
+        for message in output.messages:
+            print(message.type)
+            if message.type == "ToolCallExecutionEvent":
+                for result in message.content:
+                    if result.is_error:
+                        error = result.content
+
+        self.set_last_error(error)
 
         langfuse_context.update_current_observation(
             usage_details={

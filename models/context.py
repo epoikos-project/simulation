@@ -10,6 +10,7 @@ class ObservationType(str, Enum):
     RESOURCE = "Resource"
     AGENT = "Agent"
     OBSTACLE = "Obstacle"
+    ERROR = "Execution_Error"
     OTHER = "Other"
 
 
@@ -55,12 +56,7 @@ class OtherObservation(_BaseObs):
 
 
 Observation = Annotated[
-    Union[
-        ResourceObservation,
-        AgentObservation,
-        ObstacleObservation,
-        OtherObservation,
-    ],
+    Union[ResourceObservation, AgentObservation, ObstacleObservation, OtherObservation],
     Field(discriminator="type"),
 ]
 

@@ -8,7 +8,7 @@ class ResourceHarvestedMessage(WorldBase):
 
     # simulation_id: str  # Simulation ID
     # resource_id: str  # Rersource ID
-    harvester_id: str  # Agent ID
+    harvester: list[str]  # Agent ID
     location: tuple[int, int]  # Location of resource
     start_tick: int  # Tick when harvesting started
     end_tick: int  # Tick when harvesting ended

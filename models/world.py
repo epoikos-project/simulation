@@ -282,10 +282,13 @@ class World:
                 & (Query()["y_coord"] == y_coord),
             )
         else:
-            logger.warning(
+            logger.error(
                 f"Agent {agent_id} is not in harvesting range for the resource at {(x_coord, y_coord)}."
             )
-            return
+            raise ValueError(
+                f"Agent {agent_id} is not in harvesting range for the resource at {(x_coord, y_coord)}."
+            )
+        return
 
         # Publish resource harvest message
         resource_harvested_message = ResourceHarvestedMessage(

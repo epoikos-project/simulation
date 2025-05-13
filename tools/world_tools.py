@@ -61,7 +61,7 @@ async def harvest_resource(
     agent_id: str,
     simulation_id: str,
 ):
-    """Harvest a resource"""
+    """Call this tool to harvest a resource and increase your energy level. You can harvest at any time if you are next to a resource."""
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 
@@ -76,3 +76,4 @@ async def harvest_resource(
         await world.harvest_resource(x_coord=x, y_coord=y, harvester_id=agent_id)
     except Exception as e:
         logger.error(f"Error harvesting resource: {e}")
+        raise e
