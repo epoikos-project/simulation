@@ -20,7 +20,7 @@ from datetime import datetime
 from typing import cast, Callable, List
 from functools import partial
 
-from models.context import Observation, Message
+from models.context import Observation, Message, ObservationType
 from models.prompting import (
     SYSTEM_MESSAGE,
     DESCRIPTION,
@@ -34,6 +34,8 @@ from models.world import World
 from tools import available_tools
 from models.relationship import RelationshipManager  # , RelationshipType
 from models.utils import extract_tool_call_info
+from models.plan import get_plan
+from models.task import get_task
 
 from loguru import logger
 
@@ -78,9 +80,11 @@ class Agent:
 
         self.observations: list[Observation] = []
         self.message: Message = Message(content="", sender_id="")
-        self.conversation_id: str = ""
+        self.conversation_id: str | None = None
         self.plan_participation: list[str] = []
         self.assigned_tasks: list[str] = []
+        self.plan_ownership: str | None = None
+        self.plan_ownership_task_count: int = 0
         self.memory: str = ""
         # objective: str # could be some sort of description to guide the agents actions
         # personality: str # might want to use that later
@@ -285,6 +289,16 @@ class Agent:
             [task["id"] for task in assigned_tasks] if assigned_tasks else []
         )
 
+        if self.plan_ownership:
+            plan_obj = get_plan(
+                self._db, self._nats, self.plan_ownership, self.simulation_id
+            )
+            tasks_obj = [
+                get_task(self._db, self._nats, task_id, self.simulation_id)
+                for task_id in plan_obj.get_tasks()
+            ]
+            self.plan_ownership_task_count = len(tasks_obj)
+
     def build_context(self) -> str:
         """Get the context for the agent."""
         self._load_context()
@@ -304,6 +318,53 @@ class Agent:
         context = "\n".join(parts)
         context += "\nGiven this information now decide on your next action by performing a tool call."
         return context
+
+    def _adapt_tools(self):
+        """Adapt the tools based on the agent's context."""
+
+        # remove make_plan if agent already owns a plan
+        if self.plan_ownership:
+            self.autogen_agent._tools = [
+                tool for tool in self.autogen_agent._tools if tool.name != "make_plan"
+            ]
+        # remove add_task if the current plan already has more than 2 tasks
+        if self.plan_ownership_task_count > 2:
+            self.autogen_agent._tools = [
+                tool for tool in self.autogen_agent._tools if tool.name != "add_task"
+            ]
+        # remove take_on_task if the agent is not part of any plan
+        if len(self.plan_participation) == 0:
+            self.autogen_agent._tools = [
+                tool
+                for tool in self.autogen_agent._tools
+                if tool.name != "take_on_task"
+            ]
+        # remove start_conversation if the agent does not observe any other agents or if already in active conversation
+        # TODO: check if this works correctly after communication rework
+        if (
+            not any(obs.type == ObservationType.AGENT for obs in self.observations)
+            or self.conversation_id
+        ):
+            self.autogen_agent._tools = [
+                tool
+                for tool in self.autogen_agent._tools
+                if tool.name != "start_conversation"
+            ]
+        # remove engage_conversation if the agent is not in a conversation
+        if not self.conversation_id:
+            self.autogen_agent._tools = [
+                tool
+                for tool in self.autogen_agent._tools
+                if tool.name != "engage_conversation"
+            ]
+        # remove harvest_resource if the agent is not near any resource
+        # TODO: rework after world observation is updated
+        if not any(obs.type == ObservationType.RESOURCE for obs in self.observations):
+            self.autogen_agent._tools = [
+                tool
+                for tool in self.autogen_agent._tools
+                if tool.name != "harvest_resource"
+            ]
 
     def _get_energy(self) -> int:
         """Get the agent's energy level."""
@@ -350,6 +411,8 @@ class Agent:
         # update agent energy
         self.update_agent_energy(self._get_energy_consumption())
         context = self.build_context()
+
+        self._adapt_tools()
 
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
