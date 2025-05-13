@@ -65,6 +65,8 @@ async def harvest_resource(
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 
+    logger.success("Calling tool harvest_resource")
+
     logger.debug(f"Agent {agent_id} starts harvesting resource at {(x, y)}")
 
     db = get_client()

@@ -28,11 +28,11 @@ class ResourceObservation(_BaseObs):
     harvesting_area: int
     mining_time: int
     being_harvested: bool
-    num_harverster: int
+    num_harvester: int
 
     def __str__(self) -> str:
 
-        obs = f"""A resource at location {self.location} ({self.distance} units away) with 
+        obs = f"""A resource at location {self.location} ({self.distance} units away) with
                   energy yield {self.energy_yield} and mining time {self.mining_time}."""
 
         if self._check_harvest_possible():
@@ -46,7 +46,7 @@ class ResourceObservation(_BaseObs):
         """Check if the can be harvested by the agent under current conditions"""
         if self.distance > self.harvesting_area:
             return False
-        elif self.being_harvested and self.num_harverster >= self.required_agents:
+        elif self.being_harvested and self.num_harvester >= self.required_agents:
             return False
         elif self.num_harvester == 0 and self.required_agents > 1:
             return False
@@ -60,7 +60,7 @@ class ResourceObservation(_BaseObs):
         resource_message = ""
 
         if self.being_harvested:
-            resource_message = f""" This resource is currently harvested by {self.num_harverster} agent(s) 
+            resource_message = f""" This resource is currently harvested by {self.num_harvester} agent(s)
                                   and requires only ONE additional harvester."""
         else:
             resource_message = (
@@ -78,11 +78,11 @@ class ResourceObservation(_BaseObs):
         if self.distance > self.harvesting_area:
             return f""" The resource is too far away to harvest! (you have to be within {self.harvesting_area} units)"""
         # Resource is being harvested by enough agents
-        if self.being_harvested and self.num_harverster >= self.required_agents:
-            return f""" The resource is currently harvested by {self.num_harverster} agent(s) 
+        if self.being_harvested and self.num_harvester >= self.required_agents:
+            return f""" The resource is currently harvested by {self.num_harvester} agent(s)
                         and is therefore not available."""
-        if self.num_harverster == 0 and self.required_agents > 1:
-            return f""" The resource is currently not harvested by anybody 
+        if self.num_harvester == 0 and self.required_agents > 1:
+            return f""" The resource is currently not harvested by anybody
                         but requires {self.required_agents} harvester."""
 
         return f""" The resource is currently NOT available for harvesting!"""
@@ -94,7 +94,7 @@ class AgentObservation(_BaseObs):
     relationship_status: str = RelationshipType.STRANGER.value
 
     def __str__(self) -> str:
-        return f"""Agent {self.id} with name {self.name} at location {self.location}, which is 
+        return f"""Agent {self.id} with name {self.name} at location {self.location}, which is
                    {self.distance} units away from you. The agent is a to you {self.relationship_status}."""
 
 

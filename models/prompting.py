@@ -27,8 +27,9 @@ class HungerContextPrompt:
             hunger_description = f"Energy level: Your current energy level is {energy_level}. You are starving and need to find and consume resources immediately. "
         else:
             hunger_description = f"Energy level: Your current energy level is {energy_level}. You are not starving, but you should consume resources to maintain your energy level. "
-        return hunger_description.append(
-            f"Otherwise you will die after {energy_level} actions. "
+        return (
+            hunger_description
+            + f"Otherwise you will die after {energy_level} actions. "
         )
 
 

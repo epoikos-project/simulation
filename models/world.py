@@ -355,11 +355,12 @@ class World:
             resource_distance = self._compute_distance(
                 agent_location, resource_location
             )
-
             res_obs = ResourceObservation(
                 type=ObservationType.RESOURCE,
                 location=resource_location,
                 distance=resource_distance,
+                being_harvested=resource["being_harvested"],
+                num_harvester=len(resource["harvester"]),
                 id=resource["id"],
                 energy_yield=resource["energy_yield"],
                 available=resource["availability"],
@@ -566,7 +567,9 @@ class World:
             raise ValueError(f"Agent {agent_id} is not placed in the world.")
         # Check if destination is valid
         if not self._check_coordinates(destination):
-            raise ValueError(f"Destination {destination} is invalid.")
+            raise ValueError(
+                f"Destination {destination} is invalid. World boundary reached."
+            )
         # Check if destination is occupied
 
         # Get agent location and distance to destination
@@ -576,9 +579,10 @@ class World:
         agent_range = agent["range_per_move"]
 
         if agent_location == destination:
-            logger.warning(
+            logger.error(
                 f"Agent {agent_id} is already at the destination {destination}."
             )
+
             raise ValueError(
                 f"Agent {agent_id} is already at the destination {destination}."
             )

@@ -302,7 +302,7 @@ class Agent:
         self._load_context()
 
         parts = [
-            HungerContextPrompt().build(self.hunger),
+            HungerContextPrompt().build(self.energy_level, self.hunger),
             ObservationContextPrompt().build(self.observations),
             PlanContextPrompt().build(
                 self.plan_ownership,
@@ -314,13 +314,15 @@ class Agent:
             MemoryContextPrompt().build(self.memory),
         ]
         context = "\n".join(parts)
-        context += "YOU CANNOT move to an already occupied location. Only x - 1 to it"
+        context += "YOU CANNOT move to an already occupied location."
         error = self.get_last_error()
 
         if error:
-            context += "Last turn you experienced the following error: " + error
+            context += (
+                "\n ERROR!! Last turn you experienced the following error: " + error
+            )
 
-        context += "\nGiven this information now decide on your next action by performing a tool call. (harvest or move)"
+        context += "\nGiven this information now decide on your next action by performing a tool call YOU DO NOT HAVE TO BE EXACTLY ON A RESOURCE TO HARVEST IT. 1 block away suffices. (harvest_resource or move)"
         return context
 
     def _get_energy(self) -> int:
@@ -333,7 +335,7 @@ class Agent:
 
     def update_agent_energy(self, energy_delta: int):
         """Update the agent's energy level."""
-        self.energy_level = self._get_energy() + energy_delta
+        self.energy_level = self._get_energy() - energy_delta
         table = self._db.table(settings.tinydb.tables.agent_table)
         table.update(
             {"energy_level": self.energy_level},
@@ -376,7 +378,6 @@ class Agent:
         error = ""
 
         for message in output.messages:
-            print(message.type)
             if message.type == "ToolCallExecutionEvent":
                 for result in message.content:
                     if result.is_error:
