@@ -46,7 +46,7 @@ class Orchestrator:
         return sim_id
 
     async def _create_simulation(self) -> str:
-        sim_id = uuid.uuid4().hex
+        sim_id = uuid.uuid4().hex[:8]
         sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)
         await sim.create()
         logger.info(f"Orchestrator: created simulation {sim_id}")

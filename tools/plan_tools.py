@@ -39,7 +39,7 @@ async def make_plan(
     db = get_client()
     nats = nats_broker()
 
-    plan_id = uuid.uuid4().hex
+    plan_id = uuid.uuid4().hex[:8]
 
     try:
         plan = Plan(db=db, id=plan_id, nats=nats, simulation_id=simulation_id)
@@ -70,7 +70,7 @@ async def add_task(
     db = get_client()
     nats = nats_broker()
 
-    task_id: str = uuid.uuid4().hex
+    task_id: str = uuid.uuid4().hex[:8]
 
     # TODO: check how error handling effects autogen tool calls
     # try:

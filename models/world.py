@@ -52,7 +52,7 @@ class World:
                 )
             )
 
-        self.id = uuid.uuid4().hex
+        self.id = uuid.uuid4().hex[:8]
         self.size_x = size[0]
         self.size_y = size[1]
         self.num_regions = num_regions

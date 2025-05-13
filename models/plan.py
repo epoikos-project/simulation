@@ -11,7 +11,7 @@ from tinydb import Query
 class Plan:
     def __init__(self, db: TinyDB, nats: NatsBroker, id: str, simulation_id: str):
         if not id:
-            self.id = uuid.uuid4().hex
+            self.id = uuid.uuid4().hex[:8]
         else:
             self.id = id
         self.simulation_id: str = simulation_id

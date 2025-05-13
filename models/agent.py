@@ -49,7 +49,7 @@ class Agent:
         id: str | None = None,
     ):
         if id is None:
-            self.id = uuid.uuid4().hex
+            self.id = uuid.uuid4().hex[:8]
         else:
             self.id = id
 
@@ -304,7 +304,7 @@ class Agent:
         context = "\n".join(parts)
         context += "\nGiven this information now decide on your next action by performing a tool call."
         return context
-    
+
     def _get_energy(self) -> int:
         """Get the agent's energy level."""
         table = self._db.table(settings.tinydb.tables.agent_table)
