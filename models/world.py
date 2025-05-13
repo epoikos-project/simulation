@@ -52,7 +52,7 @@ class World:
                 )
             )
 
-        self.id = uuid.uuid4().hex
+        self.id = uuid.uuid4().hex[:8]
         self.size_x = size[0]
         self.size_y = size[1]
         self.num_regions = num_regions
@@ -363,6 +363,9 @@ class World:
                 id=resource["id"],
                 energy_yield=resource["energy_yield"],
                 available=resource["availability"],
+                required_agents=resource["required_agents"],
+                harvesting_area=resource["harvesting_area"],
+                mining_time=resource["mining_time"],
             )
             resource_observations.append(res_obs)
 
@@ -395,7 +398,7 @@ class World:
                 distance=agent_distance,
                 id=agent["id"],
                 name=agent["name"],
-                relationship_status="Friendly",
+                relationship_status="Stranger",
             )
             agent_observations.append(agent_obs)
 

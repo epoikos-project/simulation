@@ -20,7 +20,7 @@ class Region:
         id: str = None,
     ):
         if id is None:
-            self.id = uuid.uuid4().hex
+            self.id = uuid.uuid4().hex[:8]
         else:
             self.id = id
 
@@ -92,7 +92,7 @@ class Region:
             json.dumps(
                 {
                     "type": "created",
-                    "message": f"Region {self.id} of size {x_coords[1]-x_coords[0]}x{y_coords[1]-y_coords[0]} at [{x_coords[0]},{y_coords[0]}] created",
+                    "message": f"Region {self.id} of size {x_coords[1] - x_coords[0]}x{y_coords[1] - y_coords[0]} at [{x_coords[0]},{y_coords[0]}] created",
                 }
             ),
             f"simulation.{self.simulation_id}.world.{self.world_id}.region",
@@ -167,7 +167,6 @@ class Region:
         return region[0]
 
     def _load_from_db(self, simulation_id: str):
-
         table = self._db.table(settings.tinydb.tables.region_table)
         region = table.search(
             Query()["id"] == self.id and Query()["simulation_id"] == simulation_id

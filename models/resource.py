@@ -11,7 +11,6 @@ from messages.world.resource_grown import ResourceGrownMessage
 
 
 class Resource:
-
     def __init__(
         self,
         simulation_id: str,
@@ -22,7 +21,7 @@ class Resource:
         id_: str = None,
     ):
         if id_ is None:
-            self.id = uuid.uuid4().hex
+            self.id = uuid.uuid4().hex[:8]
         else:
             self.id = id_
 

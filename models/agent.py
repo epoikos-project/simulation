@@ -49,7 +49,7 @@ class Agent:
         id: str | None = None,
     ):
         if id is None:
-            self.id = uuid.uuid4().hex
+            self.id = uuid.uuid4().hex[:8]
         else:
             self.id = id
 
