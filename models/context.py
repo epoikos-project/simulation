@@ -64,7 +64,7 @@ class ResourceObservation(_BaseObs):
                                   and requires only ONE additional harvester."""
         else:
             resource_message = (
-                f""" This resource is direclty available for harvesting!"""
+                f""" This resource is directly available for harvesting!"""
             )
 
         return resource_message
