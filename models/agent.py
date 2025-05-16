@@ -91,6 +91,17 @@ class Agent:
 
         self.relationship_manager = RelationshipManager()
 
+    def set_last_error(self, msg: str):
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        table.update({"last_error": msg}, Query()["id"] == self.id)
+
+    def get_last_error(self):
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table.get(Query()["id"] == self.id)
+        if not agent:
+            raise ValueError(f"Agent with id {self.id} not found in database.")
+        return agent.get("last_error", "")
+
     def _initialize_llm(self, model_name: ModelName):
         model = AvailableModels.get(model_name)
         self._client = OpenAIChatCompletionClient(
@@ -147,6 +158,7 @@ class Agent:
                 "name": self.name,
                 "model": self.model,
                 "energy_level": self.energy_level,
+                "last_error": "",
                 "hunger": self.hunger,
                 "x_coord": location[0],
                 "y_coord": location[1],
@@ -304,7 +316,7 @@ class Agent:
         self._load_context()
 
         parts = [
-            HungerContextPrompt().build(self.hunger),
+            HungerContextPrompt().build(self.energy_level, self.hunger),
             ObservationContextPrompt().build(self.observations),
             PlanContextPrompt().build(
                 self.plan_ownership,
@@ -316,6 +328,13 @@ class Agent:
             MemoryContextPrompt().build(self.memory),
         ]
         context = "\n".join(parts)
+        error = self.get_last_error()
+
+        if error:
+            context += (
+                "\n ERROR!! Last turn you experienced the following error: " + error
+            )
+
         context += "\nGiven this information now decide on your next action by performing a tool call."
         return context
 
@@ -376,7 +395,7 @@ class Agent:
 
     def update_agent_energy(self, energy_delta: int):
         """Update the agent's energy level."""
-        self.energy_level = self._get_energy() + energy_delta
+        self.energy_level = self._get_energy() - energy_delta
         table = self._db.table(settings.tinydb.tables.agent_table)
         table.update(
             {"energy_level": self.energy_level},
@@ -417,6 +436,16 @@ class Agent:
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
+
+        error = ""
+
+        for message in output.messages:
+            if message.type == "ToolCallExecutionEvent":
+                for result in message.content:
+                    if result.is_error:
+                        error = result.content
+
+        self.set_last_error(error)
 
         langfuse_context.update_current_observation(
             usage_details={

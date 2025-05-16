@@ -3,9 +3,11 @@ import json
 
 from faststream.nats import NatsBroker
 from loguru import logger
+from messages.world.resource_harvested import ResourceHarvestedMessage
 from tinydb import Query, TinyDB
 
 from config.base import settings
+from messages.world.resource_grown import ResourceGrownMessage
 
 
 class Resource:
@@ -103,15 +105,12 @@ class Resource:
                 },
                 Query()["id"] == self.id,
             )
-            await self._nats.publish(
-                json.dumps(
-                    {
-                        "type": "regrown",
-                        "message": f"Resource {self.id} has regrown",
-                    }
-                ),
-                f"simulation.{self.simulation_id}.world.{self.world_id}.region.{self.region_id}.resource",
+            grown_message = ResourceGrownMessage(
+                simulation_id=self.simulation_id,
+                id=self.id,
+                location=(resource_data["x_coord"], resource_data["y_coord"]),
             )
+            await grown_message.publish(self._nats)
 
         # Resource is being harvested by enough agents and the harvest is finished
         harvester = resource_data["harvester"]
@@ -122,15 +121,15 @@ class Resource:
             and start_harvest + mining_time <= tick
         ):
             self._harvesting_finished(tick, harvester)
-            await self._nats.publish(
-                json.dumps(
-                    {
-                        "type": "harvested",
-                        "message": f"Resource {self.id} has been harvested by agent(s) {resource_data['harvester']}",
-                    }
-                ),
-                f"simulation.{self.simulation_id}.world.{self.world_id}.region.{self.region_id}.resource",
+            resource_harvested_message = ResourceHarvestedMessage(
+                simulation_id=self.simulation_id,
+                id=self.id,
+                harvester=harvester,
+                location=(resource_data["x_coord"], resource_data["y_coord"]),
+                start_tick=tick,
+                end_tick=tick + mining_time,
             )
+            await resource_harvested_message.publish(self._nats)
 
     def _harvesting_finished(self, tick: int, list_harvester: list[str]):
         """Finish harvesting the resource"""

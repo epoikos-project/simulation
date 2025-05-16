@@ -22,9 +22,15 @@ DESCRIPTION = "These are your personal attributes: ID: {id}, Name: {name}"  # , 
 
 
 class HungerContextPrompt:
-    def build(self, hunger: int) -> str:
-        hunger_description = f"Energy level: Your current energy level is {hunger}.  If you do not consume any resources, you will run out of energy after {hunger} actions. "
-        return hunger_description
+    def build(self, energy_level: int, hunger: int) -> str:
+        if energy_level <= hunger:
+            hunger_description = f"Energy level: Your current energy level is {energy_level}. You are starving and need to find and consume resources immediately. "
+        else:
+            hunger_description = f"Energy level: Your current energy level is {energy_level}. You are not starving, but you should consume resources to maintain your energy level. "
+        return (
+            hunger_description
+            + f"Otherwise you will die after {energy_level} actions. "
+        )
 
 
 class ObservationContextPrompt:
