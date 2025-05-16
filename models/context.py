@@ -31,9 +31,8 @@ class ResourceObservation(_BaseObs):
     num_harvester: int
 
     def __str__(self) -> str:
-
-        obs = f"""A resource at location {self.location} ({self.distance} units away) with
-                  energy yield {self.energy_yield} and mining time {self.mining_time}."""
+        availability = "available" if self.available else "unavailable"
+        obs = f"[ID: {self.id}; type: {self.type.value}; location: {self.location}; distance: {self.distance}; energy yield: {self.energy_yield}; mining time: {self.mining_time}; {availability}]"
 
         if self._check_harvest_possible():
             obs += self._harvest_possible()
@@ -94,8 +93,7 @@ class AgentObservation(_BaseObs):
     relationship_status: str = RelationshipType.STRANGER.value
 
     def __str__(self) -> str:
-        return f"""Agent {self.id} with name {self.name} at location {self.location}, which is
-                   {self.distance} units away from you. The agent is a to you {self.relationship_status}."""
+        return f"[ID: {self.id}; type: {self.type.value}; location: {self.location}; distance: {self.distance}; name: {self.name}; relationship status: {self.relationship_status}]"
 
 
 class ObstacleObservation(_BaseObs):
@@ -103,7 +101,7 @@ class ObstacleObservation(_BaseObs):
     # no extra fields
 
     def __str__(self) -> str:
-        return f"type: {self.type.value}; location: {self.location}; distance: {self.distance}]"
+        return f"[type: {self.type.value}; location: {self.location}; distance: {self.distance}]"
 
 
 class OtherObservation(_BaseObs):
@@ -111,7 +109,7 @@ class OtherObservation(_BaseObs):
     # no extra fields
 
     def __str__(self) -> str:
-        return f"type: {self.type.value}; location: {self.location}; distance: {self.distance}]"
+        return f"[type: {self.type.value}; location: {self.location}; distance: {self.distance}]"
 
 
 Observation = Annotated[

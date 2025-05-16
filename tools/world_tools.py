@@ -26,7 +26,7 @@ async def move(
     agent_id: str,
     simulation_id: str,
 ):
-    """Move in the world. You can only move one coordinate at a time and have to choose a location different to your current location."""
+    """Move in the world. You can only move one coordinate at a time and have to choose a location different to your current location. YOU CANNOT move to an already occupied location."""
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 
@@ -61,7 +61,7 @@ async def harvest_resource(
     agent_id: str,
     simulation_id: str,
 ):
-    """Call this tool to harvest a resource and increase your energy level. You can harvest at any time if you are next to a resource."""
+    """Call this tool to harvest a resource and increase your energy level. You can harvest at any time if you are next to a resource. YOU DO NOT HAVE TO BE EXACTLY ON A RESOURCE TO HARVEST IT. 1 block away suffices."""
     from clients.tinydb import get_client
     from clients.nats import nats_broker
 

@@ -314,7 +314,6 @@ class Agent:
             MemoryContextPrompt().build(self.memory),
         ]
         context = "\n".join(parts)
-        context += "YOU CANNOT move to an already occupied location."
         error = self.get_last_error()
 
         if error:
@@ -322,7 +321,7 @@ class Agent:
                 "\n ERROR!! Last turn you experienced the following error: " + error
             )
 
-        context += "\nGiven this information now decide on your next action by performing a tool call YOU DO NOT HAVE TO BE EXACTLY ON A RESOURCE TO HARVEST IT. 1 block away suffices. (harvest_resource or move)"
+        context += "\nGiven this information now decide on your next action by performing a tool call."
         return context
 
     def _get_energy(self) -> int:
