@@ -6,6 +6,7 @@ from tinydb.queries import Query
 from config.base import settings
 from messages.simulation import SimulationTickMessage
 from models.agent import Agent
+from models.world import World
 from typing import Set
 import asyncio
 
@@ -26,29 +27,42 @@ class ClusterExecutor:
         """
         logger.debug(f"Executing cluster {cluster} at tick {tick}")
 
-        # Prepare to load and trigger each agent
+        # Determine simulation ID from first agent, if any
         agent_table = self.db.table(settings.tinydb.tables.agent_table)
-        tasks = []
         sim_id = None
+        if cluster:
+            first = next(iter(cluster))
+            row0 = agent_table.get(Query().id == first)
+            if row0:
+                sim_id = row0["simulation_id"]
+
+        # Advance resources for this cluster before agent actions
+        if sim_id is not None:
+            world = World(simulation_id=sim_id, db=self.db, nats=self.nats)
+            try:
+                world.load()
+                await world.tick_resources_for_agents(cluster, tick)
+            except Exception as e:
+                logger.error(f"Error ticking resources for cluster {cluster}: {e}")
+
+        # Load and trigger each agent in the cluster concurrently
+        tasks: list[asyncio.Future] = []
         for aid in cluster:
             row = agent_table.get(Query().id == aid)
             if not row:
                 logger.error(f"Agent {aid} not found in database.")
                 continue
-            sim_id = row["simulation_id"]
             # Instantiate and load the agent
             agent = Agent(
                 milvus=self.milvus,
                 db=self.db,
                 nats=self.nats,
-                simulation_id=sim_id,
+                simulation_id=row["simulation_id"],
                 id=aid,
             )
             agent.load()
-            # Schedule the agent's tick
             tasks.append(agent.trigger())
 
-        # Run all agent triggers concurrently
         if tasks:
             await asyncio.gather(*tasks)
         else:

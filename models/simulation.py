@@ -160,20 +160,8 @@ class Simulation:
         sim_table.update({"tick": self._tick_counter}, Query()["id"] == self.id)
 
         # broadcast tick event
-        tick_msg = SimulationTickMessage(id=self.id, tick=self._tick_counter)
-        await self._nats.publish(
-            tick_msg.model_dump_json(), tick_msg.get_channel_name()
-        )
-
-        tick_message = SimulationTickMessage(
-            id=self.id,
-            tick=self._tick_counter,
-        )
-
-        await self.world.tick()
-        await self._nats.publish(
-            tick_message.model_dump_json(), tick_message.get_channel_name()
-        )
+        # World state is now updated by per-cluster/agent workers directly;
+        # remove central world.tick to avoid global synchronization barrier.
 
         # ---------- agents ----------
         agent_table = self._db.table(settings.tinydb.tables.agent_table)

@@ -224,6 +224,39 @@ class World:
             f"simulation.{self.simulation_id}.world.{self.id}",
         )
 
+    async def tick_resources_for_agents(
+        self,
+        agent_ids: set[str],
+        tick: int,
+    ) -> None:
+        """
+        Tick (regrow/harvest completion) only resources in range of the given agents.
+        This replaces the global world.tick to avoid a synchronization barrier.
+        """
+        # Iterate over all resources in this simulation
+        resources = self.get_resources()
+        for r in resources:
+            # Check if any agent in this cluster is in range of the resource
+            for aid in agent_ids:
+                agent = self.get_agent(aid)
+                if not agent:
+                    continue
+                # Manhattan distance between agent and resource
+                dist = abs(agent["x_coord"] - r["x_coord"]) + abs(agent["y_coord"] - r["y_coord"])
+                # Agents cover resource if within visibility + move range
+                if dist <= agent["visibility_range"] + agent["range_per_move"]:
+                    # Tick this resource
+                    res_obj = Resource(
+                        simulation_id=self.simulation_id,
+                        world_id=self.id,
+                        region_id=r["region_id"],
+                        db=self._db,
+                        nats=self._nats,
+                        id_=r["id"],
+                    )
+                    await res_obj.tick(tick=tick)
+                    break
+
     async def harvest_resource(
         self,
         x_coord: int,

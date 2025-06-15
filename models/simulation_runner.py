@@ -65,17 +65,19 @@ class SimulationRunner:
         # 1) make world once
         await sim._initialize_world()
         # 2) create our out-of-order scheduler just once
-        executor  = ClusterExecutor(sim.get_db(), sim.get_nats(), sim._milvus)
-        scheduler = ClusterScheduler(sim.world, executor)
+        if settings.cluster_optimization:
+            executor = ClusterExecutor(sim.get_db(), sim.get_nats(), sim._milvus)
+            scheduler = ClusterScheduler(sim.world, executor)
 
-        # 3) start the scheduler (spawns all cluster tasks + controller)
-        await scheduler.start()
-
-        # 4) keep going until someone calls SimulationRunner.stop()
-        while sim.is_running():
-            # nothing else to do here: scheduler is ticking clusters as fast
-            # as dependencies allow, across multiple global‐ticks.
-            await asyncio.sleep(self._tick_interval)
-
-        # 5) tear it down when they stop()
-        await scheduler.stop()
+            # 3a) optimized: start the cluster scheduler (spawns cluster loops + controller)
+            await scheduler.start()
+            # let the scheduler run until stopped
+            while sim.is_running():
+                await asyncio.sleep(self._tick_interval)
+            # tear down optimized scheduler
+            await scheduler.stop()
+        else:
+            # 3b) fallback: synchronous tick on world + agents
+            while sim.is_running():
+                await sim.tick()
+                await asyncio.sleep(self._tick_interval)

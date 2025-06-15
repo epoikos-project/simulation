@@ -111,8 +111,9 @@ class ClusterScheduler:
 
                 # once every cluster has finished tick `current_global_tick+1`…
                 if not pending_clusters:
-                    # 1) advance world exactly once
-                    await self.world.tick()
+                    # 1) advance global world tick exactly once (deprecated)
+                    # NOTE: global world.tick is no longer used in cluster-optimized mode
+                    # await self.world.tick()
 
                     # 2) broadcast the global‐tick event
                     msg = SimulationTickMessage(self.simulation_id, current_global_tick+1)
