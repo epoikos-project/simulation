@@ -188,7 +188,7 @@ class ClusterScheduler:
 
         # spawn new clusters
         for new_c in new_clusters - existing:
-            # merge if any old ⊆ new_c, else split if new_c ⊆ old
+            # merge if any old part of new_c, else split if new_c part of old
             if any(old.issubset(new_c) for old in existing):
                 sources = [self._cluster_ticks[old] for old in existing if old.issubset(new_c)]
             else:
