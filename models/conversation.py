@@ -4,6 +4,7 @@ from typing import List, Dict, Optional
 from tinydb.queries import Query
 from config.base import settings
 from models.relationship import RelationshipType
+from models.llm_utils import analyze_conversation_with_llm
 
 
 # TODO: instead of this custom implementation it might be worth it to consider using native autogen functionalities such as RoundRobinGroupChat
@@ -125,76 +126,27 @@ class Conversation:
         Returns:
             Dict containing:
             - total_sentiment: float (cumulative sentiment score)
-            - total_trust: float (cumulative trust score)
-            - total_respect: float (cumulative respect score)
-            - relationship_type: str (computed from new logic)
+            - relationship_type: str (computed from LLM)
             - interaction_count: int (number of interactions)
             - last_interaction: str (timestamp of last interaction)
         """
-        from models.relationship import Relationship, RelationshipType
-
-        # Filter relationship changes between the two agents
-        relevant_changes = [
-            change
-            for change in self.relationship_changes
-            if (
-                change["source_agent_id"] == agent1_id
-                and change["target_agent_id"] == agent2_id
-            )
-            or (
-                change["source_agent_id"] == agent2_id
-                and change["target_agent_id"] == agent1_id
-            )
+        # Filter messages between the two agents
+        relevant_messages = [
+            m for m in self.messages
+            if m["sender_id"] in [agent1_id, agent2_id]
         ]
-
-        if not relevant_changes:
+        if not relevant_messages:
             return {
                 "total_sentiment": 0.0,
-                "total_trust": 0.0,
-                "total_respect": 0.0,
-                "relationship_type": RelationshipType.STRANGER.value,
+                "relationship_type": "Neutral",
                 "interaction_count": 0,
                 "last_interaction": None,
             }
-
-        # Aggregate scores
-        total_sentiment = sum(
-            change.get("sentiment_change", 0.0) for change in relevant_changes
-        )
-        # For backward compatibility, trust and respect may not be present in all changes
-        total_trust = sum(
-            change.get("trust_change", 0.0) for change in relevant_changes
-        )
-        total_respect = sum(
-            change.get("respect_change", 0.0) for change in relevant_changes
-        )
-        interaction_count = len(relevant_changes)
-        last_interaction = max(change["timestamp"] for change in relevant_changes)
-
-        # Create a temporary Relationship object to use its logic
-        relationship = Relationship(
-            source_agent_id=agent1_id,
-            target_agent_id=agent2_id,
-            relationship_type=RelationshipType.STRANGER,
-            sentiment_score=0.0,
-            trust_score=0.0,
-            respect_score=0.0,
-            interaction_count=0,
-        )
-        relationship.sentiment_score = max(-1.0, min(1.0, total_sentiment))
-        relationship.trust_score = max(0.0, min(1.0, total_trust))
-        relationship.respect_score = max(0.0, min(1.0, total_respect))
-        relationship.interaction_count = interaction_count
-        # Use the update logic to set the relationship type
-        relationship.update_sentiment(
-            0.0
-        )  # This will update the type based on current scores
-
+        # Use LLM to analyze the conversation
+        llm_result = analyze_conversation_with_llm(relevant_messages)
         return {
-            "total_sentiment": relationship.sentiment_score,
-            "total_trust": relationship.trust_score,
-            "total_respect": relationship.respect_score,
-            "relationship_type": relationship.relationship_type.value,
-            "interaction_count": relationship.interaction_count,
-            "last_interaction": last_interaction,
+            "total_sentiment": llm_result.get("sentiment_score", 0.0),
+            "relationship_type": llm_result.get("relationship_type", "Neutral"),
+            "interaction_count": len(relevant_messages),
+            "last_interaction": relevant_messages[-1]["timestamp"],
         }

@@ -181,141 +181,14 @@ async def advance_conversation(
     # Analyze sentiment and relationship dynamics
     logger.info("Analyzing sentiment and relationship dynamics")
 
-    # Get conversation history for context
-    conversation_history = (
-        conversation.messages[-5:]
-        if len(conversation.messages) > 5
-        else conversation.messages
-    )
+    # Give the whole conversation to the LLM and let it decide sentiment and relationship
+    from models.llm_utils import analyze_conversation_with_llm
 
-    # Prepare context for sentiment analysis
-    context = {
-        "current_message": response,
-        "conversation_history": conversation_history,
-        "current_agent_id": current_agent_id,
-        "other_agents": [
-            aid for aid in conversation.agent_ids if aid != current_agent_id
-        ],
-    }
-
-    # Calculate sentiment score based on conversation context
-    sentiment_score = 0.0
-    trust_change = 0.0
-    respect_change = 0.0
-
-    if isinstance(response, str):
-        # Analyze message content and context
-        message_lower = response.lower()
-
-        # Positive indicators
-        positive_phrases = [
-            "thank",
-            "please",
-            "appreciate",
-            "great",
-            "excellent",
-            "wonderful",
-            "agree",
-            "support",
-            "help",
-            "collaborate",
-            "together",
-            "team",
-            "trust",
-            "rely",
-            "depend",
-            "respect",
-            "admire",
-            "value",
-        ]
-
-        # Negative indicators
-        negative_phrases = [
-            "no",
-            "can't",
-            "won't",
-            "disagree",
-            "against",
-            "oppose",
-            "wrong",
-            "bad",
-            "terrible",
-            "hate",
-            "dislike",
-            "refuse",
-            "doubt",
-            "suspicious",
-            "untrustworthy",
-            "disrespect",
-        ]
-
-        # Trust indicators
-        trust_phrases = [
-            "trust",
-            "rely",
-            "depend",
-            "confident",
-            "sure",
-            "certain",
-            "guarantee",
-            "promise",
-            "commit",
-            "dedicated",
-            "loyal",
-        ]
-
-        # Respect indicators
-        respect_phrases = [
-            "respect",
-            "admire",
-            "value",
-            "appreciate",
-            "honor",
-            "esteem",
-            "regard",
-            "consider",
-            "acknowledge",
-            "recognize",
-            "praise",
-        ]
-
-        # Calculate base sentiment
-        for phrase in positive_phrases:
-            if phrase in message_lower:
-                sentiment_score += 0.1
-
-        for phrase in negative_phrases:
-            if phrase in message_lower:
-                sentiment_score -= 0.1
-
-        # Calculate trust and respect changes
-        for phrase in trust_phrases:
-            if phrase in message_lower:
-                trust_change += 0.1
-
-        for phrase in respect_phrases:
-            if phrase in message_lower:
-                respect_change += 0.1
-
-        # Consider conversation history
-        if conversation_history:
-            # Check for consistency in sentiment
-            recent_sentiment = sum(
-                msg.get("sentiment_score", 0) for msg in conversation_history
-            )
-            if (sentiment_score > 0 and recent_sentiment > 0) or (
-                sentiment_score < 0 and recent_sentiment < 0
-            ):
-                sentiment_score *= 1.2  # Amplify consistent sentiment
-            elif (sentiment_score > 0 and recent_sentiment < 0) or (
-                sentiment_score < 0 and recent_sentiment > 0
-            ):
-                sentiment_score *= 0.8  # Reduce inconsistent sentiment
-
-        # Normalize scores
-        sentiment_score = max(-1.0, min(1.0, sentiment_score))
-        trust_change = max(-0.2, min(0.2, trust_change))
-        respect_change = max(-0.2, min(0.2, respect_change))
+    llm_result = analyze_conversation_with_llm(conversation.messages)
+    sentiment_score = llm_result.get("sentiment_score", 0.0)
+    relationship_type = llm_result.get("relationship_type", "Unknown")
+    trust_change = llm_result.get("trust_change", 0.0)
+    respect_change = llm_result.get("respect_change", 0.0)
 
     # Add the message to the conversation with sentiment
     logger.info("Adding message to conversation")
@@ -331,6 +204,9 @@ async def advance_conversation(
             relationship.update_sentiment(sentiment_score)
             relationship.update_trust(trust_change)
             relationship.update_respect(respect_change)
+
+    # Optionally, log or store the relationship_type if needed
+    logger.info(f"LLM-inferred relationship type: {relationship_type}")
 
     # Check if we should end the conversation
     if not should_continue:
