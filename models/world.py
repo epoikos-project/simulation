@@ -7,7 +7,12 @@ from loguru import logger
 from messages.world.agent_moved import AgentMovedMessage
 from messages.world.agent_placed import AgentPlacedMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
-from models.context import AgentObservation, ObservationType, ResourceObservation
+from models.context import (
+    AgentObservation,
+    ObservationType,
+    ResourceObservation,
+    Observation,
+)
 from models.map import Map
 from models.region import Region
 from models.resource import Resource
@@ -19,7 +24,6 @@ from models.db_utils import safe_update, ConcurrentWriteError
 
 
 class World:
-
     def __init__(self, simulation_id: str, db: TinyDB, nats: NatsBroker):
         self.id = None
         self.simulation_id = simulation_id
@@ -49,7 +53,7 @@ class World:
                 )
             )
 
-        self.id = uuid.uuid4().hex
+        self.id = uuid.uuid4().hex[:8]
         self.size_x = size[0]
         self.size_y = size[1]
         self.num_regions = num_regions
@@ -314,10 +318,13 @@ class World:
                 & (Query()["y_coord"] == y_coord),
             )
         else:
-            logger.warning(
+            logger.error(
                 f"Agent {agent_id} is not in harvesting range for the resource at {(x_coord, y_coord)}."
             )
-            return
+            raise ValueError(
+                f"Agent {agent_id} is not in harvesting range for the resource at {(x_coord, y_coord)}."
+            )
+        return
 
         # Publish resource harvest message
         resource_harvested_message = ResourceHarvestedMessage(
@@ -363,7 +370,7 @@ class World:
 
     def _load_resource_observation(
         self, agent_location: tuple[int, int], visibility_range: int
-    ):
+    ) -> list[ResourceObservation]:
         """Load resource observation from database given coordinates and visibility range of an agent"""
         table = self._db.table(settings.tinydb.tables.resource_table)
 
@@ -384,14 +391,18 @@ class World:
             resource_distance = self._compute_distance(
                 agent_location, resource_location
             )
-
             res_obs = ResourceObservation(
                 type=ObservationType.RESOURCE,
                 location=resource_location,
                 distance=resource_distance,
+                being_harvested=resource["being_harvested"],
+                num_harvester=len(resource["harvester"]),
                 id=resource["id"],
                 energy_yield=resource["energy_yield"],
                 available=resource["availability"],
+                required_agents=resource["required_agents"],
+                harvesting_area=resource["harvesting_area"],
+                mining_time=resource["mining_time"],
             )
             resource_observations.append(res_obs)
 
@@ -399,7 +410,7 @@ class World:
 
     def _load_agent_observation(
         self, agent_id: str, agent_location: tuple[int, int], visibility_range: int
-    ):
+    ) -> list[AgentObservation]:
         """Load agent observation from database given coordinates and visibility range of an agent"""
         table = self._db.table(settings.tinydb.tables.agent_table)
         # Filter agents based on agents location and visibility range
@@ -424,13 +435,13 @@ class World:
                 distance=agent_distance,
                 id=agent["id"],
                 name=agent["name"],
-                relationship_status="Friendly",
+                relationship_status="Stranger",
             )
             agent_observations.append(agent_obs)
 
         return agent_observations
 
-    def load_agent_context(self, agent_id: str):
+    def load_agent_context(self, agent_id: str) -> list[Observation]:
         """Load agent context from database"""
         context = []
 
@@ -441,13 +452,13 @@ class World:
             )
 
         # Load agent's resource observations
-        context.append(
+        context.extend(
             self._load_resource_observation(
                 (agent["x_coord"], agent["y_coord"]), agent["visibility_range"]
             )
         )
         # Load agent's agent observations
-        context.append(
+        context.extend(
             self._load_agent_observation(
                 agent["id"],
                 (agent["x_coord"], agent["y_coord"]),
@@ -592,7 +603,9 @@ class World:
             raise ValueError(f"Agent {agent_id} is not placed in the world.")
         # Check if destination is valid
         if not self._check_coordinates(destination):
-            raise ValueError(f"Destination {destination} is invalid.")
+            raise ValueError(
+                f"Destination {destination} is invalid. World boundary reached."
+            )
         # Check if destination is occupied
 
         # Get agent location and distance to destination
@@ -602,9 +615,10 @@ class World:
         agent_range = agent["range_per_move"]
 
         if agent_location == destination:
-            logger.warning(
+            logger.error(
                 f"Agent {agent_id} is already at the destination {destination}."
             )
+
             raise ValueError(
                 f"Agent {agent_id} is already at the destination {destination}."
             )

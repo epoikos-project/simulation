@@ -1,4 +1,5 @@
 # models/orchestrator.py
+from typing import Dict, List
 import uuid
 import json
 from loguru import logger
@@ -30,6 +31,12 @@ class Orchestrator:
         self.nats = nats
         self.milvus = milvus
 
+    def find_attribute(self, arr: List[dict], name: str) -> int:
+        return next(
+            (int(a["value"]) for a in arr if a.get("name") == name),
+            0,
+        )
+
     async def run_from_config(self, config_name: str) -> str:
         cfg = Configuration(self.db).get(config_name)
         if not cfg:
@@ -46,7 +53,7 @@ class Orchestrator:
         return sim_id
 
     async def _create_simulation(self) -> str:
-        sim_id = uuid.uuid4().hex
+        sim_id = uuid.uuid4().hex[:8]
         sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)
         # create simulation (which may initialize a default world)
         await sim.create()
@@ -94,14 +101,9 @@ class Orchestrator:
         model_entry = AvailableModels.get(model_name)
 
         # 2) read out hunger attr
-        hunger = next(
-            (
-                int(a["value"])
-                for a in agent_cfg.get("attributes", [])
-                if a.get("name") == "hunger"
-            ),
-            0,
-        )
+        attributes = agent_cfg["attributes"]
+        hunger = self.find_attribute(attributes, "hunger")
+        energy_level = self.find_attribute(attributes, "energyLevel")
 
         # 3) spawn count times
         for _ in range(agent_cfg.get("count", 1)):
@@ -113,9 +115,9 @@ class Orchestrator:
                 model=model_entry,
             )
             agent.name = agent_cfg.get("name", "") + str(uuid.uuid4().hex)[:2]
-            agent.hunger = hunger
             await agent.create(
                 hunger=hunger,
+                energy_level=energy_level,
                 visibility_range=agent_cfg.get("visibility_range", 5),
                 range_per_move=agent_cfg.get("range_per_move", 1),
             )

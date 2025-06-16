@@ -23,7 +23,7 @@ class Task:
         self, id: str, db: TinyDB, nats: Nats, plan_id: str, simulation_id: str
     ):
         if not id:
-            self.id = uuid.uuid4().hex
+            self.id = uuid.uuid4().hex[:8]
         else:
             self.id = id
         self._db: TinyDB = db

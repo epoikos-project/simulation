@@ -8,6 +8,7 @@ from config.openai import AvailableModels
 from models.agent import Agent
 from loguru import logger
 
+
 class AgentFactory:
     def __init__(
         self,

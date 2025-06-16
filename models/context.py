@@ -10,6 +10,7 @@ class ObservationType(str, Enum):
     RESOURCE = "Resource"
     AGENT = "Agent"
     OBSTACLE = "Obstacle"
+    ERROR = "Execution_Error"
     OTHER = "Other"
 
 
@@ -23,14 +24,67 @@ class ResourceObservation(_BaseObs):
     type: Literal[ObservationType.RESOURCE]
     energy_yield: int
     available: bool
+    required_agents: int
+    harvesting_area: int
+    mining_time: int
+    being_harvested: bool
+    num_harvester: int
 
     def __str__(self) -> str:
-        return (
-            f"{self.type.value} with ID {self.id} "
-            f"at location {self.location} with a distance of {self.distance}. "
-            f"Its energy yield is {self.energy_yield} and it is currently "
-            f"{'available' if self.available else 'unavailable'}. "
-        )
+        availability = "available" if self.available else "unavailable"
+        obs = f"[ID: {self.id}; type: {self.type.value}; location: {self.location}; distance: {self.distance}; energy yield: {self.energy_yield}; mining time: {self.mining_time}; {availability}]"
+
+        if self._check_harvest_possible():
+            obs += self._harvest_possible()
+        else:
+            obs += self._harvest_not_possible()
+
+        return obs
+
+    def _check_harvest_possible(self) -> bool:
+        """Check if the can be harvested by the agent under current conditions"""
+        if self.distance > self.harvesting_area:
+            return False
+        elif self.being_harvested and self.num_harvester >= self.required_agents:
+            return False
+        elif self.num_harvester == 0 and self.required_agents > 1:
+            return False
+        elif not self.available:
+            return False
+        else:
+            return True
+
+    def _harvest_possible(self) -> str:
+        """Message to be sent to the agent if the resource can be harvested"""
+        resource_message = ""
+
+        if self.being_harvested:
+            resource_message = f""" This resource is currently harvested by {self.num_harvester} agent(s)
+                                  and requires only ONE additional harvester."""
+        else:
+            resource_message = (
+                f""" This resource is directly available for harvesting!"""
+            )
+
+        return resource_message
+
+    def _harvest_not_possible(self) -> str:
+        """Message to be sent to the agent if the resource cannot be harvested"""
+        # Resource is not available
+        if not self.available:
+            return f""" This resource is currently NOT available for harvesting!"""
+        # Resource is out of range
+        if self.distance > self.harvesting_area:
+            return f""" The resource is too far away to harvest! (you have to be within {self.harvesting_area} units)"""
+        # Resource is being harvested by enough agents
+        if self.being_harvested and self.num_harvester >= self.required_agents:
+            return f""" The resource is currently harvested by {self.num_harvester} agent(s)
+                        and is therefore not available."""
+        if self.num_harvester == 0 and self.required_agents > 1:
+            return f""" The resource is currently not harvested by anybody
+                        but requires {self.required_agents} harvester."""
+
+        return f""" The resource is currently NOT available for harvesting!"""
 
 
 class AgentObservation(_BaseObs):
@@ -39,11 +93,7 @@ class AgentObservation(_BaseObs):
     relationship_status: str = RelationshipType.STRANGER.value
 
     def __str__(self) -> str:
-        return (
-            f"{self.type.value} with ID {self.id} and name {self.name} "
-            f"at location {self.location} with a distance of {self.distance}. "
-            f"Your relationship status to this person is {self.relationship_status}. "
-        )
+        return f"[ID: {self.id}; type: {self.type.value}; location: {self.location}; distance: {self.distance}; name: {self.name}; relationship status: {self.relationship_status}]"
 
 
 class ObstacleObservation(_BaseObs):
@@ -51,10 +101,7 @@ class ObstacleObservation(_BaseObs):
     # no extra fields
 
     def __str__(self) -> str:
-        return (
-            f"{self.type.value} with ID {self.id} "
-            f"Location {self.location}, distance {self.distance}. "
-        )
+        return f"[type: {self.type.value}; location: {self.location}; distance: {self.distance}]"
 
 
 class OtherObservation(_BaseObs):
@@ -62,19 +109,11 @@ class OtherObservation(_BaseObs):
     # no extra fields
 
     def __str__(self) -> str:
-        return (
-            f"{self.type.value} with ID {self.id} "
-            f"Location {self.location}, distance {self.distance}. "
-        )
+        return f"[type: {self.type.value}; location: {self.location}; distance: {self.distance}]"
 
 
 Observation = Annotated[
-    Union[
-        ResourceObservation,
-        AgentObservation,
-        ObstacleObservation,
-        OtherObservation,
-    ],
+    Union[ResourceObservation, AgentObservation, ObstacleObservation, OtherObservation],
     Field(discriminator="type"),
 ]
 
@@ -86,7 +125,6 @@ class Message(BaseModel):
     sender_id: str
 
 
-# TODO: consider if the following would make more sense to be part of their actual classes. In general it can be considered if the context classes can be combined with the actual ones, if the exist.
 class PlanContext(BaseModel):
     """A plan for resource acquisition."""
 
@@ -98,11 +136,7 @@ class PlanContext(BaseModel):
     total_payoff: int = 0
 
     def __str__(self) -> str:
-        return (
-            f"Plan with ID: {self.id}, owner: {self.owner}, goal: {self.goal}, total expected payoff: {self.total_payoff}. \n"
-            f"This plan has the following participants: {', '.join(self.participants)}. \n"
-            f"This plan has the following tasks: {', '.join(self.tasks)}. \n"
-        )
+        return f"[ID: {self.id}; owner: {self.owner}; goal: {self.goal}; total expected payoff: {self.total_payoff}; participants: {', '.join(self.participants)}; tasks: {', '.join(self.tasks)}]"
 
 
 class TaskContext(BaseModel):
@@ -116,10 +150,4 @@ class TaskContext(BaseModel):
     worker: str | None = None
 
     def __str__(self) -> str:
-        return (
-            f"Task with ID: {self.id}, target: {self.target}, payoff: {self.payoff}. "
-            f"This task is part of plan: {self.plan_id}. "
-            f"This task is assigned to agent: {self.worker}. "
-        )
-
-    # TODO: this probably needs improvement
+        return f"[ID: {self.id}; target: {self.target}; payoff: {self.payoff}; plan_id: {self.plan_id}; worker: {self.worker}]"

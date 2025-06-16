@@ -28,8 +28,8 @@ class Simulation:
         self._runner = SimulationRunner()
         self._runner.set_simulation(self)
 
-        # self.world = self._initialize_world()
-        self.world = None
+        self.world = self._initialize_world()
+        # self.world = None
         self.collection_name = f"agent_{self.id}"
 
     def get_db(self) -> TinyDB:
@@ -38,12 +38,13 @@ class Simulation:
     def get_nats(self) -> NatsBroker:
         return self._nats
 
-    async def _initialize_world(self):
+    def _initialize_world(self):
         world = World(simulation_id=self.id, nats=self._nats, db=self._db)
         try:
             world.load()
         except ValueError:
-            await world.create(size=(25, 25))
+            logger.warning("Error loading world.")
+            # await world.create(size=(25, 25))
         return world
 
     def _initialize_tick_counter(self):
@@ -111,7 +112,7 @@ class Simulation:
 
     async def create(self):
         logger.info(f"Creating Simulation {self.id}")
-        self.world = await self._initialize_world()
+        # self.world = self._initialize_world()
         self._create_in_db()
         await self._create_stream()
 
