@@ -1,7 +1,6 @@
-# messages/simulation_clusters.py
 from typing import List
 from pydantic import BaseModel
-from messages.message_base import MessageBase
+from messages import MessageBase
 
 class SimulationClustersMessage(MessageBase):
     """

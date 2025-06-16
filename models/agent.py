@@ -348,7 +348,6 @@ class Agent:
 
     def _get_energy_consumption(self) -> int:
         """Get the energy consumption of the agent with regard to the region."""
-        location = self.get_location()
         table = self._db.table(settings.tinydb.tables.region_table)
         # find the region containing the agent's current location
         x, y = self.get_location()
