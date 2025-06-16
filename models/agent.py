@@ -1,43 +1,39 @@
-import uuid
 import json
+import uuid
+from datetime import datetime
+from functools import partial
+from typing import Callable, List, cast
 
 from autogen_agentchat.agents import AssistantAgent
-from autogen_ext.models.openai import OpenAIChatCompletionClient
-from autogen_core.tools import BaseTool, FunctionTool
 from autogen_core import CancellationToken
+from autogen_core.tools import BaseTool, FunctionTool
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from langfuse.decorators import langfuse_context, observe
+from loguru import logger
 from pymilvus import MilvusClient
 from tinydb import TinyDB
 from tinydb.queries import Query
 
-from langfuse.decorators import observe, langfuse_context
-
 from clients.nats import Nats
 from config.base import settings
 from config.openai import AvailableModels, ModelEntry, ModelName
-
 from messages.agent import AgentCreatedMessage
-from datetime import datetime
-from typing import cast, Callable, List
-from functools import partial
-
-from models.context import Observation, Message, ObservationType
+from models.context import Message, Observation, ObservationType
+from models.plan import get_plan
 from models.prompting import (
-    SYSTEM_MESSAGE,
     DESCRIPTION,
+    SYSTEM_MESSAGE,
+    ConversationContextPrompt,
     HungerContextPrompt,
+    MemoryContextPrompt,
     ObservationContextPrompt,
     PlanContextPrompt,
-    ConversationContextPrompt,
-    MemoryContextPrompt,
 )
+from models.relationship import RelationshipManager  # , RelationshipType
+from models.task import get_task
+from models.utils import extract_tool_call_info
 from models.world import World
 from tools import available_tools
-from models.relationship import RelationshipManager  # , RelationshipType
-from models.utils import extract_tool_call_info
-from models.plan import get_plan
-from models.task import get_task
-
-from loguru import logger
 
 
 class Agent:
@@ -346,18 +342,20 @@ class Agent:
             self.autogen_agent._tools = [
                 tool for tool in self.autogen_agent._tools if tool.name != "make_plan"
             ]
-        # remove add_task if the current plan already has more than 2 tasks
-        if self.plan_ownership_task_count > 2:
+        # remove add_task if the current plan already has more than 2 tasks or if the agent does not own a plan
+        if self.plan_ownership_task_count > 2 or not self.plan_ownership:
             self.autogen_agent._tools = [
                 tool for tool in self.autogen_agent._tools if tool.name != "add_task"
             ]
-        # remove take_on_task if the agent is not part of any plan
-        if len(self.plan_participation) == 0:
-            self.autogen_agent._tools = [
-                tool
-                for tool in self.autogen_agent._tools
-                if tool.name != "take_on_task"
-            ]
+        # remove take_on_task if the agent is not part of any plan -> does not make sense as agent can only become part of a plan if it takes on a task
+        # could consider simplification/ restriction to only allow taking on one task at a time
+        # if len(self.plan_participation) == 0:
+        #     self.autogen_agent._tools = [
+        #         tool
+        #         for tool in self.autogen_agent._tools
+        #         if tool.name != "take_on_task"
+        #     ]
+
         # remove start_conversation if the agent does not observe any other agents or if already in active conversation
         # TODO: check if this works correctly after communication rework
         if (
