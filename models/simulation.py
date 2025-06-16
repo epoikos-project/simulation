@@ -4,7 +4,7 @@ from nats.js.api import StreamConfig
 from pymilvus import MilvusClient
 from tinydb import TinyDB
 from tinydb.queries import Query
-from config.base import settings
+from config.base import settings, CLUSTER_OPTIMIZATION
 from messages.simulation import (
     SimulationStartedMessage,
     SimulationStoppedMessage,
@@ -15,6 +15,7 @@ from models.simulation_runner import SimulationRunner
 from models.world import World
 import asyncio
 import shutil
+from models.db_utils import safe_update, ConcurrentWriteError
 
 
 class Simulation:
@@ -61,6 +62,8 @@ class Simulation:
                 "collection_name": self.collection_name,
                 "running": False,
                 "tick": 0,
+                # optimistic concurrency version
+                "version": 0,
             }
         )
 
@@ -144,9 +147,17 @@ class Simulation:
         return simulation.get("running", False)
 
     async def tick(self):
-        """Tick the simulation.
+        """
+        Sequential (fallback) world→agents tick workflow:
+        1) backup the current DB state
+        2) increment and persist the simulation tick counter
+        3) world.tick() to update global resources/state
+        4) broadcast a central SimulationTickMessage
+        5) for each agent (in sorted ID order): load and trigger the agent
+        6) perform periodic DB backups after each full agent round
 
-        This method is called by the SimulationRunner for every tick.
+        When cluster_optimization=True, per-cluster workers handle world and agent ticks asynchronously,
+        and cluster-based SimulationTickMessages are published instead.
         """
         # backup db of the current tick
         self._backup_file("data/tinydb/db.json", "data/tinydb/db_backup_tick-1.json")
@@ -155,31 +166,48 @@ class Simulation:
         self._tick_counter += 1
         logger.debug(f"[SIM {self.id}] Tick {self._tick_counter}")
 
-        # persist tick counter
+        # persist tick counter (optimistic concurrency)
         sim_table = self._db.table(settings.tinydb.tables.simulation_table)
-        sim_table.update({"tick": self._tick_counter}, Query()["id"] == self.id)
+        cond = Query()["id"] == self.id
+        try:
+            safe_update(sim_table, cond, {"tick": self._tick_counter})
+        except ConcurrentWriteError as e:
+            logger.error(f"Concurrent update conflict on simulation {self.id}: {e}")
+            raise
 
-        # broadcast tick event
-        # World state is now updated by per-cluster/agent workers directly;
-        # remove central world.tick to avoid global synchronization barrier.
+        # ---------- fallback world→agents tick sequence ----------
+        # Only when not using asynchronous cluster optimization:
+        if not CLUSTER_OPTIMIZATION:
+            # 1) world tick: update global resources/state
+            await self.world.tick()
+            # 2) broadcast central SimulationTickMessage
+            tick_msg = SimulationTickMessage(id=self.id, tick=self._tick_counter)
+            await self._nats.publish(
+                tick_msg.model_dump_json(), tick_msg.get_channel_name()
+            )
 
         # ---------- agents ----------
         agent_table = self._db.table(settings.tinydb.tables.agent_table)
         agent_rows = agent_table.search(Query().simulation_id == self.id)
 
-        async def run_agent(row):
-            agent = Agent(
-                milvus=self._milvus,
-                db=self._db,
-                nats=self._nats,
-                simulation_id=self.id,
-                id=row["id"],
-            )
-            agent.load()
-            await agent.trigger()
+        # execute each agent sequentially for deterministic fallback behavior
+        # sort agents by ID to ensure consistent order
+        agent_rows.sort(key=lambda r: r.get("id"))
+        for row in agent_rows:
+            try:
+                agent = Agent(
+                    milvus=self._milvus,
+                    db=self._db,
+                    nats=self._nats,
+                    simulation_id=self.id,
+                    id=row["id"],
+                )
+                agent.load()
+                await agent.trigger()
+            except Exception as e:
+                logger.error(f"Error ticking agent {row['id']} at tick {self._tick_counter}: {e}")
 
-        tasks = [run_agent(row) for row in agent_rows]
-        # backup db once every agent was ticked and keep the last two backups
+        # backup DB once every full round of agent ticks
         if agent_rows and (self._tick_counter % len(agent_rows) == 0):
             self._backup_file(
                 "data/tinydb/db_backup_step-1.json", "data/tinydb/db_backup_step-2.json"
@@ -187,4 +215,3 @@ class Simulation:
             self._backup_file(
                 "data/tinydb/db.json", "data/tinydb/db_backup_step-1.json"
             )
-        await asyncio.gather(*tasks)

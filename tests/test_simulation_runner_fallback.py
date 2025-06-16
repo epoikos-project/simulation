@@ -1,6 +1,7 @@
 import pytest
 
-from config.base import settings
+import config.base as base
+from config.base import settings, CLUSTER_OPTIMIZATION
 from models.simulation_runner import SimulationRunner
 
 
@@ -26,8 +27,8 @@ class FakeSim:
 
 @pytest.mark.asyncio
 async def test_runner_synchronous_fallback(monkeypatch):
-    # Turn off cluster optimization
-    monkeypatch.setattr(settings, "cluster_optimization", False)
+    # Turn off cluster optimization via code-level flag
+    monkeypatch.setattr(base, "CLUSTER_OPTIMIZATION", False)
 
     fake = FakeSim()
     runner = SimulationRunner()

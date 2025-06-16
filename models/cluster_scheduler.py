@@ -33,6 +33,15 @@ class ClusterScheduler:
     async def start(self):
         # 1) initial clusters
         raw = self.cluster_manager.compute_clusters()
+        init_msg = SimulationClustersMessage(
+            id=self.simulation_id,
+            tick=0,
+            clusters=[list(c) for c in raw],
+        )
+        await self.world._nats.publish(
+            subject=init_msg.get_channel_name(),
+            message=init_msg.model_dump_json(),
+        )
         clusters = {frozenset(c) for c in raw}
         for c in clusters:
             self._cluster_ticks[c] = 0
@@ -204,14 +213,17 @@ class ClusterScheduler:
         agents = self.cluster_manager._load_agents()
         agent_map = {a["id"]: a for a in agents}
         for other, other_tick in self._cluster_ticks.items():
+            # only consider clusters that are strictly behind in ticks
             if other is cluster or other_tick >= my_tick:
                 continue
+            lag = my_tick - other_tick
             for aid in cluster:
                 for bid in other:
                     a = agent_map[aid]
                     b = agent_map[bid]
                     dist = abs(a["x"] - b["x"]) + abs(a["y"] - b["y"])
-                    threshold = a["vis_range"] + a["max_move"]
+                    # dynamic threshold: agents could meet within lag ticks
+                    threshold = a["vis_range"] + lag * a["max_move"]
                     if dist <= threshold:
                         return True
         return False

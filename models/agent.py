@@ -40,6 +40,7 @@ from models.relationship import RelationshipManager, RelationshipType
 from models.utils import extract_tool_call_info
 
 from loguru import logger
+from models.db_utils import safe_update, ConcurrentWriteError
 
 
 class Agent:
@@ -151,6 +152,8 @@ class Agent:
                 "y_coord": location[1],
                 "visibility_range": self.visibilty_range,
                 "range_per_move": self.range_per_move,
+                # optimistic concurrency version
+                "version": 0,
             }
         )
 
@@ -425,7 +428,7 @@ class Agent:
         """Get the agent's energy level."""
         table = self._db.table(settings.tinydb.tables.agent_table)
         agent = table.get(
-            Query().id == self.id & Query().simulation_id == self.simulation_id
+            (Query().id == self.id) & (Query().simulation_id == self.simulation_id)
         )
         return agent.get("energy_level", 0) if agent else 0
 
@@ -433,22 +436,24 @@ class Agent:
         """Update the agent's energy level."""
         self.energy_level = self._get_energy() + energy_delta
         table = self._db.table(settings.tinydb.tables.agent_table)
-        table.update(
-            {"energy_level": self.energy_level},
-            Query().id == self.id,
-            Query().simulation_id == self.simulation_id,
-        )
+        cond = (Query().id == self.id) & (Query().simulation_id == self.simulation_id)
+        try:
+            safe_update(table, cond, {"energy_level": self.energy_level})
+        except ConcurrentWriteError as e:
+            logger.error(f"Concurrent update conflict on agent {self.id}: {e}")
+            raise
 
     def _get_energy_consumption(self) -> int:
         """Get the energy consumption of the agent with regard to the region."""
         table = self._db.table(settings.tinydb.tables.region_table)
+        # find the region containing the agent's current location
+        x, y = self.get_location()
         region = table.get(
-            Query().simulation_id
-            == self.simulation_id & Query().x_1
-            <= self.location[0] & Query().x_2
-            >= self.location[0] & Query().y_1
-            <= self.location[1] & Query().y_2
-            >= self.location[1]
+            (Query().simulation_id == self.simulation_id)
+            & (Query().x_1 <= x)
+            & (Query().x_2 >= x)
+            & (Query().y_1 <= y)
+            & (Query().y_2 >= y)
         )
         energy_cost = region["region_energy_cost"] if region else 0
         return energy_cost

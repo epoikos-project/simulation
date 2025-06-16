@@ -4,7 +4,7 @@ import threading
 from loguru import logger
 from tinydb import Query, TinyDB
 
-from config import settings
+from config.base import settings, CLUSTER_OPTIMIZATION, MAX_STEPS
 from typing import Optional, TYPE_CHECKING
 from models.cluster_executor import ClusterExecutor
 from models.cluster_scheduler import ClusterScheduler
@@ -62,22 +62,37 @@ class SimulationRunner:
 
     async def _run_tick_loop(self):
         sim = self.simulation
-        # 1) make world once
-        await sim._initialize_world()
+        # 1) initialize or load the world once and store on simulation
+        sim.world = await sim._initialize_world()
         # 2) create our out-of-order scheduler just once
-        if settings.cluster_optimization:
+        # how many ticks to run (None for infinite)
+        max_steps = MAX_STEPS
+
+        if CLUSTER_OPTIMIZATION:
             executor = ClusterExecutor(sim.get_db(), sim.get_nats(), sim._milvus)
             scheduler = ClusterScheduler(sim.world, executor)
 
-            # 3a) optimized: start the cluster scheduler (spawns cluster loops + controller)
+            # optimized: start scheduler (spawns cluster loops + controller)
             await scheduler.start()
-            # let the scheduler run until stopped
-            while sim.is_running():
+            # run up to max_steps if set, else until stopped
+            from time import perf_counter
+            start = perf_counter()
+            ticks = 0
+            while sim.is_running() and (max_steps is None or ticks < max_steps):
                 await asyncio.sleep(self._tick_interval)
+                ticks += 1
+            elapsed = perf_counter() - start
+            logger.info(f"Benchmark: completed {ticks} cluster ticks in {elapsed:.3f}s")
             # tear down optimized scheduler
             await scheduler.stop()
         else:
-            # 3b) fallback: synchronous tick on world + agents
-            while sim.is_running():
+            # synchronous fallback: sequential world→agents ticks (see Simulation.tick doc)
+            from time import perf_counter
+            start = perf_counter()
+            ticks = 0
+            while sim.is_running() and (max_steps is None or ticks < max_steps):
                 await sim.tick()
                 await asyncio.sleep(self._tick_interval)
+                ticks += 1
+            elapsed = perf_counter() - start
+            logger.info(f"Benchmark: completed {ticks} sequential ticks in {elapsed:.3f}s")

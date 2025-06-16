@@ -10,16 +10,16 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        # use double underscore for nested settings; single-underscore envs will be top-level and ignored
-        env_nested_delimiter="__",
+        env_nested_delimiter="_",
         extra="ignore",
     )
     nats: NatsSettings = NatsSettings()
     tinydb: TinyDBSettings = TinyDBSettings()
     milvus: MilvusSettings = MilvusSettings()
     openai: OpenAISettings = OpenAISettings()
-    # Feature flag: enable cluster-based asynchronous optimization
-    cluster_optimization: bool = True
 
 
 settings = Settings()
+# Flags
+CLUSTER_OPTIMIZATION: bool = True
+MAX_STEPS: int | None = None

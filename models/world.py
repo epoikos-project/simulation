@@ -15,6 +15,7 @@ from tinydb import Query, TinyDB
 
 from config.base import settings
 from messages.world import WorldCreatedMessage
+from models.db_utils import safe_update, ConcurrentWriteError
 
 
 class World:
@@ -84,6 +85,8 @@ class World:
                 "num_regions": num_regions,
                 "total_resources": total_resources,
                 "base_energy_cost": base_energy_cost,
+                # optimistic concurrency version
+                "version": 0,
             }
         )
 
@@ -625,10 +628,16 @@ class World:
 
         # Update agent location in database
         table_agents = self._db.table(settings.tinydb.tables.agent_table)
-        table_agents.update(
-            {"x_coord": new_location[0], "y_coord": new_location[1]},
-            Query()["id"] == agent_id,
-        )
+        cond = Query()["id"] == agent_id
+        try:
+            safe_update(
+                table_agents,
+                cond,
+                {"x_coord": new_location[0], "y_coord": new_location[1]},
+            )
+        except ConcurrentWriteError as e:
+            logger.error(f"Concurrent move conflict on agent {agent_id}: {e}")
+            raise
 
         agent_moved_message = AgentMovedMessage(
             simulation_id=self.simulation_id,

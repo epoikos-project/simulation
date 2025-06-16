@@ -1,15 +1,10 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 from dataclasses import dataclass
 from typing import Dict, Literal
 from autogen_core.models import ModelInfo
 
 
 class OpenAISettings(BaseSettings):
-    # use double underscore for nested vars; ignore any other OPENAI_* envs
-    model_config = SettingsConfigDict(
-        env_nested_delimiter="__",
-        extra="ignore",
-    )
     baseurl: str = ""
     apikey: str = ""
 

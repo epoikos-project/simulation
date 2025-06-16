@@ -48,7 +48,16 @@ class Orchestrator:
     async def _create_simulation(self) -> str:
         sim_id = uuid.uuid4().hex
         sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)
+        # create simulation (which may initialize a default world)
         await sim.create()
+        # clean up any default world to allow configuration-driven creation
+        default_world = World(simulation_id=sim_id, db=self.db, nats=self.nats)
+        try:
+            default_world.load()
+            default_world.delete()
+        except ValueError:
+            # no pre-existing world to remove
+            pass
         logger.info(f"Orchestrator: created simulation {sim_id}")
 
         sim_msg = SimulationCreatedMessage(id=sim_id)
