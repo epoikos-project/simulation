@@ -4,6 +4,7 @@ import json
 
 from faststream.nats import NatsBroker
 from loguru import logger
+from sqlmodel import Session
 from messages.world.agent_moved import AgentMovedMessage
 from messages.world.agent_placed import AgentPlacedMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
@@ -20,6 +21,17 @@ from tinydb import Query, TinyDB
 
 from config.base import settings
 from messages.world import WorldCreatedMessage
+from schemas.world import World as WorldModel
+from schemas.simulation import Simulation as SimulationModel
+
+async def create_world(model: WorldModel, db: Session):
+    db.add(model)
+    db.commit()
+
+async def bootstrap_world_for_simulation(simulation: SimulationModel, db: Session):
+    world = WorldModel(simulation_id=simulation.id)
+    db.add(world)
+    db.commit()
 
 
 class World:

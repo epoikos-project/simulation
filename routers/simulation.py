@@ -4,7 +4,8 @@ from fastapi import APIRouter
 from loguru import logger
 from pydantic import BaseModel
 from tinydb import Query
-from clients import Nats, Milvus, DB
+from clients import Nats, Milvus
+from clients.sqlite import DB
 from models.simulation import Simulation
 from models.world import World
 

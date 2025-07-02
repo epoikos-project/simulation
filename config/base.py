@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from config.neo4j import Neo4jSettings
 from config.openai import OpenAISettings
 from config.tinydb import TinyDBSettings
 from config.milvus import MilvusSettings
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     tinydb: TinyDBSettings = TinyDBSettings()
     milvus: MilvusSettings = MilvusSettings()
     openai: OpenAISettings = OpenAISettings()
+    neo4j: Neo4jSettings = Neo4jSettings()
 
 
 settings = Settings()

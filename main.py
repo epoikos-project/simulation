@@ -3,11 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from faststream.nats.fastapi import NatsRouter
+from sqlmodel import SQLModel
 
 from clients import milvus, tinydb
+from clients.sqlite import create_db_and_tables
 import routers
 import subscribers
 from config.base import settings
+from config.sqlite import engine
 
 router = NatsRouter(settings.nats.url)
 
@@ -40,6 +43,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
 
 # Include routers
 app.include_router(routers.simulation.router)
