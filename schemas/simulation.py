@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from schemas.agent import Agent
     from schemas.world import World
     from schemas.resource import Resource
+    from schemas.conversation import Conversation
 
 
 class Simulation(BaseModel, table=True):
@@ -20,5 +21,9 @@ class Simulation(BaseModel, table=True):
     )
     world: "World" = Relationship(back_populates="simulation", cascade_delete=True)
     resources: list["Resource"] = Relationship(
+        back_populates="simulation", cascade_delete=True
+    )
+
+    conversations: list["Conversation"] = Relationship(
         back_populates="simulation", cascade_delete=True
     )

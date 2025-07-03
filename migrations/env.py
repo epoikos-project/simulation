@@ -21,7 +21,19 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 
 # Import schemas to ensure they are registered with SQLModel
-from schemas import agent, simulation, resource, world, region, configuration
+from schemas import (
+    agent,
+    simulation,
+    resource,
+    world,
+    region,
+    configuration,
+    relationship,
+    task,
+    plan,
+    message,
+    conversation,
+)
 
 target_metadata = SQLModel.metadata
 

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 class Resource(BaseModel, table=True):
     simulation_id: str = Field(foreign_key="simulation.id")
+
     world_id: str = Field(foreign_key="world.id")
     region_id: str = Field(foreign_key="region.id")
     x_coord: int = Field(default=0)

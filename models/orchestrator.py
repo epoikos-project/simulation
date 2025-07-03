@@ -13,13 +13,14 @@ from tinydb import TinyDB
 from config.openai import AvailableModels
 from models.configuration import Configuration
 
+from engine.runners import SimulationRunner
+
 from messages.simulation import SimulationCreatedMessage
 
 from services.agent import AgentService
 from services.region import RegionService
 from services.resource import ResourceService
 from services.simulation import SimulationService
-from services.simulation_runner import SimulationRunner
 from services.world import WorldService
 
 from schemas.simulation import Simulation

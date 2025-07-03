@@ -4,9 +4,11 @@ from sqlmodel import Field, Relationship
 from schemas.base import BaseModel
 
 if TYPE_CHECKING:
+    from schemas.plan import Plan
     from schemas.resource import Resource
     from schemas.simulation import Simulation
     from schemas.relationship import Relationship
+    from schemas.task import Task
 
 
 class Agent(BaseModel, table=True):
@@ -15,6 +17,10 @@ class Agent(BaseModel, table=True):
     harvesting_resource_id: str = Field(
         foreign_key="resource.id", default=None, nullable=True
     )
+    participating_in_plan_id: str = Field(
+        foreign_key="plan.id", default=None, nullable=True
+    )
+
     name: str = Field()
     model: str = Field(default=None, nullable=True)
     energy_level: int = Field(default=20)
@@ -28,8 +34,10 @@ class Agent(BaseModel, table=True):
     simulation: "Simulation" = Relationship(back_populates="agents")
     harvesting_resource: "Resource" = Relationship(back_populates="harvesters")
     relationships_a: list["Relationship"] = Relationship(
-        back_populates="agent_a", sa_relationship_kwargs={"cascade": "delete"}
+        back_populates="agent_a", cascade_delete=True
     )
     relationships_b: list["Relationship"] = Relationship(
-        back_populates="agent_b", sa_relationship_kwargs={"cascade": "delete"}
+        back_populates="agent_b", cascade_delete=True
     )
+    participating_in_plan: "Plan" = Relationship(back_populates="participants")
+    task: "Task" = Relationship(back_populates="worker")
