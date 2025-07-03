@@ -98,7 +98,14 @@ class Agent:
             raise ValueError(f"Agent with id {self.id} not found in database.")
         return agent.get("last_error", "")
 
-    def _initialize_llm(self, model_name: ModelName):
+    def _get_model_name(self) -> ModelName:
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table.get(Query()["id"] == self.id)
+        if not agent:
+            raise ValueError(f"Agent with id {self.id} not found in database.")
+        return agent.get("model", "")
+
+    def _initialize_llm(self, model_name: ModelName, use_tools: bool = True):
         model = AvailableModels.get(model_name)
         self._client = OpenAIChatCompletionClient(
             model=model.name,
@@ -107,8 +114,12 @@ class Agent:
             api_key=settings.openai.apikey,
         )
 
-        tools: List[BaseTool] = [self.make_bound_tool(tool) for tool in available_tools]
-        # TODO: make tools adaptive to current context: eg. make plan only if no plan exists
+        if use_tools:
+            tools: List[BaseTool] = [
+                self.make_bound_tool(tool) for tool in available_tools
+            ]
+        else:
+            tools = []
 
         self.autogen_agent = AssistantAgent(
             name=f"{self.name}",
@@ -179,7 +190,7 @@ class Agent:
             raise ValueError(f"Agent with id {self.id} not found in database.")
         return (agent["x_coord"], agent["y_coord"])
 
-    def load(self):
+    def load(self, use_tools: bool):
         logger.debug(f"Loading agent {self.id}")
         try:
             result = self._load_from_db()
@@ -201,7 +212,8 @@ class Agent:
             raise ValueError()
 
         try:
-            self._initialize_llm(self.model)
+
+            self._initialize_llm(self._get_model_name(), use_tools=use_tools)
         except Exception as e:
             logger.error(f"Error initializing LLM for agent {self.id}: {e}")
             raise ValueError(f"Error initializing LLM for agent {self.id}: {e}")
@@ -324,14 +336,7 @@ class Agent:
             MemoryContextPrompt().build(self.memory),
         ]
         context = "\n".join(parts)
-        error = self.get_last_error()
 
-        if error:
-            context += (
-                "\n ERROR!! Last turn you experienced the following error: " + error
-            )
-
-        context += "\nGiven this information now decide on your next action by performing a tool call."
         return context
 
     def _adapt_tools(self):
@@ -415,7 +420,7 @@ class Agent:
         return energy_cost
 
     @observe(as_type="generation", name="Agent Tick")
-    async def trigger(self):
+    async def trigger(self, reason: bool, reasoning_output: str | None = None):
         self._db.clear_cache()
         logger.debug(f"Ticking agent {self.id}")
 
@@ -429,7 +434,23 @@ class Agent:
         self.update_agent_energy(self._get_energy_consumption())
         context = self.build_context()
 
-        self._adapt_tools()
+        if reason:
+            tools_summary = "These are possible actions you can perform in the world: "
+            # TODO: maybe provide a few more details on the tools
+            for tool in available_tools:
+                tools_summary += tool.__name__ + ", "
+            context += f"{tools_summary}\nGiven this information reason about your next action. Think step by step. Answer with with a comprehensive explanation about what and why you want to do next."
+        else:
+            error = self.get_last_error()
+
+            if error:
+                context += (
+                    "\n ERROR!! Last turn you experienced the following error: " + error
+                )
+            if reasoning_output:
+                context += f"\nYour reasoning about what to do next: {reasoning_output}"
+            context += "\nGiven this reasoning now decide on your next action by performing a tool call."
+            self._adapt_tools()
 
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
@@ -454,9 +475,13 @@ class Agent:
                 "system_message": self.autogen_agent._system_messages[0].content,
                 "description": self.autogen_agent._description,
                 "context": context,
-                "tools": [tool.schema for tool in self.autogen_agent._tools],
+                "tools": (
+                    [tool.schema for tool in self.autogen_agent._tools]
+                    if not reason
+                    else tools_summary
+                ),
             },
-            metadata=extract_tool_call_info(output),
+            metadata=extract_tool_call_info(output) if not reason else {},
         )
         return output
 
