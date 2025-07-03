@@ -105,7 +105,7 @@ class Agent:
             raise ValueError(f"Agent with id {self.id} not found in database.")
         return agent.get("model", "")
 
-    def _initialize_llm(self, model_name: ModelName, use_tools: bool = True):
+    def _initialize_llm(self, model_name: ModelName):
         model = AvailableModels.get(model_name)
         self._client = OpenAIChatCompletionClient(
             model=model.name,
@@ -113,13 +113,6 @@ class Agent:
             base_url=settings.openai.baseurl,
             api_key=settings.openai.apikey,
         )
-
-        if use_tools:
-            tools: List[BaseTool] = [
-                self.make_bound_tool(tool) for tool in available_tools
-            ]
-        else:
-            tools = []
 
         self.autogen_agent = AssistantAgent(
             name=f"{self.name}",
@@ -132,9 +125,16 @@ class Agent:
             ),
             reflect_on_tool_use=False,  # False as our current tools do not return text
             model_client_stream=False,
-            tools=tools,
+            tools=[],  # defaults to no tools
             # memory=[]
         )
+
+    def toggle_tools(self, use_tools: bool):
+        tools: List[BaseTool] = [self.make_bound_tool(tool) for tool in available_tools]
+        if use_tools:
+            self.autogen_agent._tools = tools
+        else:
+            self.autogen_agent._tools = []
 
     def make_bound_tool(
         self, func: Callable, *, name: str | None = None, description: str | None = None
@@ -190,7 +190,7 @@ class Agent:
             raise ValueError(f"Agent with id {self.id} not found in database.")
         return (agent["x_coord"], agent["y_coord"])
 
-    def load(self, use_tools: bool):
+    def load(self):
         logger.debug(f"Loading agent {self.id}")
         try:
             result = self._load_from_db()
@@ -213,7 +213,7 @@ class Agent:
 
         try:
 
-            self._initialize_llm(self._get_model_name(), use_tools=use_tools)
+            self._initialize_llm(self._get_model_name())
         except Exception as e:
             logger.error(f"Error initializing LLM for agent {self.id}: {e}")
             raise ValueError(f"Error initializing LLM for agent {self.id}: {e}")
@@ -439,7 +439,7 @@ class Agent:
             # TODO: maybe provide a few more details on the tools
             for tool in available_tools:
                 tools_summary += tool.__name__ + ", "
-            context += f"{tools_summary}\nGiven this information reason about your next action. Think step by step. Answer with with a comprehensive explanation about what and why you want to do next."
+            context += f"{tools_summary}\nGiven this information reason about your next action. Think step by step. Answer with a comprehensive explanation about what and why you want to do next."
         else:
             error = self.get_last_error()
 
