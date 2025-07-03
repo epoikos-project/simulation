@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from schemas.simulation import Simulation
     from schemas.resource import Resource
 
+
 class Region(BaseModel, table=True):
     simulation_id: str = Field(foreign_key="simulation.id")
     world_id: str = Field(foreign_key="world.id")
@@ -20,7 +21,6 @@ class Region(BaseModel, table=True):
     resource_cluster: int = Field(default=1)
 
     region_energy_cost: float = Field(default=1.0)
-
 
     world: "World" = Relationship(back_populates="regions")
     resources: list["Resource"] = Relationship(back_populates="region")

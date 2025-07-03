@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from schemas.simulation import Simulation
     from schemas.region import Region
 
+
 class World(BaseModel, table=True):
     simulation_id: str = Field(foreign_key="simulation.id")
 
@@ -16,4 +17,6 @@ class World(BaseModel, table=True):
 
     regions: list["Region"] = Relationship(back_populates="world", cascade_delete=True)
     simulation: "Simulation" = Relationship(back_populates="world")
-    resources: list["Resource"] = Relationship(back_populates="world", cascade_delete=True)
+    resources: list["Resource"] = Relationship(
+        back_populates="world", cascade_delete=True
+    )

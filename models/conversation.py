@@ -132,8 +132,7 @@ class Conversation:
         """
         # Filter messages between the two agents
         relevant_messages = [
-            m for m in self.messages
-            if m["sender_id"] in [agent1_id, agent2_id]
+            m for m in self.messages if m["sender_id"] in [agent1_id, agent2_id]
         ]
         if not relevant_messages:
             return {

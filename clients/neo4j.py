@@ -8,7 +8,9 @@ from config import settings
 URI = settings.neo4j.uri
 AUTH = (settings.neo4j.username, settings.neo4j.password)
 
+
 def get_driver():
     return GraphDatabase.driver(URI, auth=AUTH)
+
 
 Neo4j = Annotated[GraphDatabase, Depends(get_driver)]

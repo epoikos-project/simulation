@@ -4,7 +4,7 @@ import json
 
 from faststream.nats import NatsBroker
 from loguru import logger
-from sqlmodel import Session
+from sqlmodel import Session, select
 from messages.world.agent_moved import AgentMovedMessage
 from messages.world.agent_placed import AgentPlacedMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
@@ -15,114 +15,57 @@ from models.context import (
     Observation,
 )
 from models.map import Map
-from models.region import Region
-from models.resource import Resource
+from schemas.agent import Agent
+from schemas.region import Region
+from schemas.resource import Resource
 from tinydb import Query, TinyDB
 
 from config.base import settings
-from messages.world import WorldCreatedMessage
 from schemas.world import World as WorldModel
-from schemas.simulation import Simulation as SimulationModel
+from services.base import BaseService
+from services.region import RegionService
 
 
-async def create_world(model: WorldModel, db: Session):
-    db.add(model)
-    db.commit()
+class WorldService(BaseService[WorldModel]):
 
-
-class World:
-    def __init__(self, simulation_id: str, db: TinyDB, nats: NatsBroker):
-        self.id = None
-        self.simulation_id = simulation_id
-        self._db = db
-        self._nats = nats
-
-        self.size_x: int = None
-        self.size_y: int = None
-        self.num_regions: int = None
-        self.total_resources: int = None
-        self.base_energy_cost: int = None
-
-    async def create(
+    def create_regions_for_world(
         self,
-        size: tuple[int, int],
-        num_regions: int = 1,
-        total_resources: int = 10,
+        world: WorldModel,
+        num_regions: int,
         base_energy_cost: int = 1,
+        total_resources: int = 25,
+        commit: bool = True,
     ):
-        """Create a world in the simulation"""
-        # Check if a world already exists for given simulation
-        table = self._db.table(settings.tinydb.tables.world_table)
-        if table.contains(Query()["simulation_id"] == self.simulation_id):
-            raise ValueError(
-                logger.warning(
-                    f"Cannot create world. A world already exists for simulation {self.simulation_id}."
-                )
-            )
+        region_sizes = self._divide_grid_into_regions(
+            [world.size_x, world.size_y], num_regions
+        )
 
-        self.id = uuid.uuid4().hex[:8]
-        self.size_x = size[0]
-        self.size_y = size[1]
-        self.num_regions = num_regions
-        self.total_resources = total_resources
-        self.base_energy_cost = base_energy_cost
-
-        # Divide the world into regions
-        regions = self._divide_grid_into_regions(size, num_regions)
-
-        # Create regions
-        for r in regions:
+        regions = []
+        for r in region_sizes:
             region = Region(
-                simulation_id=self.simulation_id,
-                world_id=self.id,
-                db=self._db,
-                nats=self._nats,
+                simulation_id=world.simulation_id,
+                world_id=world.id,
+                x_1=r["x1"],
+                x_2=r["x2"],
+                y_1=r["y1"],
+                y_2=r["y2"],
+                region_energy_cost=base_energy_cost,
             )
-            await region.create(
-                x_coords=(r["x1"], r["x2"]),
-                y_coords=(r["y1"], r["y2"]),
-                base_energy_cost=base_energy_cost,
+            region_service = RegionService(db=self._db, nats=self._nats)
+            region_service.create(
+                model=region,
+                commit=False,
+            )
+
+            region_service.create_resources_for_region(
+                region=region,
                 num_resources=total_resources // num_regions,
-                resource_regen=10,
+                commit=False,
             )
-
-        logger.info(f"Creating world {self.id} for simulation {self.simulation_id}")
-        table.insert(
-            {
-                "simulation_id": self.simulation_id,
-                "id": self.id,
-                "size_x": size[0],
-                "size_y": size[1],
-                "num_regions": num_regions,
-                "total_resources": total_resources,
-                "base_energy_cost": base_energy_cost,
-            }
-        )
-
-        world_create_message = WorldCreatedMessage(
-            id=self.id, simulation_id=self.simulation_id, size=size
-        )
-        await world_create_message.publish(self._nats)
-
-    def get_instance(self):
-        """Get world instance"""
-        return {
-            "id": self.id,
-            "simulation_id": self.simulation_id,
-            "size_x": self.size_x,
-            "size_y": self.size_y,
-            "base_energy_cost": self.base_energy_cost,
-        }
-
-    def delete(self):
-        """Delete world and all its regions and resources from database"""
-        logger.info(f"Deleting world {self.id}")
-        table_world = self._db.table(settings.tinydb.tables.world_table)
-        table_regions = self._db.table(settings.tinydb.tables.region_table)
-        table_resources = self._db.table(settings.tinydb.tables.resource_table)
-        table_world.remove(Query()["id"] == self.id)
-        table_regions.remove(Query()["world_id"] == self.id)
-        table_resources.remove(Query()["world_id"] == self.id)
+            regions.append(region)
+        if commit:
+            self._db.commit()
+        return regions
 
     def _divide_grid_into_regions(
         self, size: tuple[int, int], num_regions: int, min_region_size: int = 3
@@ -159,33 +102,7 @@ class World:
         split_region(0, size[0], 0, size[1], num_regions)
         return regions
 
-    def _load_from_db(self):
-        table = self._db.table(settings.tinydb.tables.world_table)
-        world = table.search(Query()["simulation_id"] == self.simulation_id)
-        if not world:
-            raise ValueError(
-                f"World with id {self.id} for simulation {self.simulation_id} not found in database."
-            )
-        return world[0]
-
-    def load(self):
-        """Load world from database"""
-        logger.info(f"Loading world for simulation {self.simulation_id}")
-        try:
-            result = self._load_from_db()
-            self.id = result["id"]
-            self.simulation_id = result["simulation_id"]
-            self.size_x = result["size_x"]
-            self.size_y = result["size_y"]
-            self.base_energy_cost = result["base_energy_cost"]
-
-        except ValueError:
-            logger.warning(
-                f"World {self.id} not found in database. Creating new world."
-            )
-            raise ValueError(
-                f"World {self.id} not found in database. Creating new world."
-            )
+    ###TODO
 
     # This function is not used for the actual simulation
     # but is used to tick the world via the endpoint
@@ -439,23 +356,6 @@ class World:
         )
         return context
 
-    def get_random_agent_location(self):
-        """Get random agent location in world that is not occupied by an agent or resource"""
-        location = self._get_random_location()
-
-        while (
-            location in self._get_agent_coords()
-            or location in self._get_resource_coords()
-        ):
-            location = self._get_random_location()
-        return location
-
-    def _get_random_location(self):
-        """Get random location in world"""
-        x = random.randint(0, self.size_x - 1)
-        y = random.randint(0, self.size_y - 1)
-        return (x, y)
-
     def get_resources(self):
         """Get all resources in world"""
         table_resources = self._db.table(settings.tinydb.tables.resource_table)
@@ -478,43 +378,6 @@ class World:
             & (Query()["id"] == agent_id)
         )
         return agent if agent else None
-
-    async def place_agent(self, agent_id: str, agent_location: tuple[int, int]):
-        """Place agent in world"""
-        table_agents = self._db.table(settings.tinydb.tables.agent_table)
-        agent = table_agents.get(
-            (Query()["simulation_id"] == self.simulation_id)
-            & (Query()["id"] == agent_id)
-        )
-        # Check if agent exists for simulation
-        if not agent:
-            raise ValueError(
-                f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
-            )
-        agent_coords = self._get_agent_coords()[:-1]
-        resource_coords = self._get_resource_coords()
-
-        # Check if agent coordinates are valid
-        # should be unnecessary since agent should be created with valid coordinates
-        # but we check it here to be sure or when function is called directly
-        if not self._check_coordinates(agent_location):
-            raise ValueError(
-                f"Agent {agent_id} coordinates {agent_location} are invalid."
-            )
-
-        # Check if agent coordinates are already occupied
-        if agent_location in agent_coords or agent_location in resource_coords:
-            raise ValueError(
-                f"Agent {agent_id} coordinates {agent_location} are already occupied."
-            )
-        # Publish agent placement message
-        agent_placed_message = AgentPlacedMessage(
-            id=agent_id,
-            name=agent.get("name"),
-            location=agent_location,
-            simulation_id=self.simulation_id,
-        )
-        await agent_placed_message.publish(self._nats)
 
     async def remove_agent(self, agent_id: str):
         """Remove agent from world"""

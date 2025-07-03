@@ -49,6 +49,7 @@ app.add_middleware(
 def on_startup():
     create_db_and_tables()
 
+
 # Include routers
 app.include_router(routers.simulation.router)
 app.include_router(routers.world.router)

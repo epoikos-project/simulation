@@ -4,6 +4,7 @@ from config.base import settings
 import openai
 from typing import List, Dict
 
+
 def analyze_conversation_with_llm(messages: List[Dict]) -> Dict:
     """
     Given a list of messages (dicts with sender_id, content, timestamp),
@@ -12,9 +13,9 @@ def analyze_conversation_with_llm(messages: List[Dict]) -> Dict:
       - relationship_type: str ("Positive" or "Negative")
     """
     # Compose the prompt for the LLM
-    conversation_text = "\n".join([
-        f"{msg['sender_id']}: {msg['content']}" for msg in messages
-    ])
+    conversation_text = "\n".join(
+        [f"{msg['sender_id']}: {msg['content']}" for msg in messages]
+    )
     prompt = f"""
 Given the following conversation between two agents, analyze the overall sentiment and relationship type.
 Relationship types: Positive, Negative.
@@ -37,7 +38,8 @@ Conversation:
         max_tokens=100,
     )
     import json
+
     # Extract the JSON from the LLM response
-    content = response['choices'][0]['message']['content']
+    content = response["choices"][0]["message"]["content"]
     result = json.loads(content)
     return result

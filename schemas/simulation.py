@@ -9,11 +9,16 @@ if TYPE_CHECKING:
     from schemas.world import World
     from schemas.resource import Resource
 
+
 class Simulation(BaseModel, table=True):
     collection_name: str = Field(default="")
     running: bool = Field(default=False)
     tick: int = Field(default=0)
 
-    agents: list["Agent"] = Relationship(back_populates="simulation", cascade_delete=True)
+    agents: list["Agent"] = Relationship(
+        back_populates="simulation", cascade_delete=True
+    )
     world: "World" = Relationship(back_populates="simulation", cascade_delete=True)
-    resources: list["Resource"] = Relationship(back_populates="simulation", cascade_delete=True)
+    resources: list["Resource"] = Relationship(
+        back_populates="simulation", cascade_delete=True
+    )

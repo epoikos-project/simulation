@@ -6,7 +6,6 @@ import logging
 
 from clients import Nats
 from clients.tinydb import DB
-from models.simulation import Simulation
 from models.world import World
 
 router = APIRouter(prefix="/simulation/{simulation_id}/world", tags=["World"])

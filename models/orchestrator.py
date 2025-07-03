@@ -1,4 +1,5 @@
 # models/orchestrator.py
+import random
 from typing import Dict, List
 import uuid
 import json
@@ -6,14 +7,23 @@ from loguru import logger
 
 from faststream.nats import NatsBroker
 from pymilvus import MilvusClient
+from sqlmodel import Session
 from tinydb import TinyDB
 
 from config.openai import AvailableModels
 from models.configuration import Configuration
-from models.simulation import Simulation
-from models.world import World
-from models.agent import Agent
+
 from messages.simulation import SimulationCreatedMessage
+
+from services.agent import AgentService
+from services.region import RegionService
+from services.resource import ResourceService
+from services.simulation import SimulationService
+from services.world import WorldService
+
+from schemas.simulation import Simulation
+from schemas.world import World
+from schemas.agent import Agent
 
 
 class Orchestrator:
@@ -26,10 +36,19 @@ class Orchestrator:
       5. Emitting NATS events at each step
     """
 
-    def __init__(self, db: TinyDB, nats: NatsBroker, milvus: MilvusClient):
-        self.db = db
+    def __init__(
+        self, db: TinyDB, sqlite: Session, nats: NatsBroker, milvus: MilvusClient
+    ):
+        self.tinydb = db
+        self._db = sqlite
         self.nats = nats
         self.milvus = milvus
+
+        self.simulation_service = SimulationService(self._db, self.nats, self.milvus)
+        self.world_service = WorldService(self._db, self.nats)
+        self.region_service = RegionService(self._db, self.nats)
+        self.agent_service = AgentService(self._db, self.nats)
+        self.resource_service = ResourceService(self._db, self.nats)
 
     def find_attribute(self, arr: List[dict], name: str) -> int:
         return next(
@@ -38,55 +57,50 @@ class Orchestrator:
         )
 
     async def run_from_config(self, config_name: str) -> str:
-        cfg = Configuration(self.db).get(config_name)
+        cfg = Configuration(self.tinydb).get(config_name)
         if not cfg:
-            raise ValueError(f"Configuration '{config_name}' not found")
+            raise ValueError(f"Config '{config_name}' not found")
 
-        # 1) create the sim & world
-        sim_id = await self._create_simulation()
-        await self._create_world(cfg, sim_id)
+        simulation = self.simulation_service.create(
+            Simulation(),
+            commit=False,
+        )
 
-        # 2) spawn agents
+        world = self.world_service.create(
+            World(simulation_id=simulation.id), commit=False
+        )
+        self._db.add(world)
+
+        regions = self.world_service.create_regions_for_world(
+            world=world,
+            num_regions=cfg.get("settings", {}).get("num_regions", 1),
+            commit=False,
+        )
+        self._db.add_all(regions)
+
+        resources = []
+        for region in regions:
+            # 2. Create resources for each region
+            num_resources = cfg.get("settings", {}).get("num_resources", 10)
+            resources.extend(
+                self.region_service.create_resources_for_region(
+                    region=region,
+                    num_resources=num_resources,
+                    commit=False,
+                )
+            )
+            logger.info(f"Orchestrator: resources created for region {region.id}")
+
+        self._db.add_all(resources)
+
         for agent_cfg in cfg.get("agents", []):
-            await self._spawn_agents(sim_id, agent_cfg)
+            await self._spawn_agents(simulation.id, world, agent_cfg)
 
-        return sim_id
+        self._db.commit()
 
-    async def _create_simulation(self) -> str:
-        sim_id = uuid.uuid4().hex[:8]
-        sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)
-        await sim.create()
-        logger.info(f"Orchestrator: created simulation {sim_id}")
+        return simulation.id
 
-        sim_msg = SimulationCreatedMessage(id=sim_id)
-        await self.nats.publish(
-            sim_msg.model_dump_json(),
-            sim_msg.get_channel_name(),
-        )
-        return sim_id
-
-    async def _create_world(self, cfg: dict, sim_id: str):
-        ws = cfg.get("settings", {}).get("world", {})
-        world = World(simulation_id=sim_id, db=self.db, nats=self.nats)
-        await world.create(
-            size=tuple(ws.get("size", (25, 25))),
-            num_regions=ws.get("num_regions", 1),
-            total_resources=ws.get("total_resources", 25),
-        )
-        logger.info(f"Orchestrator: created world {world.id} for sim {sim_id}")
-
-        await self.nats.publish(
-            message=json.dumps(
-                {
-                    "type": "world_created",
-                    "simulation_id": sim_id,
-                    "world_id": world.id,
-                }
-            ),
-            subject=f"simulation.{sim_id}.world.created",
-        )
-
-    async def _spawn_agents(self, sim_id: str, agent_cfg: dict):
+    async def _spawn_agents(self, sim_id: str, world: World, agent_cfg: dict):
         # 1) choose model (fallback auf default)
         model_name = agent_cfg.get("model") or "llama-3.3-70b-instruct"
         model_entry = AvailableModels.get(model_name)
@@ -96,23 +110,37 @@ class Orchestrator:
         hunger = self.find_attribute(attributes, "hunger")
         energy_level = self.find_attribute(attributes, "energyLevel")
 
+        agents = []
         # 3) spawn count times
         for _ in range(agent_cfg.get("count", 1)):
+            name = agent_cfg.get("name", "") + str(uuid.uuid4().hex)[:2]
+            # Ensure unique (x, y) coordinates for each agent
+            attempts = 0
+            max_attempts = 100
+            while True:
+                x = random.randint(0, world.size_x - 1)
+                y = random.randint(0, world.size_y - 1)
+                if not any(a.x_coord == x and a.y_coord == y for a in agents):
+                    break
+                attempts += 1
+                if attempts >= max_attempts:
+                    raise RuntimeError(
+                        "Could not find unique coordinates for agent after 100 attempts"
+                    )
             agent = Agent(
-                milvus=self.milvus,
-                db=self.db,
-                nats=self.nats,
                 simulation_id=sim_id,
-                model=model_entry,
-            )
-            agent.name = agent_cfg.get("name", "") + str(uuid.uuid4().hex)[:2]
-            await agent.create(
+                model=model_entry.name,
                 hunger=hunger,
                 energy_level=energy_level,
                 visibility_range=agent_cfg.get("visibility_range", 5),
                 range_per_move=agent_cfg.get("range_per_move", 1),
+                name=name,
+                x_coord=x,
+                y_coord=y,
+                collection_name=f"simulation_{sim_id}_agent_{name}",
             )
-
+            agent = self.agent_service.create(agent, commit=False)
+            agents.append(agent)
             logger.info(f"Orchestrator: created agent {agent.id} ({agent.name})")
             await self.nats.publish(
                 message=json.dumps(
@@ -125,6 +153,7 @@ class Orchestrator:
                 ),
                 subject=f"simulation.{sim_id}.agent.created",
             )
+        self._db.add_all(agents)
 
     async def tick(self, sim_id: str):
         sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)

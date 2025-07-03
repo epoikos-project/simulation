@@ -18,6 +18,7 @@ async def list_milvus_collections(milvus: Milvus):
 
     return collections_with_stats
 
+
 @router.get("/n4o4j/connection/test")
 async def test_n4o4j_connection(n4o4j: Neo4j):
     """Test connection to N4O4J"""

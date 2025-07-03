@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from schemas.simulation import Simulation
     from schemas.region import Region
 
+
 class Resource(BaseModel, table=True):
     simulation_id: str = Field(foreign_key="simulation.id")
     world_id: str = Field(foreign_key="world.id")

@@ -3,11 +3,12 @@ import asyncio
 from fastapi import APIRouter
 from loguru import logger
 from pydantic import BaseModel
+from sqlmodel import select
 from tinydb import Query
 from clients import Nats, Milvus
 from clients.sqlite import DB
-from models.simulation import Simulation
-from models.world import World
+
+from services.simulation import SimulationService
 
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
 
@@ -26,8 +27,8 @@ class CreateWorldInput(BaseModel):
 @router.post("")
 async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):
     try:
-        simulation = Simulation(db=db, nats=broker, milvus=milvus, id=name)
-        await simulation.create()
+        simulation = SimulationService(db=db, nats=broker, milvus=milvus, id=name)
+        simulation.create_simulation()
     except Exception as e:
         logger.error(f"Error creating simulation: {e}")
         return {"message": f"Error creating simulation"}
@@ -37,8 +38,8 @@ async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):
 @router.get("")
 async def list_simulations(db: DB):
     try:
-        table = db.table("simulations")
-        simulations = table.all()
+        simulation_service = SimulationService(db=db, nats=None, milvus=None)
+        simulations = simulation_service.get_simulations()
     except Exception as e:
         logger.error(f"Error listing simulations: {e}")
         return {"message": f"Error listing simulations"}
@@ -48,8 +49,8 @@ async def list_simulations(db: DB):
 @router.get("/{id}")
 async def get_simulation(id: str, db: DB):
     try:
-        table = db.table("simulations")
-        simulation = table.get(Query().id == id)
+        simulation_service = SimulationService(db=db, nats=None, milvus=None)
+        simulation = simulation_service.get_simulation_by_id(id)
     except Exception as e:
         logger.error(f"Error getting simulation: {e}")
         return {"message": f"Error getting simulation"}
