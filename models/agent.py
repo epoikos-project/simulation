@@ -1,4 +1,3 @@
-import json
 import uuid
 from datetime import datetime
 from functools import partial
@@ -29,10 +28,13 @@ from models.prompting import (
     ObservationContextPrompt,
     PlanContextPrompt,
 )
-from models.relationship import RelationshipManager  # , RelationshipType
 from models.task import get_task
 from models.utils import extract_tool_call_info
 from models.world import World
+from clients.sqlite import engine
+from sqlmodel import Session
+from services.relationship import update_relationship
+from messages.agent.agent_communication import AgentCommunicationMessage
 from tools import available_tools
 
 
@@ -85,7 +87,6 @@ class Agent:
         # objective: str # could be some sort of description to guide the agents actions
         # personality: str # might want to use that later
 
-        self.relationship_manager = RelationshipManager()
 
     def set_last_error(self, msg: str):
         table = self._db.table(settings.tinydb.tables.agent_table)
@@ -462,25 +463,6 @@ class Agent:
 
     #### === Turn-based communication -> TODO: consider to rework this! === ###
     # TODO: check if conversation has id/ name of other agent so llm know who its talking to
-    async def send_message_to_agent(self, target_agent_id: str, content: str) -> str:
-        """Send a message to another agent and update relationship based on interaction."""
-        await self._nats.publish(
-            message=json.dumps(
-                {
-                    "content": content,
-                    "type": "agent_communication",
-                    "from_agent_id": self.id,
-                    "to_agent_id": target_agent_id,
-                }
-            ),
-            subject=f"simulation.{self.simulation_id}.agent.{target_agent_id}",
-        )
-        # Update relationship based on message content
-        # This is a simple implementation - in a real system, you might want to analyze
-        # the message content to determine the sentiment change
-        self.relationship_manager.update_relationship(self.id, target_agent_id, 0.1)
-
-        return target_agent_id
 
     def receive_conversation_context(self, conversation_id: str):
         table = self._db.table("agent_conversations")
@@ -560,15 +542,6 @@ class Agent:
 
         logger.info(f"Formatting {len(conversation['messages'])} previous messages")
 
-        # Include relationship information
-        relationship_info = "Relationship Information:\n"
-        for agent_id in conversation.get("agent_ids", []):
-            if agent_id != self.id:
-                relationship_status = self.get_relationship_status(agent_id)
-                relationship_info += (
-                    f"Your relationship with Agent {agent_id}: {relationship_status}\n"
-                )
-        context += relationship_info + "\n"
 
         for msg in conversation["messages"]:
             sender = (
@@ -580,20 +553,24 @@ class Agent:
         logger.info("Conversation formatted successfully")
         return context
 
-    def get_relationship_status(self, target_agent_id: str) -> str:
-        """Get the relationship status with another agent."""
-        relationship = self.relationship_manager.get_relationship(
-            self.id, target_agent_id
-        )
-        return relationship.relationship_type.value
 
-    def update_relationship(
-        self, target_agent_id: str, sentiment_change: float
-    ) -> None:
-        """Update the relationship with another agent."""
-        self.relationship_manager.update_relationship(
-            self.id, target_agent_id, sentiment_change
+
+    async def send_message_to_agent(self, target_agent_id: str, content: str) -> str:
+        """Send a message to another agent and update persistent relationship based on sentiment."""
+        # Publish standardized agent-to-agent communication message
+        msg = AgentCommunicationMessage(
+            id=self.id,
+            simulation_id=self.simulation_id,
+            to_agent_id=target_agent_id,
+            content=content,
         )
+        await msg.publish(self._nats)
+
+        # Update persistent relationship based on sentiment
+        with Session(engine) as session:
+            update_relationship(session, self.id, target_agent_id, content)
+
+        return target_agent_id
 
     def _store_message_in_conversation(self, conversation_id: str, content: str):
         """Store a message in the conversation"""

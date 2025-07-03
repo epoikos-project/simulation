@@ -6,6 +6,7 @@ from schemas.base import BaseModel
 if TYPE_CHECKING:
     from schemas.resource import Resource
     from schemas.simulation import Simulation
+    from schemas.relationship import Relationship
 
 
 class Agent(BaseModel, table=True):
@@ -26,3 +27,9 @@ class Agent(BaseModel, table=True):
 
     simulation: "Simulation" = Relationship(back_populates="agents")
     harvesting_resource: "Resource" = Relationship(back_populates="harvesters")
+    relationships_a: list["Relationship"] = Relationship(
+        back_populates="agent_a", sa_relationship_kwargs={"cascade": "delete"}
+    )
+    relationships_b: list["Relationship"] = Relationship(
+        back_populates="agent_b", sa_relationship_kwargs={"cascade": "delete"}
+    )

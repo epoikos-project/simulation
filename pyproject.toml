@@ -21,6 +21,10 @@ dependencies = [
     "neomodel>=5.5.0",
     "sqlmodel>=0.0.24",
     "alembic>=1.16.2",
+    "transformers>=4.30.0",
+    "torch>=2.0.0",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
 ]
 
 [dependency-groups]

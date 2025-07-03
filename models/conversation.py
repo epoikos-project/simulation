@@ -3,8 +3,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from tinydb.queries import Query
 from config.base import settings
-from models.relationship import RelationshipType
-from models.llm_utils import analyze_conversation_with_llm
+from models.sentiment import analyze_message_sentiment
 
 
 # TODO: instead of this custom implementation it might be worth it to consider using native autogen functionalities such as RoundRobinGroupChat
@@ -120,32 +119,3 @@ class Conversation:
             Query().id == self.id,
         )
 
-    def get_relationship_status(self, agent1_id: str, agent2_id: str) -> Dict:
-        """Get the relationship status between two specific agents in the conversation.
-
-        Returns:
-            Dict containing:
-            - total_sentiment: float (cumulative sentiment score)
-            - relationship_type: str (computed from LLM)
-            - interaction_count: int (number of interactions)
-            - last_interaction: str (timestamp of last interaction)
-        """
-        # Filter messages between the two agents
-        relevant_messages = [
-            m for m in self.messages if m["sender_id"] in [agent1_id, agent2_id]
-        ]
-        if not relevant_messages:
-            return {
-                "total_sentiment": 0.0,
-                "relationship_type": "Neutral",
-                "interaction_count": 0,
-                "last_interaction": None,
-            }
-        # Use LLM to analyze the conversation
-        llm_result = analyze_conversation_with_llm(relevant_messages)
-        return {
-            "total_sentiment": llm_result.get("sentiment_score", 0.0),
-            "relationship_type": llm_result.get("relationship_type", "Neutral"),
-            "interaction_count": len(relevant_messages),
-            "last_interaction": relevant_messages[-1]["timestamp"],
-        }

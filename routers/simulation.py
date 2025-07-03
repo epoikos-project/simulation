@@ -9,6 +9,7 @@ from clients import Nats, Milvus
 from clients.sqlite import DB
 
 from services.simulation import SimulationService
+from services.relationship import get_relationship_graph
 
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
 
@@ -68,6 +69,17 @@ async def delete_simulation(id: str, db: DB, milvus: Milvus, nats: Nats):
         logger.error(f"Error deleting simulation: {e}")
         return {"message": f"Error deleting simulation"}
     return {"message": "Simulation deleted successfully!"}
+
+
+@router.get("/{simulation_id}/relationship_graph")
+async def relationship_graph(
+    simulation_id: str,
+    db: DB,
+):
+    """Get the full relationship graph for all agents in a simulation"""
+    # simulation_id param provided to match path; not currently used to filter
+    graph = get_relationship_graph(db)
+    return graph
 
 
 @router.post("/{simulation_id}/replay")
