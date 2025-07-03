@@ -140,6 +140,7 @@ class Agent:
             description=DESCRIPTION.format(
                 id=self.id,
                 name=self.name,
+                location=self.get_location(),
                 # personality=self.personality
             ),
             reflect_on_tool_use=False,  # False as our current tools do not return text
@@ -577,6 +578,7 @@ class Agent:
                 description=DESCRIPTION.format(
                     id=self.id,
                     name=self.name,
+                    location=self.get_location(),
                     # personality=self.personality
                 ),
                 reflect_on_tool_use=False,  # False as our current tools do not return text
