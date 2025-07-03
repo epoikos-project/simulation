@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 from clients import Nats, DB, Milvus
+from clients import sqlite
 from clients.sqlite import DB as SQLiteDB
 from models.orchestrator import Orchestrator
 
@@ -21,8 +22,10 @@ async def run(config_name: str, db: DB, sqlite: SQLiteDB, nats: Nats, milvus: Mi
 
 
 @router.post("/tick/{simulation_id}")
-async def tick(simulation_id: str, db: DB, nats: Nats, milvus: Milvus):
-    orch = Orchestrator(db=db, nats=nats, milvus=milvus)
+async def tick(
+    simulation_id: str, db: DB, sqlite: SQLiteDB, nats: Nats, milvus: Milvus
+):
+    orch = Orchestrator(db=db, sqlite=sqlite, nats=nats, milvus=milvus)
     try:
         await orch.tick(simulation_id)
     except Exception as e:

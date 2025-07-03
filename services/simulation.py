@@ -6,6 +6,9 @@ from services.base import BaseMilvusService
 
 class SimulationService(BaseMilvusService[SimulationModel]):
 
+    def __init__(self, db, nats, milvus):
+        super().__init__(SimulationModel, db, nats, milvus)
+
     def get_simulations(self) -> list[SimulationModel]:
         """
         Retrieve all simulations from the database.

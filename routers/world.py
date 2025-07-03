@@ -5,8 +5,9 @@ from tinydb import Query
 import logging
 
 from clients import Nats
-from clients.tinydb import DB
-from models.world import World
+from clients.sqlite import DB
+
+from services.world import WorldService
 
 router = APIRouter(prefix="/simulation/{simulation_id}/world", tags=["World"])
 
@@ -49,24 +50,15 @@ async def publish_message(simulation_id: str, message: str, broker: Nats):
 async def get_world(simulation_id: str, db: DB, broker: Nats):
     """Get the world from the simulation"""
 
-    world = World(simulation_id=simulation_id, db=db, nats=broker)
-    world.load()
-    world_data = world.get_instance()
-    if not world_data:
-        return {"message": f"No world found for simulation {simulation_id}"}
-
-    table_regions = db.table("regions")
-    regions_data = table_regions.search(Query().simulation_id == simulation_id)
-
-    table_resources = db.table("resources")
-    resources_data = table_resources.search(Query().simulation_id == simulation_id)
+    world_service = WorldService(db=db, nats=broker)
+    world = world_service.get_by_simulation_id(simulation_id)
 
     return {
         "message": f"World retrieved for simulation {simulation_id}",
         "simulation_id": simulation_id,
-        "world_data": world_data,
-        "regions_data": regions_data,
-        "resources_data": resources_data,
+        "world_data": world,
+        "regions_data": world.regions,
+        "resources_data": world.resources,
     }
 
 

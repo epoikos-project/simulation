@@ -1,4 +1,5 @@
 import random
+from typing import override
 import uuid
 import json
 
@@ -27,6 +28,18 @@ from services.region import RegionService
 
 
 class WorldService(BaseService[WorldModel]):
+
+    def __init__(self, db: Session, nats: NatsBroker):
+        super().__init__(WorldModel, db=db, nats=nats)
+
+    @override
+    def get_by_simulation_id(self, simulation_id: str) -> WorldModel:
+        """Get world by simulation ID"""
+        statement = select(WorldModel).where(WorldModel.simulation_id == simulation_id)
+        world = self._db.exec(statement).first()
+        if not world:
+            raise ValueError(f"World for simulation {simulation_id} not found.")
+        return world
 
     def create_regions_for_world(
         self,

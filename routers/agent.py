@@ -6,8 +6,10 @@ from tinydb import Query
 
 import clients
 from clients import Nats
+from clients.sqlite import DB
 from models.agent import Agent
 from models.world import World
+from services.agent import AgentService
 
 router = APIRouter(prefix="/simulation/{simulation_id}/agent", tags=["Agent"])
 
@@ -37,20 +39,18 @@ async def create_agent(
 
 
 @router.get("/{id}")
-async def get_agent(id: str, simulation_id: str, db: clients.DB):
+async def get_agent(id: str, simulation_id: str, db: DB, broker: Nats):
     """Get an agent by ID"""
-    table = db.table("agents")
-    agent = table.get(Query().id == id and Query().simulation_id == simulation_id)
-    if agent is None:
-        return {"message": "Agent not found"}
-    return agent
+    agents_service = AgentService(db=db, nats=broker)
+    return agents_service.get_by_id(id)
 
 
 @router.get("")
-async def list_agents(simulation_id: str, db: clients.DB):
+async def list_agents(simulation_id: str, db: DB, broker: Nats):
     """List all agents in the simulation"""
-    table = db.table("agents")
-    agents = table.search(Query().simulation_id == simulation_id)
+    agents_service = AgentService(db=db, nats=broker)
+
+    agents = agents_service.get_by_simulation_id(simulation_id)
     return agents
 
 

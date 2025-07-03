@@ -8,6 +8,9 @@ from services.resource import ResourceService
 
 class RegionService(BaseService[Region]):
 
+    def __init__(self, db, nats):
+        super().__init__(Region, db, nats)
+
     def create_resources_for_region(
         self,
         region: Region,

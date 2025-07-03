@@ -11,8 +11,10 @@ from sqlmodel import Session, select
 from messages.simulation.simulation_tick import SimulationTickMessage
 from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
+from schemas.agent import Agent
 from schemas.simulation import Simulation as SimulationModel
 
+from services.agent import AgentService
 from services.resource import ResourceService
 from services.simulation import SimulationService
 from services.world import WorldService
@@ -20,11 +22,8 @@ from services.world import WorldService
 
 class SimulationRunner:
 
-    def __init__(
-        self, simulation_id: str, db: Session, nats: NatsBroker, milvus: MilvusClient
-    ):
+    def __init__(self, db: Session, nats: NatsBroker, milvus: MilvusClient):
         self._db = db
-        self.simulation_id = simulation_id
         self._nats = nats
         self._milvus = milvus
         self.simulation_service = SimulationService(db, nats, milvus)
@@ -33,16 +32,16 @@ class SimulationRunner:
         self._thread = None
         self._tick_interval = 1
 
-    async def tick_simulation(self):
+    async def tick_simulation(self, simulation_id: str):
         """Tick the simulation.
 
         This method is called by the SimulationRunner for every tick.
         """
-        simulation = self.simulation_service.ge_by_id(self.simulation_id)
+        simulation = self.simulation_service.get_by_id(simulation_id)
         simulation.tick += 1
         self._db.add(simulation)
         self._db.commit()
-        logger.debug(f"[SIM {self.simulation_id}] Tick {simulation.tick}")
+        logger.debug(f"[SIM {simulation_id}] Tick {simulation.tick}")
 
         # broadcast tick event
         tick_msg = SimulationTickMessage(id=self.id, tick=self._tick_counter)
@@ -60,20 +59,10 @@ class SimulationRunner:
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
 
-        # todo
-        # ---------- agents ----------
-        agent_table = self._db.table(settings.tinydb.tables.agent_table)
-        agent_rows = agent_table.search(Query().simulation_id == self.id)
+        agent_service = AgentService(self._db, self._nats, self._milvus)
+        agents = agent_service.get_by_simulation_id(simulation_id)
 
-        async def run_agent(row):
-            agent = Agent(
-                milvus=self._milvus,
-                db=self._db,
-                nats=self._nats,
-                simulation_id=self.id,
-                id=row["id"],
-                # model=None
-            )
+        async def run_agent(agent: Agent):
 
             # simple model
             model_name = agent._get_model_name()
@@ -102,15 +91,7 @@ class SimulationRunner:
             else:
                 logger.warning("Unknown model, skipping agent tick.")
 
-        tasks = [run_agent(row) for row in agent_rows]
-        # backup db once every agent was ticked and keep the last two backups
-        if agent_rows and (self._tick_counter % len(agent_rows) == 0):
-            self._backup_file(
-                "data/tinydb/db_backup_step-1.json", "data/tinydb/db_backup_step-2.json"
-            )
-            self._backup_file(
-                "data/tinydb/db.json", "data/tinydb/db_backup_step-1.json"
-            )
+        tasks = [run_agent(agent) for agent in agents]
         await asyncio.gather(*tasks)
 
     async def tick_world(self, world_id: str):
@@ -120,7 +101,7 @@ class SimulationRunner:
         world = self.world_service.get_world_by_id(world_id)
         tick_counter = world.simulation.tick
 
-        for r in world.resources:
+        for resource in world.resources:
             await resource.tick(tick=tick_counter)
 
         await self._nats.publish(

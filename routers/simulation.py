@@ -50,7 +50,7 @@ async def list_simulations(db: DB):
 async def get_simulation(id: str, db: DB):
     try:
         simulation_service = SimulationService(db=db, nats=None, milvus=None)
-        simulation = simulation_service.get_simulation_by_id(id)
+        simulation = simulation_service.get_by_id(id)
     except Exception as e:
         logger.error(f"Error getting simulation: {e}")
         return {"message": f"Error getting simulation"}
@@ -62,8 +62,8 @@ async def get_simulation(id: str, db: DB):
 @router.delete("/{id}")
 async def delete_simulation(id: str, db: DB, milvus: Milvus, nats: Nats):
     try:
-        simulation = simulation = Simulation(db=db, nats=nats, milvus=milvus, id=id)
-        await simulation.delete(milvus=milvus)
+        simulation = SimulationService(db=db, nats=nats, milvus=milvus)
+        simulation.delete(id)
     except Exception as e:
         logger.error(f"Error deleting simulation: {e}")
         return {"message": f"Error deleting simulation"}

@@ -19,6 +19,7 @@ from services.agent import AgentService
 from services.region import RegionService
 from services.resource import ResourceService
 from services.simulation import SimulationService
+from services.simulation_runner import SimulationRunner
 from services.world import WorldService
 
 from schemas.simulation import Simulation
@@ -156,8 +157,10 @@ class Orchestrator:
         self._db.add_all(agents)
 
     async def tick(self, sim_id: str):
-        sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)
-        await sim.tick()
+        sim = SimulationRunner(db=self._db, nats=self.nats, milvus=self.milvus).tick(
+            simulation_id=sim_id
+        )
+        await sim.tick_simulation()
         logger.info(f"Orchestrator: ticked simulation {sim_id}")
 
     async def start(self, sim_id: str):

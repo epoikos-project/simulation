@@ -17,12 +17,14 @@ class BaseService(Generic[T]):
 
     def __init__(
         self,
+        model_class: Type[T],
         db: Session,
         nats: NatsBroker,
     ):
         self._db = db
         self._nats = nats
-        self._model_name = self.__class__.__name__.lower()
+        self._model_class: Type[T] = model_class
+        self._model_name = self._model_class.__name__.lower()
 
     @property
     def db(self):
@@ -43,6 +45,17 @@ class BaseService(Generic[T]):
             logger.info(f"{self._model_name} {model.id} created successfully.")
         return model
 
+    def delete(self, id: str, commit: bool = True):
+        """
+        Delete a model instance from the database.
+        """
+        model = self.get_by_id(id)
+        self._db.delete(model)
+        if commit:
+            self._db.commit()
+            logger.info(f"{self._model_name} {model.id} deleted successfully.")
+        return True
+
     def get_by_id(self, id: str):
         """
         Retrieve a model instance by its ID.
@@ -51,6 +64,20 @@ class BaseService(Generic[T]):
         model = self._db.exec(statement).first()
         if not model:
             raise ValueError(f"{self._model_class.__name__} with ID {id} not found.")
+        return model
+
+    def get_by_simulation_id(self, simulation_id: str):
+        """
+        Retrieve a model instance by its simulation ID.
+        """
+        statement = select(self._model_class).where(
+            self._model_class.simulation_id == simulation_id
+        )
+        model = self._db.exec(statement).all()
+        if not model:
+            raise ValueError(
+                f"{self._model_class.__name__} with simulation ID {simulation_id} not found."
+            )
         return model
 
 
@@ -62,11 +89,12 @@ class BaseMilvusService(BaseService[T]):
 
     def __init__(
         self,
+        model_class: Type[T],
         db: Session,
         nats: NatsBroker,
         milvus: MilvusClient,
     ):
-        super().__init__(db, nats)
+        super().__init__(model_class, db, nats)
         self._milvus = milvus  # ✅ FIXED: assign milvus client
 
     @property
