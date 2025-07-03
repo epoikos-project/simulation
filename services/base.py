@@ -95,7 +95,7 @@ class BaseMilvusService(BaseService[T]):
         milvus: MilvusClient,
     ):
         super().__init__(model_class, db, nats)
-        self._milvus = milvus  # ✅ FIXED: assign milvus client
+        self._milvus = milvus
 
     @property
     def milvus(self):
