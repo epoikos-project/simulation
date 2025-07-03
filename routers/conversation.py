@@ -178,23 +178,11 @@ async def advance_conversation(
             response = "Starting conversation..."
         logger.info(f"Using fallback response: {response}")
 
-    # Analyze sentiment and relationship dynamics
-    logger.info("Analyzing sentiment and relationship dynamics")
+    from models.sentiment import analyze_message_sentiment
 
-    # Give the whole conversation to the LLM and let it decide sentiment and relationship
-    from models.llm_utils import analyze_conversation_with_llm
-
-    llm_result = analyze_conversation_with_llm(conversation.messages)
-    sentiment_score = llm_result.get("sentiment_score", 0.0)
-    relationship_type = llm_result.get("relationship_type", "Unknown")
-    trust_change = llm_result.get("trust_change", 0.0)
-    respect_change = llm_result.get("respect_change", 0.0)
-
-    # Add the message to the conversation with sentiment
+    sentiment_score = analyze_message_sentiment(response)
     logger.info("Adding message to conversation")
     conversation.add_message(current_agent_id, response, sentiment_score)
-
-    # Update relationships for all agents in the conversation
     logger.info("Updating relationships")
     for agent_id in conversation.agent_ids:
         if agent_id != current_agent_id:
@@ -202,11 +190,8 @@ async def advance_conversation(
                 current_agent_id, agent_id
             )
             relationship.update_sentiment(sentiment_score)
-            relationship.update_trust(trust_change)
-            relationship.update_respect(respect_change)
 
     # Optionally, log or store the relationship_type if needed
-    logger.info(f"LLM-inferred relationship type: {relationship_type}")
 
     # Check if we should end the conversation
     if not should_continue:
@@ -246,36 +231,3 @@ async def advance_conversation(
     }
 
 
-@router.get("/{conversation_id}/relationship/{agent1_id}/{agent2_id}")
-async def get_relationship_status(
-    simulation_id: str,
-    conversation_id: str,
-    agent1_id: str,
-    agent2_id: str,
-    db: clients.DB,
-):
-    """Get the relationship status between two agents in a conversation"""
-    # Load the conversation
-    conversation = Conversation.load(db, conversation_id)
-    if not conversation or conversation.simulation_id != simulation_id:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-
-    # Verify both agents are in the conversation
-    if (
-        agent1_id not in conversation.agent_ids
-        or agent2_id not in conversation.agent_ids
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="One or both agents are not participants in this conversation",
-        )
-
-    # Get relationship status
-    relationship_status = conversation.get_relationship_status(agent1_id, agent2_id)
-
-    return {
-        "conversation_id": conversation_id,
-        "agent1_id": agent1_id,
-        "agent2_id": agent2_id,
-        "relationship_status": relationship_status,
-    }

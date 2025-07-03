@@ -407,7 +407,6 @@ class World:
                 distance=agent_distance,
                 id=agent["id"],
                 name=agent["name"],
-                relationship_status="Stranger",
             )
             agent_observations.append(agent_obs)
 

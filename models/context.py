@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from enum import Enum
 from typing import Annotated, Union, Literal
-from models.relationship import RelationshipType
 
 # from typing import Optional
 
@@ -90,7 +89,6 @@ class ResourceObservation(_BaseObs):
 class AgentObservation(_BaseObs):
     type: Literal[ObservationType.AGENT]
     name: str
-    relationship_status: str = RelationshipType.STRANGER.value
 
     def __str__(self) -> str:
         return f"[ID: {self.id}; type: {self.type.value}; location: {self.location}; distance: {self.distance}; name: {self.name}; relationship status: {self.relationship_status}]"

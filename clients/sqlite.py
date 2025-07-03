@@ -4,7 +4,7 @@ from sqlmodel import Session, create_engine
 from sqlmodel.main import SQLModel
 
 # Have to import all models to ensure they are registered with SQLModel
-from schemas import agent, simulation, resource, world, region, configuration
+from schemas import agent, simulation, resource, world, region, configuration, relationship
 
 sqlite_file_name = "data/database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
