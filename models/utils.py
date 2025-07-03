@@ -50,7 +50,9 @@ def summarize_tool_call(call: Dict[str, Any]) -> str:
     """
     Summarize a tool-call dict by extracting the 'name' and its 'arguments'.
     """
-    req_key = next(k for k in call if "RequestEvent" in k)
+    req_key = next((k for k in call if "RequestEvent" in k), None)
+    if req_key is None:
+        raise ValueError("No key containing 'RequestEvent' found in the call.")
     req = call[req_key]
 
     name = req.get("name", "")

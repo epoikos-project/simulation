@@ -494,10 +494,10 @@ class Agent:
         self.set_last_error(error)
 
         if not reason and not error:
-            last_tool_call = extract_tool_call_info(output)  #
+            last_tool_call = extract_tool_call_info(output)
             last_tool_summary = summarize_tool_call(last_tool_call)
         else:
-            last_tool_call = None
+            last_tool_call = {}
             last_tool_summary = None
 
         langfuse_context.update_current_observation(

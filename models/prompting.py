@@ -215,7 +215,7 @@ class ConversationContextPrompt:
 class MemoryContextPrompt:
     def build(self, memory: str) -> str:
         if memory:
-            memory_description = "Memory: " + memory + "\n"
+            memory_description = f"Memory: {memory}\n"
         else:
             memory_description = (
                 "Memory: You do not have any memory about past observations and events. "
