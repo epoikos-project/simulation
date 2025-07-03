@@ -1,14 +1,13 @@
-from models.plan import get_plan
-from models.task import get_task
+from clients.nats import nats_broker
+from clients.tinydb import get_client
 from models.context import (
-    Observation,
     Message,
+    Observation,
     PlanContext,
     TaskContext,
 )
-from clients.tinydb import get_client
-from clients.nats import nats_broker
-
+from models.plan import get_plan
+from models.task import get_task
 
 SYSTEM_MESSAGE = (
     "You are a person living in an environment with other people. Your main goal is to survive in this environment by consuming resources in order to increase your energy level. "
@@ -216,7 +215,10 @@ class ConversationContextPrompt:
 class MemoryContextPrompt:
     def build(self, memory: str) -> str:
         if memory:
-            memory_description = "Memory: You have the following memory: " + memory
+            memory_description = "Memory: " + memory + "\n"
         else:
-            memory_description = "Memory: You do not have any memory about past observations and events. "
+            memory_description = (
+                "Memory: You do not have any memory about past observations and events. "
+                + "\n"
+            )
         return memory_description

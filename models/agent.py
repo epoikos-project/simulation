@@ -31,7 +31,7 @@ from models.prompting import (
 )
 from models.relationship import RelationshipManager  # , RelationshipType
 from models.task import get_task
-from models.utils import extract_tool_call_info
+from models.utils import extract_tool_call_info, summarize_tool_call
 from models.world import World
 from tools import available_tools
 
@@ -65,8 +65,6 @@ class Agent:
 
         self.collection_name = f"agent_{self.id}"
 
-        # TODO: a bit of a mix between ids, context objects etc. could maybe be improved
-        self.energy_level: int = 0
         self.energy_level: int = 0
         self.hunger: int = 0
         self.visibility_range: int = 0
@@ -97,6 +95,27 @@ class Agent:
         if not agent:
             raise ValueError(f"Agent with id {self.id} not found in database.")
         return agent.get("last_error", "")
+
+    def set_last_action(self, last_action_summary: str | None):
+        if last_action_summary:
+            table = self._db.table(settings.tinydb.tables.agent_table)
+            agent = table.get(Query()["id"] == self.id)
+            if not agent:
+                raise ValueError(f"Agent with id {self.id} not found in database.")
+            last_actions = agent.get("last_actions", [])
+            last_actions.append(last_action_summary)
+            if len(last_actions) > 5:
+                last_actions = last_actions[-5:]
+
+            table.update({"last_actions": last_actions}, Query()["id"] == self.id)
+
+    def get_last_actions(self):
+        table = self._db.table(settings.tinydb.tables.agent_table)
+        agent = table.get(Query()["id"] == self.id)
+        if not agent:
+            raise ValueError(f"Agent with id {self.id} not found in database.")
+        last_actions = agent.get("last_actions", [])
+        return last_actions
 
     def _get_model_name(self) -> ModelName:
         table = self._db.table(settings.tinydb.tables.agent_table)
@@ -171,6 +190,7 @@ class Agent:
                 "y_coord": location[1],
                 "visibility_range": self.visibility_range,
                 "range_per_move": self.range_per_move,
+                "last_actions": [],
             }
         )
 
@@ -212,7 +232,6 @@ class Agent:
             raise ValueError()
 
         try:
-
             self._initialize_llm(self._get_model_name())
         except Exception as e:
             logger.error(f"Error initializing LLM for agent {self.id}: {e}")
@@ -273,9 +292,9 @@ class Agent:
 
         # hunger level
         table = self._db.table(settings.tinydb.tables.agent_table)
-        docs = table.search(Query().id == self.id)
-        self.energy_level = docs[0].get("energy_level", 0) if docs else 0
-        self.hunger = docs[0].get("hunger", 0) if docs else 0
+        agent = table.search(Query().id == self.id)
+        self.energy_level = agent[0].get("energy_level", 0) if agent else 0
+        self.hunger = agent[0].get("hunger", 0) if agent else 0
 
         # observations
         self.observations.extend(self.world.load_agent_context(self.id))
@@ -318,6 +337,14 @@ class Agent:
                 for task_id in plan_obj.get_tasks()
             ]
             self.plan_ownership_task_count = len(tasks_obj)
+
+        # memory (lite)
+        last_actions = self.get_last_actions()
+        self.memory = (
+            f"These were the most recent actions you previously performed: {', '.join(last_actions)}"
+            if last_actions
+            else "You have not performed any actions yet."
+        )
 
     def build_context(self) -> str:
         """Get the context for the agent."""
@@ -466,6 +493,13 @@ class Agent:
 
         self.set_last_error(error)
 
+        if not reason and not error:
+            last_tool_call = extract_tool_call_info(output)  #
+            last_tool_summary = summarize_tool_call(last_tool_call)
+        else:
+            last_tool_call = None
+            last_tool_summary = None
+
         langfuse_context.update_current_observation(
             usage_details={
                 "input_tokens": self._client.actual_usage().prompt_tokens,
@@ -481,8 +515,12 @@ class Agent:
                     else tools_summary
                 ),
             },
-            metadata=extract_tool_call_info(output) if not reason else {},
+            metadata=last_tool_call,
         )
+
+        if not error and not reason:
+            self.set_last_action(last_tool_summary)
+
         return output
 
     #### === Turn-based communication -> TODO: consider to rework this! === ###

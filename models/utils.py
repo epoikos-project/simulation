@@ -1,3 +1,7 @@
+import json
+from typing import Any, Dict
+
+
 def extract_tool_call_info(data):
     """
     Pulls out:
@@ -40,3 +44,34 @@ def extract_tool_call_info(data):
         result["ToolCallExecutionEvent"] = result["ToolCallExecutionEvent"][0]
 
     return result
+
+
+def summarize_tool_call(call: Dict[str, Any]) -> str:
+    """
+    Summarize a tool-call dict by extracting the 'name' and its 'arguments'.
+    """
+    req_key = next(k for k in call if "RequestEvent" in k)
+    req = call[req_key]
+
+    name = req.get("name", "")
+    raw_args = req.get("arguments", "{}")
+
+    if isinstance(raw_args, str):
+        try:
+            args_dict = json.loads(raw_args)
+        except json.JSONDecodeError:
+            return f"{name}({raw_args})"
+    elif isinstance(raw_args, dict):
+        args_dict = raw_args
+    else:
+        return f"{name}({raw_args!r})"
+
+    parts = []
+    for k, v in args_dict.items():
+        if isinstance(v, str):
+            parts.append(f"{k}={json.dumps(v)}")
+        else:
+            parts.append(f"{k}={v!r}")
+
+    joined = ", ".join(parts)
+    return f"{name}({joined})"
