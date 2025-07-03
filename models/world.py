@@ -575,7 +575,7 @@ class World:
             if obj is not None:
                 obj_location = (obj["x_coord"], obj["y_coord"])
                 # Move agent one step towards the object
-                agent_location = (agent[0]["x_coord"], agent[0]["y_coord"])
+                agent_location = (agent["x_coord"], agent["y_coord"])
                 dx = obj_location[0] - agent_location[0]
                 dy = obj_location[1] - agent_location[1]
                 step_x = 1 if dx > 0 else -1 if dx < 0 else 0
