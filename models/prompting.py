@@ -17,7 +17,7 @@ SYSTEM_MESSAGE = (
     "(3) talk and cooperate with other agents to execute more favorable plans and collect more resources. "
     "\nTo guide your actions, you should use the information about your environment and talk to other people that are around."
 )
-DESCRIPTION = "These are your personal attributes: ID: {id}, Name: {name}"  # , Personality: {personality}. "
+DESCRIPTION = "These are your personal attributes: ID: {id}, Name: {name}, Current location: {location}"  # , Personality: {personality}. "
 
 
 class HungerContextPrompt:

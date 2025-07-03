@@ -1,4 +1,5 @@
 from typing import Annotated
+
 from langfuse.decorators import observe
 from loguru import logger
 
@@ -7,28 +8,16 @@ from models.world import World
 
 @observe()
 async def move(
-    x: Annotated[
-        int,
-        "X Coordinate",
+    direction: Annotated[
+        str,
+        "Direction to move in. Only values 'up', 'down', 'left', 'right' or the 'ID' of a resource or agent to move towards are allowed.",
     ],
-    y: Annotated[
-        int,
-        "Y coordinate",
-    ],
-    # participants: Annotated[
-    #     list[Annotated[str, "The agents that are participating in the plan."]],
-    #     "A list of participants",
-    # ], # Participants will join the plan by separate tool call
-    # tasks: Annotated[
-    #     list[Annotated[str, "A short description of the task"]],
-    #     "A list of tasks that have to be performed to execute the plan.",
-    # ], # Tasks will be added by separate tool call
     agent_id: str,
     simulation_id: str,
 ):
-    """Move in the world. You can only move one coordinate at a time and have to choose a location different to your current location. YOU CANNOT move to an already occupied location."""
-    from clients.tinydb import get_client
+    """Move in the world. You can only move one step 'up', 'down', 'left', 'right' or towards a resource or agent. YOU CANNOT move to an already occupied location."""
     from clients.nats import nats_broker
+    from clients.tinydb import get_client
 
     logger.success("Calling tool move")
 
@@ -38,12 +27,13 @@ async def move(
     try:
         world = World(simulation_id=simulation_id, db=db, nats=nats)
         world.load()
-        await world.move_agent(agent_id=agent_id, destination=(x, y))
+        await world.move_agent(agent_id=agent_id, direction=direction)
     except Exception as e:
         logger.error(f"Error moving agent: {e}")
         raise e
 
 
+# TODO: wouldn't it make more sense to harvest resource by id?
 @observe()
 async def harvest_resource(
     x: Annotated[
@@ -54,16 +44,12 @@ async def harvest_resource(
         int,
         "Y coordinate",
     ],
-    # participants: Annotated[
-    #     list[Annotated[str, "The agents that are participating in the plan to harvest the resource."]],
-    #     "A list of participants",
-    # ], # Participants will join the plan to harvest resource by separate tool call
     agent_id: str,
     simulation_id: str,
 ):
     """Call this tool to harvest a resource and increase your energy level. You can harvest at any time if you are next to a resource. YOU DO NOT HAVE TO BE EXACTLY ON A RESOURCE TO HARVEST IT. 1 block away suffices."""
-    from clients.tinydb import get_client
     from clients.nats import nats_broker
+    from clients.tinydb import get_client
 
     logger.success("Calling tool harvest_resource")
 

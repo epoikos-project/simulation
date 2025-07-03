@@ -1,25 +1,27 @@
+import json
 import random
 import uuid
-import json
+from typing import Optional
 
 from faststream.nats import NatsBroker
 from loguru import logger
+from tinydb import Query, TinyDB
+from tinydb.table import Document
+
+from config.base import settings
+from messages.world import WorldCreatedMessage
 from messages.world.agent_moved import AgentMovedMessage
 from messages.world.agent_placed import AgentPlacedMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
 from models.context import (
     AgentObservation,
+    Observation,
     ObservationType,
     ResourceObservation,
-    Observation,
 )
 from models.map import Map
 from models.region import Region
 from models.resource import Resource
-from tinydb import Query, TinyDB
-
-from config.base import settings
-from messages.world import WorldCreatedMessage
 
 
 class World:
@@ -462,27 +464,25 @@ class World:
         agents = table_agents.search(Query()["simulation_id"] == self.simulation_id)
         return agents
 
-    def get_agent(self, agent_id: str):
+    def get_agent(self, agent_id: str) -> Document:
         """Get agent from world"""
         table_agents = self._db.table(settings.tinydb.tables.agent_table)
         agent = table_agents.get(
             (Query()["simulation_id"] == self.simulation_id)
             & (Query()["id"] == agent_id)
         )
-        return agent if agent else None
-
-    async def place_agent(self, agent_id: str, agent_location: tuple[int, int]):
-        """Place agent in world"""
-        table_agents = self._db.table(settings.tinydb.tables.agent_table)
-        agent = table_agents.get(
-            (Query()["simulation_id"] == self.simulation_id)
-            & (Query()["id"] == agent_id)
-        )
-        # Check if agent exists for simulation
         if not agent:
             raise ValueError(
                 f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
             )
+        return agent[0] if isinstance(agent, list) else agent
+
+    async def place_agent(self, agent_id: str, agent_location: tuple[int, int]):
+        """Place agent in world"""
+        agent = self.get_agent(agent_id)
+
+        # Check if agent exists for simulation
+
         agent_coords = self._get_agent_coords()[:-1]
         resource_coords = self._get_resource_coords()
 
@@ -502,7 +502,7 @@ class World:
         # Publish agent placement message
         agent_placed_message = AgentPlacedMessage(
             id=agent_id,
-            name=agent.get("name"),
+            name=agent["name"],
             location=agent_location,
             simulation_id=self.simulation_id,
         )
@@ -510,16 +510,7 @@ class World:
 
     async def remove_agent(self, agent_id: str):
         """Remove agent from world"""
-        table_agents = self._db.table(settings.tinydb.tables.agent_table)
-        agent = table_agents.search(
-            (Query()["simulation_id"] == self.simulation_id)
-            & (Query()["id"] == agent_id)
-        )
-        # Check if agent exists
-        if not agent:
-            raise ValueError(
-                f"Agent with id {agent_id} for simulation {self.simulation_id} not found in database."
-            )
+        agent = self.get_agent(agent_id)
 
         agents = self.get_agents()
         # Check if agent is already placed
@@ -536,6 +527,7 @@ class World:
             ),
             f"simulation.{self.simulation_id}.agent.{agent_id}",
         )
+        # TODO: the actual removal of the agent is not implemented here
 
     def _get_resource_coords(self) -> list[tuple[int, int]]:
         # Retrieve all resource coordinates from the database
@@ -558,13 +550,49 @@ class World:
         else:
             return True
 
-    async def move_agent(self, agent_id: str, destination: tuple[int, int]):
-        """Move agent to new location in world"""
+    async def move_agent(self, agent_id: str, direction: str):
+        """Move agent to new location in world. Direction can be 'up', 'down', 'left', 'right' or 'object_id'."""
         # Check if agent is placed in world
-        logger.debug(f"Moving agent {agent_id} to {destination}")
         agent = self.get_agent(agent_id)
-        if not agent:
-            raise ValueError(f"Agent {agent_id} is not placed in the world.")
+
+        # calculate destination based on direction
+        if direction in ["up", "down", "left", "right"]:
+            dx, dy = {
+                "up": (0, -1),
+                "down": (0, 1),
+                "left": (-1, 0),
+                "right": (1, 0),
+            }[direction]
+            destination = (agent["x_coord"] + dx, agent["y_coord"] + dy)
+        elif len(direction) == 8:
+            all_agents = self.get_agents()
+            all_resources = self.get_resources()
+
+            # Find the agent or resource with id matching the direction value
+            obj = next((a for a in all_agents if a["id"] == direction), None)
+            if obj is None:
+                obj = next((r for r in all_resources if r["id"] == direction), None)
+            if obj is not None:
+                obj_location = (obj["x_coord"], obj["y_coord"])
+                # Move agent one step towards the object
+                agent_location = (agent[0]["x_coord"], agent[0]["y_coord"])
+                dx = obj_location[0] - agent_location[0]
+                dy = obj_location[1] - agent_location[1]
+                step_x = 1 if dx > 0 else -1 if dx < 0 else 0
+                step_y = 1 if dy > 0 else -1 if dy < 0 else 0
+                destination = (agent_location[0] + step_x, agent_location[1] + step_y)
+            else:
+                raise ValueError(
+                    f"Object with id {direction} not found among agents or resources."
+                )
+        else:
+            raise ValueError(
+                f"Direction {direction} is invalid. Use 'up', 'down', 'left', 'right', or a valid 8-character object id."
+            )
+        logger.debug(
+            f"Agent {agent_id} moving {direction} to destination {destination}"
+        )
+
         # Check if destination is valid
         if not self._check_coordinates(destination):
             raise ValueError(
