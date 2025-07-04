@@ -1,4 +1,5 @@
 import random
+import select
 
 from schemas.region import Region
 from schemas.resource import Resource
@@ -40,6 +41,22 @@ class RegionService(BaseService[Region]):
         if commit:
             self._db.commit()
         return resources
+
+    def get_region_at(self, x: int, y: int) -> float:
+        """Get the region that contains the given coordinates."""
+        region = self._db.exec(
+            select(Region).where(
+                Region.x_1 <= x,
+                Region.x_2 > x,
+                Region.y_1 <= y,
+                Region.y_2 > y,
+            )
+        ).first()
+
+        if not region:
+            raise ValueError(f"No region found for coordinates ({x}, {y})")
+
+        return region
 
     def _create_resource_coords(
         self, x_coords: tuple[int, int], y_coords: tuple[int, int], num_resources: int

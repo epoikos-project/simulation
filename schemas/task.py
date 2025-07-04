@@ -23,3 +23,12 @@ class Task(BaseModel, table=True):
     worker: "Agent" = Relationship(back_populates="task")
 
     plan: "Plan" = Relationship(back_populates="tasks")
+
+    def __str__(self) -> str:
+        return (
+            f"[ID: {self.id}; "
+            f"Target: {self.target}; "
+            f"Payoff: {self.payoff}; "
+            f"Plan ID: {self.plan_id}; "
+            f"Worker ID: {self.worker_id}]"
+        )

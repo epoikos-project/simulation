@@ -39,5 +39,7 @@ class Agent(BaseModel, table=True):
     relationships_b: list["Relationship"] = Relationship(
         back_populates="agent_b", cascade_delete=True
     )
+
+    owned_plan: "Plan" = Relationship(back_populates="owner", nullable=True)
     participating_in_plan: "Plan" = Relationship(back_populates="participants")
     task: "Task" = Relationship(back_populates="worker")
