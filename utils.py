@@ -1,3 +1,7 @@
+import json
+from typing import Any, Dict
+
+
 def compute_distance(a: tuple[int, int], b: tuple[int, int]):
     """Compute distance between two coordinates in 2D space"""
     # Using Manhattan distance formula
@@ -10,6 +14,14 @@ def compute_distance_raw(
     """Compute distance between two coordinates in 2D space"""
     # Using Manhattan distance formula
     return abs(x_coord_a - x_coord_b) + abs(y_coord_a - y_coord_b)
+
+
+def compute_in_radius(
+    location_a: tuple[int, int], location_b: tuple[int, int], radius: int
+):
+    """Check if agent is within range of resource"""
+    distance = compute_distance(location_a, location_b)
+    return distance <= radius
 
 
 def extract_tool_call_info(data):
@@ -54,3 +66,36 @@ def extract_tool_call_info(data):
         result["ToolCallExecutionEvent"] = result["ToolCallExecutionEvent"][0]
 
     return result
+
+
+def summarize_tool_call(call: Dict[str, Any]) -> str:
+    """
+    Summarize a tool-call dict by extracting the 'name' and its 'arguments'.
+    """
+    req_key = next((k for k in call if "RequestEvent" in k), None)
+    if req_key is None:
+        raise ValueError("No key containing 'RequestEvent' found in the call.")
+    req = call[req_key]
+
+    name = req.get("name", "")
+    raw_args = req.get("arguments", "{}")
+
+    if isinstance(raw_args, str):
+        try:
+            args_dict = json.loads(raw_args)
+        except json.JSONDecodeError:
+            return f"{name}({raw_args})"
+    elif isinstance(raw_args, dict):
+        args_dict = raw_args
+    else:
+        return f"{name}({raw_args!r})"
+
+    parts = []
+    for k, v in args_dict.items():
+        if isinstance(v, str):
+            parts.append(f"{k}={json.dumps(v)}")
+        else:
+            parts.append(f"{k}={v!r}")
+
+    joined = ", ".join(parts)
+    return f"{name}({joined})"

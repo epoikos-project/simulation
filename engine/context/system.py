@@ -1,7 +1,7 @@
-from engine.context import Context
+from engine.context.base import BaseContext
 
 
-class SystemPrompt(Context):
+class SystemPrompt(BaseContext):
     """
     Context for the agent, including its environment, relationships, and tasks.
     """
@@ -17,7 +17,7 @@ class SystemPrompt(Context):
         )
 
 
-class SystemDescription(Context):
+class SystemDescription(BaseContext):
     """
     System description for the agent, providing its personal attributes.
     """

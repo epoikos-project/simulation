@@ -56,7 +56,6 @@ app.include_router(routers.world.router)
 app.include_router(routers.agent.router)
 app.include_router(routers.debug.router)
 app.include_router(routers.configuration.router)
-app.include_router(routers.conversation.router)
 app.include_router(routers.plan.router)
 app.include_router(routers.orchestrator.router)
 

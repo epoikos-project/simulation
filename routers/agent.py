@@ -7,8 +7,10 @@ from tinydb import Query
 import clients
 from clients import Nats
 from clients.sqlite import DB
-from models.agent import Agent
-from models.world import World
+
+from schemas.agent import Agent
+from schemas.world import World
+
 from services.agent import AgentService
 
 router = APIRouter(prefix="/simulation/{simulation_id}/agent", tags=["Agent"])
@@ -26,16 +28,9 @@ async def create_agent(
     simulation_id: str, name: str, broker: Nats, db: clients.DB, milvus: clients.Milvus
 ):
     """Create an agent in the simulation"""
-    agent = Agent(milvus=milvus, db=db, simulation_id=simulation_id, nats=broker)
-    agent.name = name
-    await agent.create()
-    return {
-        "id": agent.id,
-        "collection_name": agent.collection_name,
-        "simulation_id": simulation_id,
-        "name": agent.name,
-        "model": agent.model,
-    }
+    agent_service = AgentService(db=db, nats=broker, milvus=milvus)
+    agent = Agent(name=name, simulation_id=simulation_id)
+    return agent_service.create(agent)
 
 
 @router.get("/{id}")
@@ -96,40 +91,6 @@ async def get_context(
     }
 
 
-@router.post("/{agent_id}/chat")
-async def chat_with_agent(
-    simulation_id: str,
-    agent_id: str,
-    msg: str,
-    db: clients.DB,
-    milvus: clients.Milvus,
-    broker: Nats,
-):
-    agent = Agent(
-        id=agent_id,
-        milvus=milvus,
-        db=db,
-        simulation_id=simulation_id,
-        nats=broker,
-    )
-
-    agent.load()
-
-    await broker.publish(
-        message=json.dumps({"content": msg, "type": "human_chat"}),
-        subject=f"simulation.{simulation_id}.agent.{agent_id}",
-    )
-
-    response = await agent.autogen_agent.run(task=msg)
-
-    content = response.messages[-1].content
-    await broker.publish(
-        message=json.dumps({"content": content, "type": "agent_chat"}),
-        subject=f"simulation.{simulation_id}.agent.{agent_id}",
-    )
-    return {"content": content}
-
-
 @router.post("/{agent_id}/move")
 async def move_agent(
     agent_id: str,
@@ -139,8 +100,11 @@ async def move_agent(
     move_agent_input: MoveAgentInput,
 ):
     """Move an agent to a new location"""
-    world = World(simulation_id=simulation_id, db=db, nats=broker)
-    world.load()
-    new_location = (move_agent_input.x_coord, move_agent_input.y_coord)
-    await world.move_agent(agent_id=agent_id, destination=new_location)
+    agent_service = AgentService(db=db, nats=broker)
+    agent = agent_service.get_by_id(agent_id)
+
+    new_location = await agent_service.move_agent(
+        agent=agent, x_coord=move_agent_input.x_coord, y_coord=move_agent_input.y_coord
+    )
+
     return {"message": f"Agent {agent_id} moved to location {new_location}"}

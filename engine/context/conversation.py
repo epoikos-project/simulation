@@ -1,9 +1,9 @@
-from engine.context import Context
+from engine.context.base import BaseContext
 
 from schemas.message import Message
 
 
-class ConversationContext(Context):
+class ConversationContext(BaseContext):
     def build(self, message: Message) -> str:
         if self.agent.conversation_id:
             conversation_context = f"You are currently engaged in a conversation (ID: {self.agent.conversation_id}). "

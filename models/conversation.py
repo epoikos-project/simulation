@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from tinydb.queries import Query
 from config.base import settings
-from models.sentiment import analyze_message_sentiment
+from engine.sentiment import analyze_message_sentiment
 
 
 # TODO: instead of this custom implementation it might be worth it to consider using native autogen functionalities such as RoundRobinGroupChat
@@ -118,4 +118,3 @@ class Conversation:
             },
             Query().id == self.id,
         )
-

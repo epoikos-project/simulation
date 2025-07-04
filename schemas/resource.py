@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from schemas.world import World
     from schemas.simulation import Simulation
     from schemas.region import Region
+    from schemas.task import Task
 
 
 class Resource(BaseModel, table=True):
@@ -29,7 +30,10 @@ class Resource(BaseModel, table=True):
     start_harvest: int = Field(default=-1)
     time_harvest: int = Field(default=-1)
 
+    last_harvest: int = Field(default=-1)
+
     simulation: "Simulation" = Relationship(back_populates="resources")
     world: "World" = Relationship(back_populates="resources")
     region: "Region" = Relationship(back_populates="resources")
     harvesters: list["Agent"] = Relationship(back_populates="harvesting_resource")
+    tasks: list["Task"] = Relationship(back_populates="target", cascade_delete=True)

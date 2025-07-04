@@ -2,7 +2,7 @@ from typing import Tuple
 
 from sqlmodel import select, Session
 
-from models.sentiment import analyze_message_sentiment
+from engine.sentiment import analyze_message_sentiment
 from schemas.relationship import Relationship as RelationshipModel
 
 from schemas.agent import Agent as AgentModel
@@ -22,8 +22,7 @@ def update_relationship(
     id_a, id_b = sorted([agent1_id, agent2_id])
     sentiment = analyze_message_sentiment(message)
     statement = select(RelationshipModel).where(
-        (RelationshipModel.agent_a_id == id_a)
-        & (RelationshipModel.agent_b_id == id_b)
+        (RelationshipModel.agent_a_id == id_a) & (RelationshipModel.agent_b_id == id_b)
     )
     existing = session.exec(statement).one_or_none()
     if existing is None:
@@ -62,7 +61,9 @@ def get_relationship_graph(session: Session) -> dict:
     # Load relationships and build edges
     edges = []
     for rel in session.exec(select(RelationshipModel)).all():
-        avg_sent = rel.total_sentiment / rel.update_count if rel.update_count > 0 else 0.0
+        avg_sent = (
+            rel.total_sentiment / rel.update_count if rel.update_count > 0 else 0.0
+        )
         edges.append(
             {
                 "source": rel.agent_a_id,

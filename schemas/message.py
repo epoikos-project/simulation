@@ -12,6 +12,9 @@ class Message(BaseModel, table=True):
     agent_id: str = Field(
         foreign_key="agent.id", nullable=True, default=None, index=True
     )
+    conversation_id: str = Field(
+        foreign_key="conversation.id", nullable=True, default=None, index=True
+    )
 
     serial_number: int = Field(default=0, index=True)
     content: str = Field(default="", nullable=False)

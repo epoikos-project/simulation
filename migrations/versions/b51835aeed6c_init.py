@@ -1,8 +1,8 @@
 """init
 
-Revision ID: 76e2985234cc
+Revision ID: b51835aeed6c
 Revises:
-Create Date: 2025-07-04 00:22:55.691534
+Create Date: 2025-07-04 23:38:26.524497
 
 """
 
@@ -12,7 +12,7 @@ import sqlmodel  # New
 
 
 # revision identifiers, used by Alembic.
-revision = "76e2985234cc"
+revision = "b51835aeed6c"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -36,25 +36,14 @@ def upgrade():
         ),
         sa.Column("name", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("model", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column("energy_level", sa.Integer(), nullable=False),
+        sa.Column("energy_level", sa.Float(), nullable=False),
+        sa.Column("last_action", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("last_error", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column("hunger", sa.Integer(), nullable=False),
+        sa.Column("hunger", sa.Float(), nullable=False),
         sa.Column("x_coord", sa.Integer(), nullable=False),
         sa.Column("y_coord", sa.Integer(), nullable=False),
         sa.Column("visibility_range", sa.Integer(), nullable=False),
         sa.Column("range_per_move", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["harvesting_resource_id"],
-            ["resource.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["participating_in_plan_id"],
-            ["plan.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["simulation_id"],
-            ["simulation.id"],
-        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -70,16 +59,12 @@ def upgrade():
         "plan",
         sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("created_at", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column("agent_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("owner_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("goal", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("total_expected_payoff", sa.Float(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["agent_id"],
-            ["agent.id"],
-        ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_plan_agent_id"), "plan", ["agent_id"], unique=False)
+    op.create_index(op.f("ix_plan_owner_id"), "plan", ["owner_id"], unique=False)
     op.create_table(
         "simulation",
         sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -100,18 +85,6 @@ def upgrade():
         sa.Column("agent_b_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("tick", sa.Integer(), nullable=False),
         sa.Column("active", sa.Boolean(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["agent_a_id"],
-            ["agent.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["agent_b_id"],
-            ["agent.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["simulation_id"],
-            ["simulation.id"],
-        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -127,25 +100,6 @@ def upgrade():
         unique=False,
     )
     op.create_table(
-        "message",
-        sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column("created_at", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column("agent_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column("serial_number", sa.Integer(), nullable=False),
-        sa.Column("content", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column("tick", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["agent_id"],
-            ["agent.id"],
-        ),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(op.f("ix_message_agent_id"), "message", ["agent_id"], unique=False)
-    op.create_index(
-        op.f("ix_message_serial_number"), "message", ["serial_number"], unique=False
-    )
-    op.create_index(op.f("ix_message_tick"), "message", ["tick"], unique=False)
-    op.create_table(
         "relationship",
         sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("created_at", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
@@ -153,37 +107,8 @@ def upgrade():
         sa.Column("agent_b_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("total_sentiment", sa.Float(), nullable=False),
         sa.Column("update_count", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["agent_a_id"],
-            ["agent.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["agent_b_id"],
-            ["agent.id"],
-        ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_table(
-        "task",
-        sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column("created_at", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column("plan_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column("worker_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column("target", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column("payoff", sa.Integer(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["plan_id"],
-            ["plan.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["worker_id"],
-            ["agent.id"],
-        ),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(op.f("ix_task_plan_id"), "task", ["plan_id"], unique=False)
-    op.create_index(op.f("ix_task_target"), "task", ["target"], unique=False)
-    op.create_index(op.f("ix_task_worker_id"), "task", ["worker_id"], unique=False)
     op.create_table(
         "world",
         sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -191,12 +116,27 @@ def upgrade():
         sa.Column("simulation_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("size_x", sa.Integer(), nullable=False),
         sa.Column("size_y", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["simulation_id"],
-            ["simulation.id"],
-        ),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_table(
+        "message",
+        sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("created_at", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("agent_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("conversation_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("serial_number", sa.Integer(), nullable=False),
+        sa.Column("content", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("tick", sa.Integer(), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_message_agent_id"), "message", ["agent_id"], unique=False)
+    op.create_index(
+        op.f("ix_message_conversation_id"), "message", ["conversation_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_message_serial_number"), "message", ["serial_number"], unique=False
+    )
+    op.create_index(op.f("ix_message_tick"), "message", ["tick"], unique=False)
     op.create_table(
         "region",
         sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -211,14 +151,6 @@ def upgrade():
         sa.Column("resource_density", sa.Float(), nullable=False),
         sa.Column("resource_cluster", sa.Integer(), nullable=False),
         sa.Column("region_energy_cost", sa.Float(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["simulation_id"],
-            ["simulation.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["world_id"],
-            ["world.id"],
-        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -241,43 +173,44 @@ def upgrade():
         sa.Column("being_harvested", sa.Boolean(), nullable=False),
         sa.Column("start_harvest", sa.Integer(), nullable=False),
         sa.Column("time_harvest", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["region_id"],
-            ["region.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["simulation_id"],
-            ["simulation.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["world_id"],
-            ["world.id"],
-        ),
+        sa.Column("last_harvest", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_table(
+        "task",
+        sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("created_at", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("plan_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("target_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("worker_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("payoff", sa.Integer(), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_task_plan_id"), "task", ["plan_id"], unique=False)
+    op.create_index(op.f("ix_task_worker_id"), "task", ["worker_id"], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
-    op.drop_table("resource")
-    op.drop_table("region")
-    op.drop_table("world")
     op.drop_index(op.f("ix_task_worker_id"), table_name="task")
-    op.drop_index(op.f("ix_task_target"), table_name="task")
     op.drop_index(op.f("ix_task_plan_id"), table_name="task")
     op.drop_table("task")
-    op.drop_table("relationship")
+    op.drop_table("resource")
+    op.drop_table("region")
     op.drop_index(op.f("ix_message_tick"), table_name="message")
     op.drop_index(op.f("ix_message_serial_number"), table_name="message")
+    op.drop_index(op.f("ix_message_conversation_id"), table_name="message")
     op.drop_index(op.f("ix_message_agent_id"), table_name="message")
     op.drop_table("message")
+    op.drop_table("world")
+    op.drop_table("relationship")
     op.drop_index(op.f("ix_conversation_simulation_id"), table_name="conversation")
     op.drop_index(op.f("ix_conversation_agent_b_id"), table_name="conversation")
     op.drop_index(op.f("ix_conversation_agent_a_id"), table_name="conversation")
     op.drop_table("conversation")
     op.drop_table("simulation")
-    op.drop_index(op.f("ix_plan_agent_id"), table_name="plan")
+    op.drop_index(op.f("ix_plan_owner_id"), table_name="plan")
     op.drop_table("plan")
     op.drop_table("configuration")
     op.drop_table("agent")

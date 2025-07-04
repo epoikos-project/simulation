@@ -30,10 +30,11 @@ class ResourceObservation(BaseObservation):
         if self.distance > self.resource.harvesting_area:
             return False
         elif (
-            self.being_harvested and self.num_harvester >= self.resource.required_agents
+            self.being_harvested
+            and len(self.resource.harvesters) >= self.resource.required_agents
         ):
             return False
-        elif self.num_harvester == 0 and self.resource.required_agents > 1:
+        elif len(self.resource.harvesters) == 0 and self.resource.required_agents > 1:
             return False
         elif not self.resource.available:
             return False
@@ -45,7 +46,7 @@ class ResourceObservation(BaseObservation):
         resource_message = ""
 
         if self.resource.being_harvested:
-            resource_message = f""" This resource is currently harvested by {self.num_harvester} agent(s)
+            resource_message = f""" This resource is currently harvested by {len(self.resource.harvesters)} agent(s)
                                   and requires only ONE additional harvester."""
         else:
             resource_message = (
@@ -57,19 +58,19 @@ class ResourceObservation(BaseObservation):
     def _harvest_not_possible(self) -> str:
         """Message to be sent to the agent if the resource cannot be harvested"""
         # Resource is not available
-        if not self.available:
+        if not self.resource.available:
             return f""" This resource is currently NOT available for harvesting!"""
         # Resource is out of range
-        if self.distance > self.harvesting_area:
+        if self.distance > self.resource.harvesting_area:
             return f""" The resource is too far away to harvest! (you have to be within {self.resource.harvesting_area} units)"""
         # Resource is being harvested by enough agents
         if (
             self.resource.being_harvested
-            and self.num_harvester >= self.resource.required_agents
+            and len(self.resource.harvesters) >= self.resource.required_agents
         ):
-            return f""" The resource is currently harvested by {self.num_harvester} agent(s)
+            return f""" The resource is currently harvested by {len(self.resource.harvesters)} agent(s)
                         and is therefore not available."""
-        if self.num_harvester == 0 and self.resource.required_agents > 1:
+        if len(self.resource.harvesters) == 0 and self.resource.required_agents > 1:
             return f""" The resource is currently not harvested by anybody
                         but requires {self.resource.required_agents} harvester."""
 

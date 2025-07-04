@@ -1,7 +1,7 @@
-from engine.context import Context
+from engine.context.base import BaseContext
 
 
-class HungerContext(Context):
+class HungerContext(BaseContext):
     def build(self) -> str:
         if self.agent.energy_level <= self.agent.hunger:
             hunger_description = f"Energy level: Your current energy level is {self.agent.energy_level}. You are starving and need to find and consume resources immediately. "

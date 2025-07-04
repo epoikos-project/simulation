@@ -1,13 +1,12 @@
-from .plan_tools import make_plan, add_task, take_on_task
-from .world_tools import move, harvest_resource
-from .conversation_tools import start_conversation, engage_conversation
+from .plan_tools import make_plan, add_task
+from .world_tools import move
 
 available_tools = [
     move,
-    harvest_resource,
+    # harvest_resource,
     make_plan,
     add_task,
-    take_on_task,
-    start_conversation,
-    engage_conversation,
+    # take_on_task,
+    # start_conversation,
+    # engage_conversation,
 ]

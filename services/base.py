@@ -60,8 +60,7 @@ class BaseService(Generic[T]):
         """
         Retrieve a model instance by its ID.
         """
-        statement = select(self._model_class).where(self._model_class.id == id)
-        model = self._db.exec(statement).first()
+        model = self._db.get(self._model_class, id)
         if not model:
             raise ValueError(f"{self._model_class.__name__} with ID {id} not found.")
         return model

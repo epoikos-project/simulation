@@ -1,13 +1,13 @@
 from sqlmodel import select
 
 from schemas.simulation import Simulation as SimulationModel
-from services.base import BaseMilvusService
+from services.base import BaseService
 
 
-class SimulationService(BaseMilvusService[SimulationModel]):
+class SimulationService(BaseService[SimulationModel]):
 
-    def __init__(self, db, nats, milvus):
-        super().__init__(SimulationModel, db, nats, milvus)
+    def __init__(self, db, nats):
+        super().__init__(SimulationModel, db, nats)
 
     def get_simulations(self) -> list[SimulationModel]:
         """

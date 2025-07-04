@@ -1,21 +1,21 @@
 import pathfind
 
 
-class Map:
+class Grid:
     """Interface for 2D map objects and finding the shortest
     path for an agent's location and destination."""
 
     def __init__(self, size_x: int, size_y: int):
-        """Initialize the map with the given size."""
+        """Initialize the grid with the given size."""
         self.size_x = size_x
         self.size_y = size_y
 
-        self.map = [[0 for _ in range(size_x)] for _ in range(size_y)]
+        self.grid = [[0 for _ in range(size_x)] for _ in range(size_y)]
         for i in range(size_y):
             for j in range(size_x):
                 # Initialize each cell as walkable (1)
-                # Map is later updated with field of view of agent, i.e. obstacles (-1)
-                self.map[i][j] = 1
+                # Grid is later updated with field of view of agent, i.e. obstacles (-1)
+                self.grid[i][j] = 1
 
         self.graph: pathfind.transform.matrix2graph = None
 
@@ -28,10 +28,10 @@ class Map:
             for j in range(max(0, y - fov - 1), min(self.size_y, y + fov)):
                 if (i, j) in obstacles:
                     # All cells that are an obstacle are not walkable (-1)
-                    self.map[i][j] = -1
+                    self.grid[i][j] = -1
 
         # Update the graph with the new map
-        self.graph = pathfind.transform.matrix2graph(self.map, diagonal=False)
+        self.graph = pathfind.transform.matrix2graph(self.grid, diagonal=False)
 
     def _convert_coordinate(self, c: str) -> tuple[int, int]:
         """Convert a coordinate-String to a tuple of integers."""

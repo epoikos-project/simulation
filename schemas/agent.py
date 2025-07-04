@@ -23,9 +23,12 @@ class Agent(BaseModel, table=True):
 
     name: str = Field()
     model: str = Field(default=None, nullable=True)
-    energy_level: int = Field(default=20)
+    energy_level: float = Field(default=20.0)
+
+    last_action: str = Field(default=None, nullable=True)
     last_error: str = Field(nullable=True, default=None)
-    hunger: int = Field(default=10)
+
+    hunger: float = Field(default=10.0)
     x_coord: int = Field(default=0)
     y_coord: int = Field(default=0)
     visibility_range: int = Field(default=5)
@@ -33,13 +36,30 @@ class Agent(BaseModel, table=True):
 
     simulation: "Simulation" = Relationship(back_populates="agents")
     harvesting_resource: "Resource" = Relationship(back_populates="harvesters")
+
     relationships_a: list["Relationship"] = Relationship(
-        back_populates="agent_a", cascade_delete=True
+        back_populates="agent_a",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "[Relationship.agent_a_id]"},
     )
     relationships_b: list["Relationship"] = Relationship(
-        back_populates="agent_b", cascade_delete=True
+        back_populates="agent_b",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "[Relationship.agent_b_id]"},
     )
 
-    owned_plan: "Plan" = Relationship(back_populates="owner", nullable=True)
-    participating_in_plan: "Plan" = Relationship(back_populates="participants")
-    task: "Task" = Relationship(back_populates="worker")
+    owned_plan: "Plan" = Relationship(
+        back_populates="owner",
+        cascade_delete=True,
+        sa_relationship_kwargs={"uselist": False, "foreign_keys": "[Plan.owner_id]"},
+    )
+    participating_in_plan: "Plan" = Relationship(
+        back_populates="participants",
+        sa_relationship_kwargs={
+            "foreign_keys": "[Agent.participating_in_plan_id]",
+        },
+    )
+    task: "Task" = Relationship(
+        back_populates="worker",
+        sa_relationship_kwargs={"foreign_keys": "[Task.worker_id]"},
+    )

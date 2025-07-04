@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException
 from loguru import logger
-from clients import Nats, DB
-from models.plan import Plan
+from clients import Nats
+from clients.sqlite import DB
+from schemas.plan import Plan
 from config.base import settings
-from tinydb import Query
-from models.plan import get_plan
-from models.task import Task, TaskStatus, get_task
+
+from services.agent import AgentService
+from services.plan import PlanService
 
 
 router = APIRouter(prefix="/simulation/{simulation_id}/plan", tags=["Plan"])
@@ -14,7 +15,6 @@ router = APIRouter(prefix="/simulation/{simulation_id}/plan", tags=["Plan"])
 @router.post("")
 async def create_plan(
     simulation_id: str,
-    plan_id: str,
     nats: Nats,
     db: DB,
     owner: str,
@@ -24,47 +24,17 @@ async def create_plan(
 ):
     """Create a plan for the simulation"""
     try:
-        plan = Plan(db=db, id=plan_id, nats=nats, simulation_id=simulation_id)
-        plan.owner = owner
-        plan.participants = participants or []
-        plan.goal = goal
-        # TODO: validate if owner, participants, and tasks exist in the simulation?
-
-        plan.create()
+        plan = Plan(
+            simulation_id=simulation_id,
+            owner_id=owner,
+            goal=goal,
+        )
+        db.add(plan)
+        db.commit()
     except Exception as e:
         logger.error(f"Error creating plan: {e}")
         return {"message": "Error creating plan"}
     return {"message": "Plan created successfully!"}
-
-
-# @router.get("/{plan_id}")
-# async def get_plan_data(simulation_id: str, plan_id: str, db: DB, nats: Nats):
-#     """Get a plan by ID"""
-#     try:
-#         plan = get_plan(db, nats, plan_id, simulation_id)
-#     except ValueError as e:
-#         raise HTTPException(status_code=404, detail=str(e))
-#     return plan._get_plan_dict()
-
-
-# @router.get("")
-# async def list_plans(simulation_id: str, db: DB):
-#     """List all plans in the simulation"""
-#     table = db.table(settings.tinydb.tables.plan_table)
-#     plans = table.search(Query().simulation_id == simulation_id)
-#     return plans
-
-
-# @router.delete("/{plan_id}")
-# async def delete_plan(simulation_id: str, plan_id: str, db: DB):
-#     """Delete a plan by ID"""
-#     table = db.table(settings.tinydb.tables.plan_table)
-#     query = (Query().id == plan_id) & (Query().simulation_id == simulation_id)
-#     plan = table.get(query)
-#     if plan is None:
-#         return {"message": "Plan not found"}
-#     table.remove(query)
-#     return {"message": "Plan deleted successfully!"}
 
 
 @router.post("/{plan_id}/participant/{agent_id}/add")
@@ -76,16 +46,25 @@ async def add_participant(
     agent_id: str,
 ):
     """Add a participant to a plan"""
-    try:
-        plan = get_plan(db, nats, plan_id, simulation_id)
-    except ValueError:
+    plan_service = PlanService(db=db, nats=nats)
+    agent_service = AgentService(db=db, nats=nats)
+    plan = plan_service.get_by_id(plan_id)
+    agent = agent_service.get_by_id(agent_id)
+
+    if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
 
-    if agent_id in plan.participants:
-        raise HTTPException(status_code=400, detail="Participant already in plan")
+    if agent.participating_in_plan_id is not None:
+        raise HTTPException(
+            status_code=400, detail="Agent is already participating in a plan"
+        )
 
-    # add participant to plan
-    plan.add_participant(agent_id)
+    agent.participating_in_plan_id = plan_id
+    db.add(agent)
+    db.commit()
+
     return {"message": "Participant added successfully"}
 
 
@@ -98,16 +77,11 @@ async def remove_participant(
     agent_id: str,
 ):
     """Remove a participant from a plan"""
-    try:
-        plan = get_plan(db, nats, plan_id, simulation_id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Plan not found")
-
-    if agent_id not in plan.participants:
-        raise HTTPException(status_code=400, detail="Participant not in plan")
-
-    # remove participant from plan
-    plan.remove_participant(agent_id)
+    agent_service = AgentService(db=db, nats=nats)
+    agent = agent_service.get_by_id(agent_id)
+    agent.participating_in_plan_id = None
+    db.add(agent)
+    db.commit()
     return {"message": "Participant removed successfully"}
 
 

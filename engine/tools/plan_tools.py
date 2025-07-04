@@ -2,8 +2,10 @@ import uuid
 from langfuse.decorators import observe
 from loguru import logger
 from typing import Annotated
-from models.plan import Plan, get_plan
-from models.task import Task, get_task
+from clients.sqlite import get_session, get_tool_session
+from schemas.plan import Plan
+from schemas.task import Task
+
 
 # from fastapi import HTTPException
 
@@ -31,26 +33,24 @@ async def make_plan(
     simulation_id: str,
 ):
     """Form a new plan for resource acquisition. You can only ever have one plan at a time."""
-    from clients.tinydb import get_client
+    from clients.sqlite import get_session
     from clients.nats import nats_broker
 
     logger.success("Calling tool make_plan")
 
-    db = get_client()
-    nats = nats_broker()
+    with get_session() as db:
+        nats = nats_broker()
 
-    plan_id = uuid.uuid4().hex[:8]
+        try:
 
-    try:
-        plan = Plan(db=db, id=plan_id, nats=nats, simulation_id=simulation_id)
-        plan.owner = agent_id
-        plan.participants = []  # participants or []
-        plan.goal = goal
+            plan = Plan(owner_id=agent_id, simulation_id=simulation_id, goal=goal)
 
-        plan.create()
-    except Exception as e:
-        logger.error(f"Error creating plan: {e}")
-        raise e
+            db.add(plan)
+            db.commit()
+
+        except Exception as e:
+            logger.error(f"Error creating plan: {e}")
+            raise e
 
 
 @observe()
@@ -67,55 +67,53 @@ async def add_task(
 
     logger.success("Calling tool add_task")
 
-    db = get_client()
-    nats = nats_broker()
+    with get_tool_session() as db:
 
-    task_id: str = uuid.uuid4().hex[:8]
+        # TODO: check how error handling effects autogen tool calls
+        # try:
+        #     plan = get_plan(db, nats, plan_id, simulation_id)
+        # except ValueError:
+        #     raise HTTPException(status_code=404, detail="Plan not found")
 
-    # TODO: check how error handling effects autogen tool calls
-    # try:
-    #     plan = get_plan(db, nats, plan_id, simulation_id)
-    # except ValueError:
-    #     raise HTTPException(status_code=404, detail="Plan not found")
+        # if task_id in plan.get_tasks():
+        #     raise HTTPException(status_code=400, detail="Task already in plan")
 
-    # if task_id in plan.get_tasks():
-    #     raise HTTPException(status_code=400, detail="Task already in plan")
-
-    try:
-        task = Task(
-            id=task_id, nats=nats, db=db, plan_id=plan_id, simulation_id=simulation_id
-        )
-        task.target = target
-        task.payoff = payoff
-        task.create()
-    except Exception as e:
-        logger.error(f"Error creating task: {e}")
-        raise e
+        try:
+            task = Task(
+                simulation_id=simulation_id,
+                target_id=target,  # resource.id
+                payoff=payoff,
+            )
+            db.add(task)
+            db.commit()
+        except Exception as e:
+            logger.error(f"Error creating task: {e}")
+            raise e
 
 
-@observe()
-async def take_on_task(
-    task_id: Annotated[str, "The ID of the task to you will work on."],
-    agent_id: str,
-    simulation_id: str,
-):
-    """Take responsibility for a task and join its plan."""
-    from clients.tinydb import get_client
-    from clients.nats import nats_broker
+# @observe()
+# async def take_on_task(
+#     task_id: Annotated[str, "The ID of the task to you will work on."],
+#     agent_id: str,
+#     simulation_id: str,
+# ):
+#     """Take responsibility for a task and join its plan."""
+#     from clients.tinydb import get_client
+#     from clients.nats import nats_broker
 
-    logger.success("Calling tool take_on_task")
+#     logger.success("Calling tool take_on_task")
 
-    db = get_client()
-    nats = nats_broker()
+#     db = get_client()
+#     nats = nats_broker()
 
-    try:
-        task = get_task(db, nats, task_id, simulation_id)
-        plan_id = task.plan_id
-        plan = get_plan(db, nats, plan_id, simulation_id)
-    except ValueError as e:
-        logger.error(f"Error getting task: {e}")
-        raise e
-        # raise HTTPException(status_code=404, detail=str(e))
+#     try:
+#         task = get_task(db, nats, task_id, simulation_id)
+#         plan_id = task.plan_id
+#         plan = get_plan(db, nats, plan_id, simulation_id)
+#     except ValueError as e:
+#         logger.error(f"Error getting task: {e}")
+#         raise e
+#         # raise HTTPException(status_code=404, detail=str(e))
 
-    plan.add_participant(agent_id)
-    task.assign_agent(agent_id)
+#     plan.add_participant(agent_id)
+#     task.assign_agent(agent_id)

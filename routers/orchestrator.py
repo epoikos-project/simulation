@@ -11,8 +11,8 @@ router = APIRouter(prefix="/orchestrator", tags=["Orchestrator"])
 
 
 @router.post("/initialize/{config_name}")
-async def run(config_name: str, db: DB, sqlite: SQLiteDB, nats: Nats, milvus: Milvus):
-    orch = Orchestrator(db=db, sqlite=sqlite, nats=nats, milvus=milvus)
+async def run(config_name: str, db: DB, sqlite: SQLiteDB, nats: Nats):
+    orch = Orchestrator(db=db, sqlite=sqlite, nats=nats)
     try:
         sim_id = await orch.run_from_config(config_name)
     except Exception as e:
@@ -22,20 +22,19 @@ async def run(config_name: str, db: DB, sqlite: SQLiteDB, nats: Nats, milvus: Mi
 
 
 @router.post("/tick/{simulation_id}")
-async def tick(
-    simulation_id: str, db: DB, sqlite: SQLiteDB, nats: Nats, milvus: Milvus
-):
-    orch = Orchestrator(db=db, sqlite=sqlite, nats=nats, milvus=milvus)
+async def tick(simulation_id: str, db: DB, sqlite: SQLiteDB, nats: Nats):
+    orch = Orchestrator(db=db, sqlite=sqlite, nats=nats)
     try:
         await orch.tick(simulation_id)
     except Exception as e:
+        logger.exception(e)
         raise HTTPException(500, f"Failed to tick: {e}")
     return {"message": f"Tick for simulation {simulation_id} completed"}
 
 
 @router.post("/start/{simulation_id}")
-async def start(simulation_id: str, db: DB, nats: Nats, milvus: Milvus):
-    orch = Orchestrator(db=db, nats=nats, milvus=milvus)
+async def start(simulation_id: str, db: DB, nats: Nats):
+    orch = Orchestrator(db=db, nats=nats)
     try:
         await orch.start(simulation_id)
     except Exception as e:
@@ -44,8 +43,8 @@ async def start(simulation_id: str, db: DB, nats: Nats, milvus: Milvus):
 
 
 @router.post("/stop/{simulation_id}")
-async def stop(simulation_id: str, db: DB, nats: Nats, milvus: Milvus):
-    orch = Orchestrator(db=db, nats=nats, milvus=milvus)
+async def stop(simulation_id: str, db: DB, nats: Nats):
+    orch = Orchestrator(db=db, nats=nats)
     try:
         await orch.stop(simulation_id)
     except Exception as e:

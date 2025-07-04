@@ -38,15 +38,12 @@ class Orchestrator:
       5. Emitting NATS events at each step
     """
 
-    def __init__(
-        self, db: TinyDB, sqlite: Session, nats: NatsBroker, milvus: MilvusClient
-    ):
+    def __init__(self, db: TinyDB, sqlite: Session, nats: NatsBroker):
         self.tinydb = db
         self._db = sqlite
         self.nats = nats
-        self.milvus = milvus
 
-        self.simulation_service = SimulationService(self._db, self.nats, self.milvus)
+        self.simulation_service = SimulationService(self._db, self.nats)
         self.world_service = WorldService(self._db, self.nats)
         self.region_service = RegionService(self._db, self.nats)
         self.agent_service = AgentService(self._db, self.nats)
@@ -158,18 +155,17 @@ class Orchestrator:
         self._db.add_all(agents)
 
     async def tick(self, sim_id: str):
-        sim = SimulationRunner(db=self._db, nats=self.nats, milvus=self.milvus).tick(
-            simulation_id=sim_id
-        )
-        await sim.tick_simulation()
+        runner = SimulationRunner(db=self._db, nats=self.nats)
+
+        await runner.tick_simulation(sim_id)
         logger.info(f"Orchestrator: ticked simulation {sim_id}")
 
     async def start(self, sim_id: str):
-        sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)
+        sim = Simulation(db=self.db, nats=self.nats, id=sim_id)
         await sim.start()
         logger.info(f"Orchestrator: started simulation {sim_id}")
 
     async def stop(self, sim_id: str):
-        sim = Simulation(db=self.db, nats=self.nats, milvus=self.milvus, id=sim_id)
+        sim = Simulation(db=self.db, nats=self.nats, id=sim_id)
         await sim.stop()
         logger.info(f"Orchestrator: stopped simulation {sim_id}")

@@ -8,6 +8,9 @@ from loguru import logger
 from pymilvus import MilvusClient
 from sqlmodel import Session, select
 
+from engine.llm.autogen.agent import AutogenAgent
+from engine.runners.agent_runner import AgentRunner
+
 from messages.simulation.simulation_tick import SimulationTickMessage
 from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
@@ -22,15 +25,16 @@ from services.world import WorldService
 
 class SimulationRunner:
 
-    def __init__(self, db: Session, nats: NatsBroker, milvus: MilvusClient):
+    def __init__(self, db: Session, nats: NatsBroker):
         self._db = db
         self._nats = nats
-        self._milvus = milvus
-        self.simulation_service = SimulationService(db, nats, milvus)
+        self.simulation_service = SimulationService(db, nats)
         self.world_service = WorldService(db, nats)
         self.resource_service = ResourceService(db, nats)
         self._thread = None
         self._tick_interval = 1
+
+        self.agent_runner = AgentRunner(db, nats)
 
     async def tick_simulation(self, simulation_id: str):
         """Tick the simulation.
@@ -44,13 +48,13 @@ class SimulationRunner:
         logger.debug(f"[SIM {simulation_id}] Tick {simulation.tick}")
 
         # broadcast tick event
-        tick_msg = SimulationTickMessage(id=self.id, tick=self._tick_counter)
+        tick_msg = SimulationTickMessage(id=simulation.id, tick=simulation.tick)
         await self._nats.publish(
             tick_msg.model_dump_json(), tick_msg.get_channel_name()
         )
 
         tick_message = SimulationTickMessage(
-            id=self.simulation_id,
+            id=simulation.id,
             tick=simulation.tick,
         )
 
@@ -59,18 +63,26 @@ class SimulationRunner:
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
 
-        agent_service = AgentService(self._db, self._nats, self._milvus)
-        agents = agent_service.get_by_simulation_id(simulation_id)
+        agent_service = AgentService(self._db, self._nats)
+        agents = agent_service.get_by_simulation_id(simulation.id)
+
+        agent_runner = AgentRunner(self._db, self._nats)
+
+        tasks = [
+            agent_runner.tick_agent(AutogenAgent(self._db, self._nats, agent))
+            for agent in agents
+        ]
+        await asyncio.gather(*tasks)
 
     async def tick_world(self, world_id: str):
         """Tick the world"""
-        logger.info(f"Ticking world {self.id}")
+        logger.info(f"Ticking world {world_id}")
 
-        world = self.world_service.get_world_by_id(world_id)
+        world = self.world_service.get_by_id(world_id)
         tick_counter = world.simulation.tick
 
         for resource in world.resources:
-            await resource.tick(tick=tick_counter)
+            await self.tick_resource(resource.id)
 
         await self._nats.publish(
             json.dumps(
@@ -79,12 +91,12 @@ class SimulationRunner:
                     "message": f"World ticked at {tick_counter}",
                 }
             ),
-            f"simulation.{self.simulation_id}.world.{self.id}",
+            f"simulation.{world.simulation.id}.world.{world.id}",
         )
 
     async def tick_resource(self, resource_id: str):
         """Update the resource"""
-        resource = self.resource_service.get_resource_by_id(resource_id)
+        resource = self.resource_service.get_by_id(resource_id)
         tick = resource.simulation.tick
 
         # Resource has regrown and is available for harvesting

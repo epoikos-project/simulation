@@ -26,9 +26,9 @@ class CreateWorldInput(BaseModel):
 
 
 @router.post("")
-async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):
+async def create_simulation(name: str, broker: Nats, db: DB):
     try:
-        simulation = SimulationService(db=db, nats=broker, milvus=milvus, id=name)
+        simulation = SimulationService(db=db, nats=broker, id=name)
         simulation.create_simulation()
     except Exception as e:
         logger.error(f"Error creating simulation: {e}")
@@ -39,7 +39,7 @@ async def create_simulation(name: str, broker: Nats, db: DB, milvus: Milvus):
 @router.get("")
 async def list_simulations(db: DB):
     try:
-        simulation_service = SimulationService(db=db, nats=None, milvus=None)
+        simulation_service = SimulationService(db=db, nats=None)
         simulations = simulation_service.get_simulations()
     except Exception as e:
         logger.error(f"Error listing simulations: {e}")
@@ -50,7 +50,7 @@ async def list_simulations(db: DB):
 @router.get("/{id}")
 async def get_simulation(id: str, db: DB):
     try:
-        simulation_service = SimulationService(db=db, nats=None, milvus=None)
+        simulation_service = SimulationService(db=db, nats=None)
         simulation = simulation_service.get_by_id(id)
     except Exception as e:
         logger.error(f"Error getting simulation: {e}")
@@ -61,9 +61,9 @@ async def get_simulation(id: str, db: DB):
 
 
 @router.delete("/{id}")
-async def delete_simulation(id: str, db: DB, milvus: Milvus, nats: Nats):
+async def delete_simulation(id: str, db: DB, nats: Nats):
     try:
-        simulation = SimulationService(db=db, nats=nats, milvus=milvus)
+        simulation = SimulationService(db=db, nats=nats)
         simulation.delete(id)
     except Exception as e:
         logger.error(f"Error deleting simulation: {e}")

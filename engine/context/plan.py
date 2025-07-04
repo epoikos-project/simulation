@@ -1,8 +1,7 @@
-from engine.context import Context
-from schemas.agent import Agent
+from engine.context.base import BaseContext
 
 
-class PlanContext(Context):
+class PlanContext(BaseContext):
 
     def build(self) -> str:
 

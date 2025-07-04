@@ -1,9 +1,23 @@
-from engine.context import Context
-from engine.context.observation import Observation
+from typing import Annotated, Union
+
+from pydantic import Field
+from engine.context.base import BaseContext
+from engine.context.observations import (
+    ResourceObservation,
+    AgentObservation,
+    OtherObservation,
+)
 
 
-class ObservationContext(Context):
-    def build(self, observations: list[Observation]) -> str:
+ObservationUnion = Annotated[
+    Union[ResourceObservation, AgentObservation, OtherObservation],
+    Field(discriminator="type"),
+]
+
+
+class ObservationContext(BaseContext):
+
+    def build(self, observations: list[ObservationUnion]) -> str:
         observation_description = (
             "Observations: You have made the following observations in your surroundings: "
             + ", ".join([str(obs) for obs in observations])
