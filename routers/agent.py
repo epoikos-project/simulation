@@ -46,7 +46,11 @@ async def list_agents(simulation_id: str, db: DB, broker: Nats):
     """List all agents in the simulation"""
     agents_service = AgentService(db=db, nats=broker)
 
-    agents = agents_service.get_by_simulation_id(simulation_id)
+    try:
+        agents = agents_service.get_by_simulation_id(simulation_id)
+    except ValueError:
+        # return empty list if no agents found for this simulation
+        agents = []
     return agents
 
 

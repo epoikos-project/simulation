@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -17,6 +17,7 @@ class Simulation(BaseModel, table=True):
     collection_name: str = Field(default="")
     running: bool = Field(default=False)
     tick: int = Field(default=0)
+    last_used: Optional[str] = Field(default=None, nullable=True)
 
     agents: list["Agent"] = Relationship(
         back_populates="simulation", cascade_delete=True

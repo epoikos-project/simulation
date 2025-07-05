@@ -10,6 +10,7 @@ from loguru import logger
 from pymilvus import MilvusClient
 from sqlmodel import Session
 from tinydb import TinyDB
+from datetime import datetime, timezone
 
 from models.configuration import Configuration
 
@@ -58,14 +59,17 @@ class OrchestratorService:
         )
 
     async def run_from_config(self, config_name: str) -> str:
-        cfg = Configuration(self.tinydb).get(config_name)
+        config_model = Configuration(self.tinydb)
+        cfg = config_model.get(config_name)
         if not cfg:
             raise ValueError(f"Config '{config_name}' not found")
+        config_model.update_last_used(config_name)
 
         simulation = self.simulation_service.create(
             Simulation(),
             commit=False,
         )
+        simulation.last_used = datetime.now(timezone.utc).isoformat()
 
         world = World(
             simulation_id=simulation.id,
@@ -164,6 +168,10 @@ class OrchestratorService:
             nats=self.nats,
         )
         logger.info(f"Orchestrator: started simulation {sim_id}")
+        sim = self.simulation_service.get_by_id(sim_id)
+        sim.last_used = datetime.now(timezone.utc).isoformat()
+        self._db.add(sim)
+        self._db.commit()
 
     async def stop(self, sim_id: str):
         SimulationRunner.stop_simulation(

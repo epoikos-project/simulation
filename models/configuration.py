@@ -1,5 +1,6 @@
 import uuid
 from typing import Any, Dict, List, Optional, cast
+from datetime import datetime, timezone
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -11,6 +12,10 @@ class ConfigurationData(BaseModel):
     name: str
     agents: List[Dict[str, Any]]
     settings: Dict[str, Any] = {}
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(), nullable=True
+    )
+    last_used: Optional[str] = Field(default=None, nullable=True)
 
 
 class Configuration:
@@ -35,10 +40,21 @@ class Configuration:
             if document.get("name", "").lower() == name.lower():
                 existing = document
                 break
+        now = datetime.now(timezone.utc).isoformat()
         if existing:
-            table.update(config, doc_ids=[existing.doc_id])
+            updated = {
+                "id": existing.get("id"),
+                "name": config.get("name"),
+                "agents": config.get("agents"),
+                "settings": config.get("settings"),
+                "created_at": existing.get("created_at"),
+                "last_used": existing.get("last_used"),
+            }
+            table.update(updated, doc_ids=[existing.doc_id])
             logger.info(f"Configuration '{name}' updated successfully.")
         else:
+            config["created_at"] = now
+            config["last_used"] = now
             table.insert(config)
             logger.info(f"Configuration '{name}' saved successfully.")
 
@@ -65,3 +81,15 @@ class Configuration:
         if to_remove:
             table.remove(doc_ids=to_remove)
             logger.info(f"Configuration '{name}' deleted successfully.")
+
+    def update_last_used(self, name: str) -> None:
+        """
+        Update the last_used timestamp for a configuration record by its name (case-insensitive).
+        """
+        table = self._db.table(self._table_name)
+        for document in table.all():
+            if document.get("name", "").lower() == name.lower():
+                now = datetime.now(timezone.utc).isoformat()
+                table.update({"last_used": now}, doc_ids=[document.doc_id])
+                logger.info(f"Configuration '{name}' last_used updated to {now}.")
+                break
