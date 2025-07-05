@@ -1,8 +1,11 @@
 from asyncio.log import logger
-from typing import Type, TypeVar, Generic
+from typing import List, Type, TypeVar, Generic
 from pymilvus import MilvusClient
-from sqlmodel import Session, select
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 from faststream.nats import NatsBroker
+
+from sqlalchemy.orm import selectinload
 
 from schemas.base import BaseModel
 
@@ -18,7 +21,7 @@ class BaseService(Generic[T]):
     def __init__(
         self,
         model_class: Type[T],
-        db: Session,
+        db: AsyncSession,
         nats: NatsBroker,
     ):
         self._db = db
@@ -34,50 +37,79 @@ class BaseService(Generic[T]):
     def nats(self):
         return self._nats
 
-    def create(self, model: T, commit: bool = True):
+    async def create(self, model: T, commit: bool = True):
         """
         Create a new model instance in the database.
         """
         self._db.add(model)
         if commit:
-            self._db.commit()
-            self._db.refresh(model)
+            await self._db.commit()
+            await self._db.refresh(model)
             logger.info(f"{self._model_name} {model.id} created successfully.")
         return model
 
-    def delete(self, id: str, commit: bool = True):
+    async def delete(self, id: str, commit: bool = True):
         """
         Delete a model instance from the database.
         """
-        model = self.get_by_id(id)
+        model = await self.get_by_id(id)
         self._db.delete(model)
         if commit:
-            self._db.commit()
+            await self._db.commit()
             logger.info(f"{self._model_name} {model.id} deleted successfully.")
         return True
 
-    def get_by_id(self, id: str):
+    async def get_by_id(self, id: str, relations: List[str] = None) -> T | None:
         """
-        Retrieve a model instance by its ID.
+        Retrieve a model instance by its ID, with optional eager loading of relationships.
         """
-        model = self._db.get(self._model_class, id)
+        statement = select(self._model_class).where(self._model_class.id == id)
+
+        if relations:
+            for relation_name in relations:
+                relation_attr = getattr(self._model_class, relation_name, None)
+                if relation_attr is None:
+                    logger.warning(
+                        f"Relationship '{relation_name}' not found on model "
+                        f"'{self._model_class.__name__}'. Skipping eager load."
+                    )
+                    continue
+                statement = statement.options(selectinload(relation_attr))
+
+        result = await self._db.execute(statement)
+        model = result.scalars().first()
+
         if not model:
-            raise ValueError(f"{self._model_class.__name__} with ID {id} not found.")
+            logger.warning(f"{self._model_class.__name__} with ID {id} not found.")
+            return None
+
         return model
 
-    def get_by_simulation_id(self, simulation_id: str):
+    async def get_by_simulation_id(
+        self, simulation_id: str, relations: List[str] = None
+    ) -> List[T]:
         """
-        Retrieve a model instance by its simulation ID.
+        Retrieve all model instances by simulation ID, with optional eager loading.
         """
         statement = select(self._model_class).where(
             self._model_class.simulation_id == simulation_id
         )
-        model = self._db.exec(statement).all()
-        if not model:
-            raise ValueError(
-                f"{self._model_class.__name__} with simulation ID {simulation_id} not found."
-            )
-        return model
+
+        # Dynamically add relationship loading
+        if relations:
+            for relation_name in relations:
+                relation_attr = getattr(self._model_class, relation_name, None)
+                if relation_attr is None:
+                    logger.warning(
+                        f"Relationship '{relation_name}' not found on model "
+                        f"'{self._model_class.__name__}'. Skipping eager load."
+                    )
+                    continue
+                statement = statement.options(selectinload(relation_attr))
+
+        result = await self._db.execute(statement)
+        models = result.scalars().all()
+        return models
 
 
 class BaseMilvusService(BaseService[T]):
@@ -89,7 +121,7 @@ class BaseMilvusService(BaseService[T]):
     def __init__(
         self,
         model_class: Type[T],
-        db: Session,
+        db: AsyncSession,
         nats: NatsBroker,
         milvus: MilvusClient,
     ):

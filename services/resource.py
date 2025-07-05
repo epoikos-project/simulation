@@ -6,9 +6,12 @@ from schemas.resource import Resource
 from services.base import BaseService
 from utils import compute_in_radius
 
+from faststream.nats import NatsBroker
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 
 class ResourceService(BaseService[Resource]):
-    def __init__(self, db, nats):
+    def __init__(self, db: AsyncSession, nats: NatsBroker):
         super().__init__(Resource, db, nats)
 
     async def start_harvest_resource(self, resource: Resource, harvester: Agent):
@@ -35,7 +38,7 @@ class ResourceService(BaseService[Resource]):
             resource.time_harvest = tick + resource.mining_time
 
             self._db.add(resource)
-            self._db.commit()
+            await self._db.commit()
 
         else:
             logger.error(
@@ -55,7 +58,7 @@ class ResourceService(BaseService[Resource]):
         )
         await resource_harvested_message.publish(self._nats)
 
-    def finish_harvest_resource(self, resource: Resource, harvester: Agent):
+    async def finish_harvest_resource(self, resource: Resource, harvester: Agent):
         """Finish harvesting the resource"""
 
         for harvester in resource.harvester:
@@ -67,4 +70,4 @@ class ResourceService(BaseService[Resource]):
 
         self._db.add(harvester)
         self._db.add(resource)
-        self._db.commit()
+        await self._db.commit()

@@ -27,19 +27,18 @@ from engine.context.observations.agent import AgentObservation
 from engine.context.observations.resource import ResourceObservation
 from engine.context.system import SystemDescription
 from schemas.agent import Agent
+from schemas.simulation import Simulation
+from schemas.world import World
 from services.agent import AgentService
 from services.region import RegionService
 from utils import extract_tool_call_info, summarize_tool_call
 
 
 class AutogenAgent:
-    def __init__(
-        self,
-        db: Session,
-        nats: Nats,
-        agent: Agent,
-    ):
+    def __init__(self, db: Session, nats: Nats, agent: Agent, simulation: Simulation):
         self.agent = agent
+        self.simulation = simulation
+
         self.model = AvailableModels.get(agent.model)
 
         self._db = db
@@ -91,10 +90,10 @@ class AutogenAgent:
             func=bound,
         )
 
-    def get_context(self):
+    async def get_context(self):
         """Load the context from the database or other storage."""
 
-        observations = self.agent_service.get_world_context(self.agent)
+        observations = await self.agent_service.get_world_context(self.agent)
 
         parts = [
             HungerContext(self.agent).build(),
@@ -179,19 +178,26 @@ class AutogenAgent:
             ]
 
     @observe(as_type="generation", name="Agent Tick")
-    async def generate(self, reason: bool, reasoning_output: str | None = None):
+    async def generate(
+        self,
+        reason: bool,
+        world: World,
+        reasoning_output: str | None = None,
+    ):
         logger.debug(f"Ticking agent {self.agent.id}")
 
         self._update_langfuse_trace()
 
+        print(world.id)
+
         # update agent energy
-        current_region = self.region_service.get_region_at(
-            self.agent.x_coord, self.agent.y_coord
+        current_region = await self.region_service.get_region_at(
+            x=self.agent.x_coord, y=self.agent.y_coord, world_id=world.id
         )
 
         self.agent.energy_level -= current_region.region_energy_cost
 
-        observations, context = self.get_context()
+        observations, context = await self.get_context()
 
         self._adapt_tools(observations=observations)
 
@@ -227,18 +233,17 @@ class AutogenAgent:
 
         self.agent.last_error = error
 
-        if not error and not reason:
-            self.agent.last_action = last_tool_summary
-
-        self._db.add(self.agent)
-        self._db.commit()
-
         if not reason and not error:
             last_tool_call = extract_tool_call_info(output)
             last_tool_summary = summarize_tool_call(last_tool_call)
+            self.agent.last_action = last_tool_summary
         else:
             last_tool_call = {}
             last_tool_summary = None
+            self.agent.last_action = None
+
+        self._db.add(self.agent)
+        await self._db.commit()
 
         langfuse_context.update_current_observation(
             usage_details={

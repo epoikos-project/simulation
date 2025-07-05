@@ -2,7 +2,8 @@ import random
 from typing import override
 
 from faststream.nats import NatsBroker
-from sqlmodel import Session, select
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from schemas.region import Region
 
@@ -13,19 +14,10 @@ from services.region import RegionService
 
 class WorldService(BaseService[WorldModel]):
 
-    def __init__(self, db: Session, nats: NatsBroker):
+    def __init__(self, db: AsyncSession, nats: NatsBroker):
         super().__init__(WorldModel, db=db, nats=nats)
 
-    @override
-    def get_by_simulation_id(self, simulation_id: str) -> WorldModel:
-        """Get world by simulation ID"""
-        statement = select(WorldModel).where(WorldModel.simulation_id == simulation_id)
-        world = self._db.exec(statement).first()
-        if not world:
-            raise ValueError(f"World for simulation {simulation_id} not found.")
-        return world
-
-    def create_regions_for_world(
+    async def create_regions_for_world(
         self,
         world: WorldModel,
         num_regions: int,
@@ -49,19 +41,19 @@ class WorldService(BaseService[WorldModel]):
                 region_energy_cost=base_energy_cost,
             )
             region_service = RegionService(db=self._db, nats=self._nats)
-            region_service.create(
+            await region_service.create(
                 model=region,
                 commit=False,
             )
 
-            region_service.create_resources_for_region(
+            await region_service.create_resources_for_region(
                 region=region,
                 num_resources=total_resources // num_regions,
                 commit=False,
             )
             regions.append(region)
         if commit:
-            self._db.commit()
+            await self._db.commit()
         return regions
 
     def _divide_grid_into_regions(

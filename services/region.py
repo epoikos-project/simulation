@@ -4,16 +4,20 @@ from sqlalchemy import select
 
 from schemas.region import Region
 from schemas.resource import Resource
+from schemas.world import World
 from services.base import BaseService
 from services.resource import ResourceService
+
+from faststream.nats import NatsBroker
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 class RegionService(BaseService[Region]):
 
-    def __init__(self, db, nats):
+    def __init__(self, db: AsyncSession, nats: NatsBroker):
         super().__init__(Region, db, nats)
 
-    def create_resources_for_region(
+    async def create_resources_for_region(
         self,
         region: Region,
         num_resources: int,
@@ -36,29 +40,33 @@ class RegionService(BaseService[Region]):
                 world_id=region.world_id,
                 region_id=region.id,
             )
-            resource = resource_service.create(model=resource, commit=commit)
+            resource = await resource_service.create(model=resource, commit=commit)
             resources.append(resource)
 
         if commit:
-            self._db.commit()
+            await self._db.commit()
         return resources
 
-    def get_region_at(self, x: int, y: int) -> Region:
+    async def get_region_at(self, world_id: int, x: int, y: int) -> Region:
         """Get the region that contains the given coordinates."""
-        results = self._db.exec(
+
+        print(x, y)
+
+        results = await self._db.execute(
             select(Region).where(
+                Region.world_id == world_id,
                 Region.x_1 <= x,
                 Region.x_2 > x,
                 Region.y_1 <= y,
                 Region.y_2 > y,
             )
         )
-        region = results.one()
+        region = results.scalar_one()
 
         if not region:
             raise ValueError(f"No region found for coordinates ({x}, {y})")
 
-        return region[0]
+        return region
 
     def _create_resource_coords(
         self, x_coords: tuple[int, int], y_coords: tuple[int, int], num_resources: int

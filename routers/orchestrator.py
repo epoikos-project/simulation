@@ -4,7 +4,8 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from clients import Nats, DB, Milvus
 from clients import sqlite
-from clients.sqlite import DB as SQLiteDB
+from clients.db import AsyncDB
+from clients.sqlite import DB as SQLiteDB, AsyncSQLiteDB
 from models.orchestrator import Orchestrator
 
 router = APIRouter(prefix="/orchestrator", tags=["Orchestrator"])
@@ -22,7 +23,7 @@ async def run(config_name: str, db: DB, sqlite: SQLiteDB, nats: Nats):
 
 
 @router.post("/tick/{simulation_id}")
-async def tick(simulation_id: str, db: DB, sqlite: SQLiteDB, nats: Nats):
+async def tick(simulation_id: str, db: DB, sqlite: AsyncDB, nats: Nats):
     orch = Orchestrator(db=db, sqlite=sqlite, nats=nats)
     try:
         await orch.tick(simulation_id)

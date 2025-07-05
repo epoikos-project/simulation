@@ -2,9 +2,12 @@ from typing import Annotated
 from langfuse.decorators import observe
 from loguru import logger
 
+from clients.db import get_async_session
+from messages.world.agent_moved import AgentMovedMessage
+
 
 @observe()
-def move(
+async def move(
     x: Annotated[
         int,
         "X Coordinate",
@@ -17,25 +20,39 @@ def move(
     simulation_id: str,
 ):
     """Move in the world. You can only move one coordinate at a time and have to choose a location different to your current location. YOU CANNOT move to an already occupied location."""
-    from clients.sqlite import get_tool_session
+    from clients.db import get_db_session
     from clients.nats import nats_broker
     from services.agent import AgentService
 
     logger.success("Calling tool move")
 
-    with get_tool_session() as db:
+    nats = nats_broker()
+
+    async with get_async_session() as db:
         logger.debug(f"Agent {agent_id} starts moving to {(x, y)}")
-        nats = nats_broker()
+
+        agent_service = AgentService(db=db, nats=nats)
 
         try:
-            agent_service = AgentService(db=db, nats=nats)
-            agent = agent_service.get_by_id(agent_id)
-
-            agent_service.move_agent(agent=agent, destination=(x, y))
+            agent = await agent_service.get_by_id(agent_id)
+            new_location = await agent_service.move_agent(
+                agent=agent, destination=(x, y)
+            )
         except Exception as e:
+            await db.rollback()
             logger.exception(e)
             logger.error(f"Error moving agent: {e}")
-            raise e
+            raise
+
+    agent_moved_message = AgentMovedMessage(
+        simulation_id=agent.simulation_id,
+        id=agent.id,
+        start_location=(agent.x_coord, agent.y_coord),
+        new_location=new_location,
+        destination=(x, y),
+        num_steps=1,
+    )
+    await agent_moved_message.publish(nats)
 
 
 # @observe()

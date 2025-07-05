@@ -30,7 +30,7 @@ class ResourceObservation(BaseObservation):
         if self.distance > self.resource.harvesting_area:
             return False
         elif (
-            self.being_harvested
+            self.resource.being_harvested
             and len(self.resource.harvesters) >= self.resource.required_agents
         ):
             return False

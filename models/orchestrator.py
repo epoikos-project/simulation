@@ -60,17 +60,17 @@ class Orchestrator:
         if not cfg:
             raise ValueError(f"Config '{config_name}' not found")
 
-        simulation = self.simulation_service.create(
+        simulation = await self.simulation_service.create(
             Simulation(),
             commit=False,
         )
 
-        world = self.world_service.create(
+        world = await self.world_service.create(
             World(simulation_id=simulation.id), commit=False
         )
         self._db.add(world)
 
-        regions = self.world_service.create_regions_for_world(
+        regions = await self.world_service.create_regions_for_world(
             world=world,
             num_regions=cfg.get("settings", {}).get("num_regions", 1),
             commit=False,
@@ -82,7 +82,7 @@ class Orchestrator:
             # 2. Create resources for each region
             num_resources = cfg.get("settings", {}).get("num_resources", 10)
             resources.extend(
-                self.region_service.create_resources_for_region(
+                await self.region_service.create_resources_for_region(
                     region=region,
                     num_resources=num_resources,
                     commit=False,
@@ -138,7 +138,7 @@ class Orchestrator:
                 y_coord=y,
                 collection_name=f"simulation_{sim_id}_agent_{name}",
             )
-            agent = self.agent_service.create(agent, commit=False)
+            agent = await self.agent_service.create(agent, commit=False)
             agents.append(agent)
             logger.info(f"Orchestrator: created agent {agent.id} ({agent.name})")
             await self.nats.publish(

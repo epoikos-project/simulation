@@ -12,6 +12,11 @@ import subscribers
 from config.base import settings
 from config.sqlite import engine
 
+import logging
+
+
+from clients.db import sessionmanager
+
 router = NatsRouter(settings.nats.url)
 
 origins = [
@@ -32,6 +37,9 @@ async def lifespan(app: FastAPI):
     milvus.create_client()
     tinydb.create_client()
     yield
+    if sessionmanager._engine is not None:
+        # Close the DB connection
+        await sessionmanager.close()
 
 
 app = FastAPI(lifespan=lifespan)

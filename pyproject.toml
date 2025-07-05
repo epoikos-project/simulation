@@ -27,6 +27,7 @@ dependencies = [
     "scipy>=1.10.0",
     "psycopg2-binary>=2.9.10",
     "sqlalchemy[asyncio]>=2.0.41",
+    "asyncpg>=0.30.0",
 ]
 
 [dependency-groups]

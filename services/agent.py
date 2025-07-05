@@ -13,36 +13,44 @@ from services.base import BaseService
 from services.world import WorldService
 from utils import compute_distance, compute_distance_raw
 
+from sqlmodel.ext.asyncio.session import AsyncSession
+from faststream.nats import NatsBroker
+
+from sqlalchemy.orm import selectinload
+
 
 class AgentService(BaseService[Agent]):
-    def __init__(self, db, nats):
+    def __init__(self, db: AsyncSession, nats: NatsBroker):
         super().__init__(Agent, db, nats)
 
     @override
-    def create(self, obj: Agent, commit: bool = True) -> Agent:
-        agent = super().create(obj, commit)
+    async def create(self, obj: Agent, commit: bool = True) -> Agent:
+        agent = await super().create(obj, commit)
         # self._milvus.create_collection(
         #     collection_name=agent.collection_name, dimension=128
         # )
         return agent
 
-    def get_world_context(self, agent: Agent) -> list[ObservationUnion]:
+    async def get_world_context(self, agent: Agent) -> list[ObservationUnion]:
         context = []
 
         context.extend(
-            self.get_resource_observations(
+            await self.get_resource_observations(
                 agent,
             )
         )
 
-        context.extend(self.get_agent_observations(agent))
+        context.extend(await self.get_agent_observations(agent))
         return context
 
-    def get_resource_observations(self, agent: Agent) -> list[ResourceObservation]:
+    async def get_resource_observations(
+        self, agent: Agent
+    ) -> list[ResourceObservation]:
         """Load resource observation from database given coordinates and visibility range of an agent"""
 
-        resources = self._db.exec(
-            select(Resource).where(
+        statement = await self._db.execute(
+            select(Resource)
+            .where(
                 Resource.simulation_id == agent.simulation.id,
                 Resource.world_id == agent.simulation.world.id,
                 Resource.x_coord >= agent.x_coord - agent.visibility_range,
@@ -50,7 +58,10 @@ class AgentService(BaseService[Agent]):
                 Resource.y_coord >= agent.y_coord - agent.visibility_range,
                 Resource.y_coord <= agent.y_coord + agent.visibility_range,
             )
-        ).all()
+            .options(selectinload(Resource.harvesters))
+        )
+
+        resources = statement.scalars().all()
 
         # Create ResourceObservation for each nearby resource
         resource_observations = []
@@ -68,11 +79,11 @@ class AgentService(BaseService[Agent]):
 
         return resource_observations
 
-    def get_agent_observations(self, agent: Agent) -> list[AgentObservation]:
+    async def get_agent_observations(self, agent: Agent) -> list[AgentObservation]:
         """Load agent observation from database given coordinates and visibility range of an agent"""
         # Filter agents based on agents location and visibility range
 
-        agents = self._db.exec(
+        statement = await self._db.execute(
             select(Agent).where(
                 Agent.simulation_id == agent.simulation_id,
                 Agent.id != agent.id,
@@ -81,7 +92,8 @@ class AgentService(BaseService[Agent]):
                 Agent.y_coord >= agent.y_coord - agent.visibility_range,
                 Agent.y_coord <= agent.y_coord + agent.visibility_range,
             )
-        ).all()
+        )
+        agents = statement.scalars().all()
 
         # Create AgentObservation for each nearby agent
         agent_observations = []
@@ -100,17 +112,18 @@ class AgentService(BaseService[Agent]):
 
         return agent_observations
 
-    def move_agent(self, agent: Agent, destination: tuple[int, int]):
+    async def move_agent(self, agent: Agent, destination: tuple[int, int]):
         """Move agent to new location in world"""
         logger.debug(f"Moving agent {agent.id} to {destination}")
 
         agent_service = AgentService(self._db, self._nats)
         world_service = WorldService(self._db, self._nats)
 
+        world = await world_service.get_by_simulation_id(agent.simulation_id)
+        world = world[0]
+
         # Check if destination is valid
-        if not world_service.check_coordinates(
-            world_service.get_by_simulation_id(agent.simulation_id), destination
-        ):
+        if not world_service.check_coordinates(world=world, coords=destination):
             raise ValueError(
                 f"Destination {destination} is invalid. World boundary reached."
             )
@@ -129,8 +142,8 @@ class AgentService(BaseService[Agent]):
 
         # Set agent field of view and get path
         # Create grid with obstacles
-        obstacles = agent_service.get_world_obstacles(agent)
-        grid = Grid(agent.simulation.world.size_x, agent.simulation.world.size_y)
+        obstacles = await agent_service.get_world_obstacles(agent)
+        grid = Grid(world.size_x, world.size_y)
         grid.set_agent_field_of_view(agent_location, agent.visibility_range, obstacles)
         # Get shortest path from agent location to destination
         try:
@@ -150,29 +163,19 @@ class AgentService(BaseService[Agent]):
         logger.debug("Before db commit")
 
         self._db.add(agent)
-        self._db.commit()
+        await self._db.commit()
 
         logger.debug("After db commit")
 
-        agent_moved_message = AgentMovedMessage(
-            simulation_id=self.simulation_id,
-            id=agent.id,
-            start_location=agent_location,
-            new_location=new_location,
-            destination=destination,
-            num_steps=(len(path) - 1) // agent.range_per_move,
-        )
-        # await agent_moved_message.publish(self._nats)
-
         return new_location
 
-    def get_world_obstacles(self, agent: Agent):
+    async def get_world_obstacles(self, agent: Agent):
         """Get obstacles for agent"""
 
         agent_fov = agent.visibility_range
         agent_location = (agent.x_coord, agent.y_coord)
 
-        agents = self._db.exec(
+        statement = await self._db.execute(
             select(Agent).where(
                 Agent.simulation_id == agent.simulation_id,
                 Agent.id != agent.id,  # Exclude the current agent
@@ -181,10 +184,11 @@ class AgentService(BaseService[Agent]):
                 Agent.y_coord >= agent_location[1] - agent_fov,
                 Agent.y_coord <= agent_location[1] + agent_fov,
             )
-        ).all()
+        )
+        agents = statement.scalars().all()
 
         # Filter resources based on agents location and visibility range
-        resources = self._db.exec(
+        statement = await self._db.execute(
             select(Resource).where(
                 Resource.simulation_id == agent.simulation_id,
                 Resource.x_coord >= agent_location[0] - agent_fov,
@@ -192,7 +196,8 @@ class AgentService(BaseService[Agent]):
                 Resource.y_coord >= agent_location[1] - agent_fov,
                 Resource.y_coord <= agent_location[1] + agent_fov,
             )
-        ).all()
+        )
+        resources = statement.scalars().all()
 
         # Create list of obstacles
         obstacles = []
