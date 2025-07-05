@@ -51,5 +51,22 @@ known_routers = ["routers"]
 known_utilities = ["utils"]
 known_config = ["config"]
 
+sections = [
+    "FUTURE",
+    "STDLIB",
+    "THIRDPARTY",
+    "CONFIG",
+    "CLIENTS",
+    "SCHEMAS",
+    "ENGINE",
+    "MESSAGES",
+    "SERVICES",
+    "ROUTERS",
+    "SUBSCRIBERS",
+    "UTILITIES",
+    "FIRSTPARTY",
+    "LOCALFOLDER"
+]
+
 forced_separate = ["clients", "config", "engine", "messages", "services", 
 "schemas", "subscribers", "routers", "utils"]

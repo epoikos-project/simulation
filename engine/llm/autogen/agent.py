@@ -195,7 +195,7 @@ class AutogenAgent:
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generating next action using model {self.model.name} | Reasoning: {reason}"
         )
 
-        self._update_langfuse_trace()
+        self._update_langfuse_trace(reason=reason)
 
         # update agent energy
         current_region = self.region_service.get_region_at(
@@ -237,7 +237,7 @@ class AutogenAgent:
         )
 
         logger.debug(
-            f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generated output: {output.messages[0].content}"
+            f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generated output: {output.messages[-1].content}"
         )
 
         error = ""
@@ -281,12 +281,17 @@ class AutogenAgent:
         )
         return output
 
-    def _update_langfuse_trace(self):
+    def _update_langfuse_trace(self, reason: bool = False):
+
+        name = (
+            f"Reasoning Tick {self.agent.name}"
+            if reason
+            else f"Action Tick {self.agent.name}"
+        )
+
         langfuse_context.update_current_trace(
-            name=f"Agent Tick {self.agent.name}",
+            name=name,
             metadata={"agent_id": self.agent.id},
             session_id=self.agent.simulation_id,
         )
-        langfuse_context.update_current_observation(
-            model=self.model.name, name="Agent Call"
-        )
+        langfuse_context.update_current_observation(model=self.model.name, name=name)
