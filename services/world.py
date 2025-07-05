@@ -54,7 +54,7 @@ class WorldService(BaseService[WorldModel]):
                 commit=False,
             )
 
-            region_service.create_resources_for_region(
+            resources = region_service.create_resources_for_region(
                 region=region,
                 num_resources=total_resources // num_regions,
                 commit=False,
@@ -62,7 +62,7 @@ class WorldService(BaseService[WorldModel]):
             regions.append(region)
         if commit:
             self._db.commit()
-        return regions
+        return (regions, resources)
 
     def _divide_grid_into_regions(
         self, size: tuple[int, int], num_regions: int, min_region_size: int = 3

@@ -76,26 +76,15 @@ class Orchestrator:
         world = self.world_service.create(world, commit=False)
         self._db.add(world)
 
-        regions = self.world_service.create_regions_for_world(
+        (regions, resources) = self.world_service.create_regions_for_world(
             world=world,
             num_regions=cfg.get("settings", {}).get("num_regions", 1),
             commit=False,
+            total_resources=cfg.get("settings", {})
+            .get("world", {})
+            .get("total_resources", 25),
         )
         self._db.add_all(regions)
-
-        resources = []
-        for region in regions:
-            # 2. Create resources for each region
-            num_resources = cfg.get("settings", {}).get("num_resources", 10)
-            resources.extend(
-                self.region_service.create_resources_for_region(
-                    region=region,
-                    num_resources=num_resources,
-                    commit=False,
-                )
-            )
-            logger.info(f"Orchestrator: resources created for region {region.id}")
-
         self._db.add_all(resources)
 
         for agent_cfg in cfg.get("agents", []):

@@ -39,7 +39,6 @@ class RegionService(BaseService[Region]):
             )
             resource = resource_service.create(model=resource, commit=commit)
             resources.append(resource)
-
         if commit:
             self._db.commit()
         return resources
