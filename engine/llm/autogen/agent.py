@@ -186,7 +186,7 @@ class AutogenAgent:
 
         # update agent energy
         current_region = self.region_service.get_region_at(
-            self.agent.x_coord, self.agent.y_coord
+            self.agent.simulation.world.id, self.agent.x_coord, self.agent.y_coord
         )
 
         self.agent.energy_level -= current_region.region_energy_cost

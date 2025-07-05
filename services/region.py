@@ -43,10 +43,11 @@ class RegionService(BaseService[Region]):
             self._db.commit()
         return resources
 
-    def get_region_at(self, x: int, y: int) -> Region:
+    def get_region_at(self, world_id, x: int, y: int) -> Region:
         """Get the region that contains the given coordinates."""
         results = self._db.exec(
             select(Region).where(
+                Region.world_id == world_id,
                 Region.x_1 <= x,
                 Region.x_2 > x,
                 Region.y_1 <= y,

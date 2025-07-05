@@ -32,7 +32,11 @@ def create_db_and_tables():
 @contextmanager
 def get_tool_session():
     with Session(engine) as session:
-        yield session
+        try:
+            yield session
+        except Exception:
+            session.rollback()
+            raise
 
 
 def get_session():
