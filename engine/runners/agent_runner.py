@@ -12,7 +12,7 @@ class AgentRunner:
     @staticmethod
     async def tick_agent(db: Session, nats: NatsBroker, agent: AutogenAgent):
         try:
-            model = AvailableModels.get(agent.agent.model.name)
+            model = AvailableModels.get(agent.agent.model)
         except KeyError:
             logger.error(
                 f"[SIM {agent.agent.simulation.id}][AGENT {agent.agent.id}] Model {agent.agent.model.name} not found in AvailableModels."

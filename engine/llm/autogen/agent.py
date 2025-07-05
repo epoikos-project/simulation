@@ -1,3 +1,4 @@
+import re
 from functools import partial
 from typing import Callable, List
 
@@ -67,8 +68,13 @@ class AutogenAgent:
             self._make_bound_tool(tool) for tool in available_tools
         ]
 
+        def make_identifier(name: str) -> str:
+            # Replace invalid characters with underscores and ensure it doesn't start with a digit
+            identifier = re.sub(r"\W|^(?=\d)", "_", name)
+            return identifier
+
         autogen = AssistantAgent(
-            name=f"{self.agent.name}",
+            name=make_identifier(f"{self.agent.name}"),
             model_client=client,
             system_message=SystemPrompt(self.agent).build(),
             description=SystemDescription(self.agent).build(),
