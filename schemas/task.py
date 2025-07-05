@@ -2,9 +2,8 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship
 
-from models.resource import Resource
-
 from schemas.base import BaseModel
+from schemas.resource import Resource
 
 if TYPE_CHECKING:
 
