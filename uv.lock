@@ -364,7 +364,6 @@ dependencies = [
     { name = "ipykernel" },
     { name = "langfuse" },
     { name = "loguru" },
-    { name = "neo4j" },
     { name = "neomodel" },
     { name = "numpy" },
     { name = "pathfind" },
@@ -373,7 +372,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pymilvus" },
     { name = "scipy" },
-    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "sqlalchemy" },
     { name = "sqlmodel" },
     { name = "tinydb" },
     { name = "torch" },
@@ -397,7 +396,6 @@ requires-dist = [
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "langfuse", specifier = ">=2.60.3" },
     { name = "loguru", specifier = ">=0.7.3" },
-    { name = "neo4j", specifier = ">=5.28.1" },
     { name = "neomodel", specifier = ">=5.5.0" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "pathfind", specifier = ">=0.1.2" },
@@ -406,7 +404,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.8.1" },
     { name = "pymilvus", specifier = ">=2.5.6" },
     { name = "scipy", specifier = ">=1.10.0" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.41" },
+    { name = "sqlalchemy", specifier = ">=2.0.41" },
     { name = "sqlmodel", specifier = ">=0.0.24" },
     { name = "tinydb", specifier = ">=4.8.2" },
     { name = "torch", specifier = ">=2.0.0" },
@@ -1903,11 +1901,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/fa/2e/677c17c5d6a004c3c45334ab1dbe7b7deb834430b282b8a0f75ae220c8eb/sqlalchemy-2.0.41-cp313-cp313-win32.whl", hash = "sha256:bfc9064f6658a3d1cadeaa0ba07570b83ce6801a1314985bf98ec9b95d74e15f", size = 2082420 },
     { url = "https://files.pythonhosted.org/packages/e9/61/e8c1b9b6307c57157d328dd8b8348ddc4c47ffdf1279365a13b2b98b8049/sqlalchemy-2.0.41-cp313-cp313-win_amd64.whl", hash = "sha256:82ca366a844eb551daff9d2e6e7a9e5e76d2612c8564f58db6c19a726869c1df", size = 2108329 },
     { url = "https://files.pythonhosted.org/packages/1c/fc/9ba22f01b5cdacc8f5ed0d22304718d2c758fce3fd49a5372b886a86f37c/sqlalchemy-2.0.41-py3-none-any.whl", hash = "sha256:57df5dc6fdb5ed1a88a1ed2195fd31927e705cad62dedd86b46972752a80f576", size = 1911224 },
-]
-
-[package.optional-dependencies]
-asyncio = [
-    { name = "greenlet" },
 ]
 
 [[package]]
