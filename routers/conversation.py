@@ -8,6 +8,7 @@ import clients
 from clients import Nats
 from models.agent import Agent
 from models.conversation import Conversation
+from models.llm_utils import analyze_conversation_with_llm
 import logging
 
 router = APIRouter(
@@ -180,13 +181,9 @@ async def advance_conversation(
 
     # Analyze sentiment and relationship dynamics
     logger.info("Analyzing sentiment and relationship dynamics")
-
-    # Give the whole conversation to the LLM and let it decide sentiment and relationship
-    from models.llm_utils import analyze_conversation_with_llm
-
-    llm_result = analyze_conversation_with_llm(conversation.messages)
+    llm_result = await analyze_conversation_with_llm(conversation.messages)
     sentiment_score = llm_result.get("sentiment_score", 0.0)
-    relationship_type = llm_result.get("relationship_type", "Unknown")
+    relationship_type = llm_result.get("relationship_type", "Neutral")
     trust_change = llm_result.get("trust_change", 0.0)
     respect_change = llm_result.get("respect_change", 0.0)
 

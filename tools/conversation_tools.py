@@ -2,6 +2,7 @@ import uuid
 from typing import Annotated, List, Optional, Union
 import json
 from langfuse.decorators import observe
+from tinydb.queries import Query
 
 from models.conversation import Conversation
 from clients.tinydb import get_client
@@ -56,7 +57,7 @@ async def engage_conversation(
     agent_id: str,
     simulation_id: str,
 ) -> None:
-    """Process the agent’s turn in an existing conversation, advance or end it, and return the response."""
+    """Process the agent's turn in an existing conversation, advance or end it, and return the response."""
 
     logger.success("Calling tool engage_conversation")
     db = get_client()
@@ -68,20 +69,41 @@ async def engage_conversation(
     logger.debug(f"Engaging agent {agent_id} in conversation {conversation_id}")
 
     try:
+        # First verify the conversation exists and agent is part of it
+        table = db.table("agent_conversations")
+        conversation = table.get(
+            (Query().id == conversation_id)
+            & (Query().simulation_id == simulation_id)
+            & (Query().agent_ids.any([agent_id]))
+        )
+        if not conversation:
+            logger.error(
+                f"Conversation {conversation_id} not found or agent {agent_id} not part of it"
+            )
+            return
+
         agent = Agent(
             milvus=None, db=db, nats=nats, simulation_id=simulation_id, id=agent_id
         )
 
         agent.load()
 
-        should_continue = await agent.process_turn(conversation_id)
+        # Process the turn and get the result
+        response, should_continue = await agent.process_turn(conversation_id)
 
         # Load and update conversation state
         conv = Conversation.load(db, conversation_id)
-        if should_continue:
-            conv.advance_turn()
+        if conv:
+            if should_continue:
+                conv.advance_turn()
+            else:
+                conv.end_conversation()
         else:
-            conv.end_conversation()
+            logger.error(
+                f"Failed to load conversation {conversation_id} after processing turn"
+            )
+
     except Exception as e:
         logger.error(f"Error engaging conversation: {e}")
-        raise e
+        # Don't raise the error - instead return gracefully so the agent can try again
+        return

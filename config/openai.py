@@ -1,10 +1,11 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from dataclasses import dataclass
 from typing import Dict, Literal
 from autogen_core.models import ModelInfo
 
 
 class OpenAISettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="OPENAI_")
     baseurl: str = ""
     apikey: str = ""
 

@@ -105,6 +105,8 @@ class Agent:
             model_info=model.info,
             base_url=settings.openai.baseurl,
             api_key=settings.openai.apikey,
+            timeout=30,  # 30 second timeout
+            max_retries=2
         )
 
         tools: List[BaseTool] = [self.make_bound_tool(tool) for tool in available_tools]
@@ -422,8 +424,16 @@ class Agent:
         return target_agent_id
 
     def receive_conversation_context(self, conversation_id: str):
+        """Get the conversation context from the database"""
+        if not conversation_id or conversation_id == "current_conversation":
+            return None
+            
         table = self._db.table("agent_conversations")
-        conversation = table.get(Query().id == conversation_id)
+        conversation = table.get(
+            (Query().id == conversation_id) & 
+            (Query().simulation_id == self.simulation_id) &
+            (Query().agent_ids.any([self.id]))  # Ensure agent is part of conversation
+        )
         return conversation
 
     async def process_turn(self, conversation_id: str):
@@ -431,35 +441,20 @@ class Agent:
         logger.info(
             f"Agent {self.id} processing turn for conversation {conversation_id}"
         )
-        # Get conversation context
-
+        
         conversation = self.receive_conversation_context(conversation_id)
         logger.info(f"Conversation context: {conversation}")
 
         if not conversation:
             logger.warning(f"No conversation context found for {conversation_id}")
             return "I'm ready to start the conversation.", True
-        # Format conversation for the LLM
+
         formatted_conversation = self._format_conversation_for_llm(conversation)
         logger.info(f"Formatted conversation for LLM: {formatted_conversation}")
 
         try:
             logger.info("Calling LLM for response")
-
-            chat_agent = AssistantAgent(
-                name=f"{self.name}",
-                model_client=self._client,
-                system_message=SYSTEM_MESSAGE,
-                description=DESCRIPTION.format(
-                    id=self.id,
-                    name=self.name,
-                    # personality=self.personality
-                ),
-                reflect_on_tool_use=False,  # False as our current tools do not return text
-                model_client_stream=False,
-                # memory=[]
-            )
-            response = await chat_agent.run(task=formatted_conversation)
+            response = await self.autogen_agent.run(task=formatted_conversation)
             logger.info(f"LLM response: {response}")
 
             if not response or not response.messages:
@@ -471,13 +466,12 @@ class Agent:
         except Exception as e:
             logger.error(f"Error processing turn for agent {self.id}: {str(e)}")
             content = "I encountered an error while processing my turn."
-        # Check if the agent wants to end the conversation
+
         should_continue = "END_CONVERSATION" not in content.upper()
         logger.info(f"Should continue conversation: {should_continue}")
 
-        # Store the message
         try:
-            await self._store_message_in_conversation(conversation_id, content)
+            self._store_message_in_conversation(conversation_id, content)
             logger.info("Message stored successfully")
         except Exception as e:
             logger.error(f"Error storing message: {str(e)}")
@@ -487,35 +481,29 @@ class Agent:
     def _format_conversation_for_llm(self, conversation):
         """Format the conversation history for the LLM"""
         logger.info("Formatting conversation for LLM")
-        context = """You are in a conversation with another agent. Your goal is to engage in meaningful dialogue.
-        Review the conversation history below and respond appropriately.
-        Your response should be natural and conversational.
-        If you want to end the conversation, include 'END_CONVERSATION' in your response.\n\n"""
-
+        
         if not conversation.get("messages"):
             logger.info("No previous messages, starting new conversation")
-            context += "This is the start of the conversation. Please introduce yourself and start the discussion."
+            context = "This is the start of the conversation. Introduce yourself briefly."
             return context
 
         logger.info(f"Formatting {len(conversation['messages'])} previous messages")
 
-        # Include relationship information
-        relationship_info = "Relationship Information:\n"
+        # Include relationship information and conversation ID
+        context = f"You are in conversation {conversation['id']}.\n\n"
+        context += "Relationship Information:\n"
         for agent_id in conversation.get("agent_ids", []):
             if agent_id != self.id:
                 relationship_status = self.get_relationship_status(agent_id)
-                relationship_info += (
-                    f"Your relationship with Agent {agent_id}: {relationship_status}\n"
-                )
-        context += relationship_info + "\n"
+                context += f"Your relationship with Agent {agent_id}: {relationship_status}\n"
+        context += "\n"
 
+        # Add conversation history
         for msg in conversation["messages"]:
-            sender = (
-                "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
-            )
+            sender = "You" if msg["sender_id"] == self.id else f"Agent {msg['sender_id']}"
             context += f"{sender}: {msg['content']}\n\n"
 
-        context += "Your turn to respond. Make sure to be engaging and continue the conversation naturally."
+        context += "Your turn to respond. Note: Use exactly this conversation ID when calling tools: " + conversation['id']
         logger.info("Conversation formatted successfully")
         return context
 

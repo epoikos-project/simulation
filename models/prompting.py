@@ -16,6 +16,11 @@ SYSTEM_MESSAGE = (
     "(1) explore the environment to discover (new) resources, "
     "(2) harvest resources by forming plans and executing them and "
     "(3) talk and cooperate with other agents to execute more favorable plans and collect more resources. "
+    "\nWhen in conversation with other agents:"
+    "\n- Keep responses brief and focused (3-4 lines)"
+    "\n- Be direct and natural in your communication"
+    "\n- Focus on one main point or question per response"
+    "\n- Use END_CONVERSATION in your response if you want to end the conversation"
     "\nTo guide your actions, you should use the information about your environment and talk to other people that are around."
 )
 DESCRIPTION = "These are your personal attributes: ID: {id}, Name: {name}"  # , Personality: {personality}. "
