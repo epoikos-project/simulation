@@ -1,10 +1,11 @@
+# Third Party
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from config.milvus import MilvusSettings
+from config.nats import NatsSettings
 from config.neo4j import Neo4jSettings
 from config.openai import OpenAISettings
 from config.tinydb import TinyDBSettings
-from config.milvus import MilvusSettings
-from config.nats import NatsSettings
 
 
 class Settings(BaseSettings):

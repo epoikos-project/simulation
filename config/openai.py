@@ -1,7 +1,8 @@
-from pydantic_settings import BaseSettings
 from dataclasses import dataclass
 from typing import Dict, Literal
-from autogen_core.models import ModelInfo
+
+from autogen_core.models import ModelFamily, ModelInfo
+from pydantic_settings import BaseSettings
 
 
 class OpenAISettings(BaseSettings):
@@ -13,6 +14,7 @@ class OpenAISettings(BaseSettings):
 class ModelEntry:
     name: str
     info: ModelInfo
+    reasoning: bool = True
 
 
 ModelName = Literal[
@@ -31,6 +33,7 @@ class AvailableModels:
                 json_output=True,
                 family="UNKNOWN",
             ),
+            reasoning=False,
         ),
         "llama-3.3-70b-instruct": ModelEntry(
             name="llama-3.3-70b-instruct",
@@ -40,6 +43,37 @@ class AvailableModels:
                 json_output=True,
                 family="UNKNOWN",
             ),
+            reasoning=False,
+        ),
+        "gpt-4o-mini-2024-07-18": ModelEntry(
+            name="gpt-4o-mini-2024-07-18",
+            info=ModelInfo(
+                vision=False,
+                function_calling=True,
+                json_output=True,
+                family=ModelFamily.GPT_4O,
+            ),
+            reasoning=False,
+        ),
+        "o4-mini-2025-04-16": ModelEntry(
+            name="o4-mini-2025-04-16",
+            info=ModelInfo(
+                vision=False,
+                function_calling=True,
+                json_output=True,
+                family=ModelFamily.O3,
+            ),
+            reasoning=True,
+        ),
+        "gpt-4.1-nano-2025-04-14": ModelEntry(
+            name="gpt-4.1-nano-2025-04-14",
+            info=ModelInfo(
+                vision=False,
+                function_calling=True,
+                json_output=True,
+                family=ModelFamily.GPT_4,
+            ),
+            reasoning=False,
         ),
     }
 
@@ -50,6 +84,13 @@ class AvailableModels:
     @classmethod
     def all(cls) -> Dict[str, ModelEntry]:
         return cls._models
+
+    @classmethod
+    def list(cls) -> list[str]:
+        """
+        Return a list of all model names.
+        """
+        return [{**{"id": key}, **vars(entry)} for key, entry in cls._models.items()]
 
     @classmethod
     def get_default(cls) -> ModelEntry:

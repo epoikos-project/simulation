@@ -1,11 +1,13 @@
 # routers/orchestrator.py
 
+
 from fastapi import APIRouter, HTTPException
 from loguru import logger
-from clients import Nats, DB, Milvus
-from clients import sqlite
-from clients.sqlite import DB as SQLiteDB
+
 from models.orchestrator import Orchestrator
+
+from clients import DB, Milvus, Nats, sqlite
+from clients.sqlite import DB as SQLiteDB
 
 router = APIRouter(prefix="/orchestrator", tags=["Orchestrator"])
 
@@ -33,20 +35,22 @@ async def tick(simulation_id: str, db: DB, sqlite: SQLiteDB, nats: Nats):
 
 
 @router.post("/start/{simulation_id}")
-async def start(simulation_id: str, db: DB, nats: Nats):
-    orch = Orchestrator(db=db, nats=nats)
+async def start(simulation_id: str, db: DB, sqlite: SQLiteDB, nats: Nats):
+    orch = Orchestrator(db=db, sqlite=sqlite, nats=nats)
     try:
         await orch.start(simulation_id)
     except Exception as e:
+        logger.exception(e)
         raise HTTPException(500, f"Failed to start: {e}")
     return {"message": f"Simulation {simulation_id} started"}
 
 
 @router.post("/stop/{simulation_id}")
-async def stop(simulation_id: str, db: DB, nats: Nats):
-    orch = Orchestrator(db=db, nats=nats)
+async def stop(simulation_id: str, db: DB, sqlite: SQLiteDB, nats: Nats):
+    orch = Orchestrator(db=db, sqlite=sqlite, nats=nats)
     try:
         await orch.stop(simulation_id)
     except Exception as e:
+        logger.exception(e)
         raise HTTPException(500, f"Failed to stop: {e}")
     return {"message": f"Simulation {simulation_id} stopped"}

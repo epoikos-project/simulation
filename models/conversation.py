@@ -1,10 +1,12 @@
 import uuid
 from datetime import datetime
-from typing import List, Dict, Optional
-from tinydb.queries import Query
-from config.base import settings
-from engine.sentiment import analyze_message_sentiment
+from typing import Dict, List, Optional
 
+from tinydb.queries import Query
+
+from config.base import settings
+
+from engine.sentiment import analyze_message_sentiment
 
 # TODO: instead of this custom implementation it might be worth it to consider using native autogen functionalities such as RoundRobinGroupChat
 # https://microsoft.github.io/autogen/stable/reference/python/autogen_agentchat.teams.html#autogen_agentchat.teams.RoundRobinGroupChat

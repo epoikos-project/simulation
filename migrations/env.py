@@ -1,9 +1,7 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 # this is the Alembic Config object, which provides
@@ -20,19 +18,20 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 
+
 # Import schemas to ensure they are registered with SQLModel
 from schemas import (
     agent,
-    simulation,
-    resource,
-    world,
-    region,
     configuration,
-    relationship,
-    task,
-    plan,
-    message,
     conversation,
+    message,
+    plan,
+    region,
+    relationship,
+    resource,
+    simulation,
+    task,
+    world,
 )
 
 target_metadata = SQLModel.metadata

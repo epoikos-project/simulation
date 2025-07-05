@@ -2,7 +2,6 @@ from fastapi.params import Depends
 from sqlalchemy.sql.annotation import Annotated
 from sqlmodel import Session, create_engine
 
-
 sqlite_file_name = "data/database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 

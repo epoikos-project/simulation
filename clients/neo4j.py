@@ -1,6 +1,6 @@
-from typing_extensions import Annotated
 from fastapi.params import Depends
 from neo4j import GraphDatabase
+from typing_extensions import Annotated
 
 from config import settings
 

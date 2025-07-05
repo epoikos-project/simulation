@@ -1,4 +1,4 @@
-from .plan_tools import make_plan, add_task
+from .plan_tools import add_task, make_plan
 from .world_tools import move
 
 available_tools = [

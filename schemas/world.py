@@ -1,12 +1,14 @@
 from typing import TYPE_CHECKING
+
 from sqlmodel import Field, Relationship, SQLModel
 
 from schemas.base import BaseModel
 
 if TYPE_CHECKING:
+
+    from schemas.region import Region
     from schemas.resource import Resource
     from schemas.simulation import Simulation
-    from schemas.region import Region
 
 
 class World(BaseModel, table=True):

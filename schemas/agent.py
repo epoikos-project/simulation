@@ -1,13 +1,15 @@
 from typing import TYPE_CHECKING
+
 from sqlmodel import Field, Relationship
 
 from schemas.base import BaseModel
 
 if TYPE_CHECKING:
+
     from schemas.plan import Plan
+    from schemas.relationship import Relationship
     from schemas.resource import Resource
     from schemas.simulation import Simulation
-    from schemas.relationship import Relationship
     from schemas.task import Task
 
 

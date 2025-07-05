@@ -1,8 +1,9 @@
 from asyncio.log import logger
-from typing import Type, TypeVar, Generic
+from typing import Generic, Type, TypeVar
+
+from faststream.nats import NatsBroker
 from pymilvus import MilvusClient
 from sqlmodel import Session, select
-from faststream.nats import NatsBroker
 
 from schemas.base import BaseModel
 

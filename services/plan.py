@@ -1,8 +1,9 @@
-from schemas.plan import Plan
-from services.base import BaseService
-
 from faststream.nats import NatsBroker
 from sqlmodel import Session
+
+from services.base import BaseService
+
+from schemas.plan import Plan
 
 
 class PlanService(BaseService[Plan]):

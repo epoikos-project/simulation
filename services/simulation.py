@@ -1,7 +1,8 @@
 from sqlmodel import select
 
-from schemas.simulation import Simulation as SimulationModel
 from services.base import BaseService
+
+from schemas.simulation import Simulation as SimulationModel
 
 
 class SimulationService(BaseService[SimulationModel]):

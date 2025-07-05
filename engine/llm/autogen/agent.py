@@ -9,11 +9,12 @@ from langfuse.decorators import langfuse_context, observe
 from loguru import logger
 from pymilvus import MilvusClient
 from sqlmodel import Session
-from engine.tools import available_tools
 
 from clients.nats import Nats
+
 from config.base import settings
 from config.openai import AvailableModels
+
 from engine.context import (
     ConversationContext,
     HungerContext,
@@ -26,9 +27,13 @@ from engine.context import (
 from engine.context.observations.agent import AgentObservation
 from engine.context.observations.resource import ResourceObservation
 from engine.context.system import SystemDescription
-from schemas.agent import Agent
+from engine.tools import available_tools
+
 from services.agent import AgentService
 from services.region import RegionService
+
+from schemas.agent import Agent
+
 from utils import extract_tool_call_info, summarize_tool_call
 
 
@@ -180,7 +185,9 @@ class AutogenAgent:
 
     @observe(as_type="generation", name="Agent Tick")
     async def generate(self, reason: bool, reasoning_output: str | None = None):
-        logger.debug(f"Ticking agent {self.agent.id}")
+        logger.debug(
+            f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generating next action using model {self.model.name} | Reasoning: {reason}"
+        )
 
         self._update_langfuse_trace()
 
@@ -190,6 +197,8 @@ class AutogenAgent:
         )
 
         self.agent.energy_level -= current_region.region_energy_cost
+
+        context = ""
 
         observations, context = self.get_context()
 
@@ -213,8 +222,16 @@ class AutogenAgent:
             context += "\nGiven this reasoning now decide on your next action by performing a tool call."
             self._adapt_tools(observations)
 
+        logger.debug(
+            f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Context for generation: {context}"
+        )
+
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
+        )
+
+        logger.debug(
+            f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generated output: {output.messages[0].content}"
         )
 
         error = ""
@@ -227,18 +244,17 @@ class AutogenAgent:
 
         self.agent.last_error = error
 
-        if not error and not reason:
-            self.agent.last_action = last_tool_summary
-
-        self._db.add(self.agent)
-        self._db.commit()
-
         if not reason and not error:
             last_tool_call = extract_tool_call_info(output)
             last_tool_summary = summarize_tool_call(last_tool_call)
+            self.agent.last_action = last_tool_summary
         else:
             last_tool_call = {}
             last_tool_summary = None
+            self.agent.last_action = None
+
+        self._db.add(self.agent)
+        self._db.commit()
 
         langfuse_context.update_current_observation(
             usage_details={

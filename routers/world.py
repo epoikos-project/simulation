@@ -1,8 +1,9 @@
 import json
+import logging
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 from tinydb import Query
-import logging
 
 from clients import Nats
 from clients.sqlite import DB

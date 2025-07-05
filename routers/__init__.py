@@ -1,10 +1,11 @@
-from .simulation import router as simulation_router
-from .world import router as world_router
 from .agent import router as agent_router
 from .debug import router as debug_router
-from .configuration import router as configuration_router
-from .plan import router as plan_router
 from .orchestrator import router as orchestrator_router
+from .plan import router as plan_router
+from .simulation import router as simulation_router
+from .world import router as world_router
+
+from .configuration import router as configuration_router
 
 __all__ = [
     "simulation_router",

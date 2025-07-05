@@ -1,13 +1,14 @@
+import json
 import uuid
 from typing import Annotated, List, Optional, Union
-import json
+
 from langfuse.decorators import observe
+from loguru import logger
 
 from models.conversation import Conversation
-from clients.tinydb import get_client
-from clients.nats import nats_broker
 
-from loguru import logger
+from clients.nats import nats_broker
+from clients.tinydb import get_client
 
 
 @observe()
@@ -63,6 +64,7 @@ async def engage_conversation(
     nats = nats_broker()
 
     # Import Agent here to avoid circular dependency
+
     from models.agent import Agent
 
     logger.debug(f"Engaging agent {agent_id} in conversation {conversation_id}")

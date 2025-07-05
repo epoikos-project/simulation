@@ -1,13 +1,13 @@
 from typing import Annotated, Union
 
 from pydantic import Field
+
 from engine.context.base import BaseContext
 from engine.context.observations import (
-    ResourceObservation,
     AgentObservation,
     OtherObservation,
+    ResourceObservation,
 )
-
 
 ObservationUnion = Annotated[
     Union[ResourceObservation, AgentObservation, OtherObservation],

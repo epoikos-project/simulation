@@ -1,11 +1,11 @@
 from typing import Tuple
 
-from sqlmodel import select, Session
+from sqlmodel import Session, select
 
 from engine.sentiment import analyze_message_sentiment
-from schemas.relationship import Relationship as RelationshipModel
 
 from schemas.agent import Agent as AgentModel
+from schemas.relationship import Relationship as RelationshipModel
 
 
 def update_relationship(

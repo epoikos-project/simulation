@@ -1,10 +1,11 @@
+from typing import TYPE_CHECKING
+
 from sqlmodel import Field, Relationship
 
 from schemas.base import BaseModel
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
+
     from schemas.message import Message
     from schemas.simulation import Simulation
 

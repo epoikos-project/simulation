@@ -1,7 +1,6 @@
 from .agent import AgentObservation
-from .resource import ResourceObservation
 from .other import OtherObservation
-
+from .resource import ResourceObservation
 
 __all__ = [
     "AgentObservation",

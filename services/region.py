@@ -2,10 +2,11 @@ import random
 
 from sqlalchemy import select
 
-from schemas.region import Region
-from schemas.resource import Resource
 from services.base import BaseService
 from services.resource import ResourceService
+
+from schemas.region import Region
+from schemas.resource import Resource
 
 
 class RegionService(BaseService[Region]):

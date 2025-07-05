@@ -1,11 +1,12 @@
 import uuid
 
 from loguru import logger
-from tinydb import TinyDB
-from config.base import settings
+from tinydb import Query, TinyDB
+
+from clients import DB, Nats
 from clients.nats import NatsBroker
-from clients import Nats, DB
-from tinydb import Query
+
+from config.base import settings
 
 
 class Plan:

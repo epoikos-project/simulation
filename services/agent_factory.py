@@ -1,12 +1,17 @@
 # services/agent_factory.py
 
+
 import uuid
+
+from loguru import logger
 from pymilvus import MilvusClient
 from tinydb import TinyDB
-from clients.nats import Nats
-from config.openai import AvailableModels
+
 from models.agent import Agent
-from loguru import logger
+
+from clients.nats import Nats
+
+from config.openai import AvailableModels
 
 
 class AgentFactory:

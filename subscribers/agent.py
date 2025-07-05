@@ -1,5 +1,6 @@
 import json
-from faststream.nats.fastapi import NatsRouter, NatsMessage
+
+from faststream.nats.fastapi import NatsMessage, NatsRouter
 from loguru import logger
 
 from config.base import settings

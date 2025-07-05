@@ -1,10 +1,9 @@
 from .conversation import ConversationContext
 from .hunger import HungerContext
+from .memory import MemoryContext
 from .observation import ObservationContext, ObservationUnion
 from .plan import PlanContext
-from .system import SystemPrompt, SystemDescription
-from .memory import MemoryContext
-
+from .system import SystemDescription, SystemPrompt
 
 __all__ = [
     "ConversationContext",

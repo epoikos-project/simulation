@@ -1,11 +1,13 @@
 import uuid
+from typing import Annotated
+
 from langfuse.decorators import observe
 from loguru import logger
-from typing import Annotated
+
 from clients.sqlite import get_session, get_tool_session
+
 from schemas.plan import Plan
 from schemas.task import Task
-
 
 # from fastapi import HTTPException
 
@@ -33,8 +35,9 @@ async def make_plan(
     simulation_id: str,
 ):
     """Form a new plan for resource acquisition. You can only ever have one plan at a time."""
-    from clients.sqlite import get_session
+
     from clients.nats import nats_broker
+    from clients.sqlite import get_session
 
     logger.success("Calling tool make_plan")
 
@@ -62,8 +65,9 @@ async def add_task(
     simulation_id: str,
 ):
     """Create a new task for resource collection and add this task to a plan."""
-    from clients.tinydb import get_client
+
     from clients.nats import nats_broker
+    from clients.tinydb import get_client
 
     logger.success("Calling tool add_task")
 

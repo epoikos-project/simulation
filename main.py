@@ -7,10 +7,13 @@ from sqlmodel import SQLModel
 
 from clients import milvus, tinydb
 from clients.sqlite import create_db_and_tables
-import routers
-import subscribers
+
 from config.base import settings
 from config.sqlite import engine
+
+import subscribers
+
+import routers
 
 router = NatsRouter(settings.nats.url)
 

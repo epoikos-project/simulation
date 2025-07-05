@@ -1,4 +1,5 @@
 from .base import BaseObservation
+
 from schemas.resource import Resource
 
 

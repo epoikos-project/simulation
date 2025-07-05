@@ -6,11 +6,13 @@ from sqlmodel import select
 from engine.context.observation import ObservationUnion
 from engine.context.observations import AgentObservation, ResourceObservation
 from engine.grid import Grid
-from messages.world.agent_moved import AgentMovedMessage
-from schemas.agent import Agent
-from schemas.resource import Resource
+
 from services.base import BaseService
 from services.world import WorldService
+
+from schemas.agent import Agent
+from schemas.resource import Resource
+
 from utils import compute_distance, compute_distance_raw
 
 
@@ -153,15 +155,6 @@ class AgentService(BaseService[Agent]):
         self._db.commit()
 
         logger.debug("After db commit")
-
-        agent_moved_message = AgentMovedMessage(
-            simulation_id=self.simulation_id,
-            id=agent.id,
-            start_location=agent_location,
-            new_location=new_location,
-            destination=destination,
-            num_steps=(len(path) - 1) // agent.range_per_move,
-        )
         # await agent_moved_message.publish(self._nats)
 
         return new_location

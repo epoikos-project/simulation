@@ -1,10 +1,23 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
 from tinydb import TinyDB
+
 from models.configuration import Configuration, ConfigurationData
+
 from clients.tinydb import get_client
 
+from config.openai import AvailableModels
+
 router = APIRouter(prefix="/configuration", tags=["Configuration"])
+
+
+@router.get("/models")
+async def get_available_models():
+    """
+    Get a list of available models for the orchestrator.
+    This is a placeholder function that should be implemented to return actual model data.
+    """
+    return AvailableModels.list()
 
 
 @router.post("")

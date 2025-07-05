@@ -5,11 +5,12 @@ from loguru import logger
 from pydantic import BaseModel
 from sqlmodel import select
 from tinydb import Query
-from clients import Nats, Milvus
+
+from clients import Milvus, Nats
 from clients.sqlite import DB
 
-from services.simulation import SimulationService
 from services.relationship import get_relationship_graph
+from services.simulation import SimulationService
 
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
 

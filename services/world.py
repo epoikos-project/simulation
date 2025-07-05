@@ -4,11 +4,11 @@ from typing import override
 from faststream.nats import NatsBroker
 from sqlmodel import Session, select
 
-from schemas.region import Region
-
-from schemas.world import World as WorldModel
 from services.base import BaseService
 from services.region import RegionService
+
+from schemas.region import Region
+from schemas.world import World as WorldModel
 
 
 class WorldService(BaseService[WorldModel]):

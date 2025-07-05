@@ -1,14 +1,16 @@
 from typing import TYPE_CHECKING
-from sqlmodel import Field, SQLModel, Relationship
+
+from sqlmodel import Field, Relationship, SQLModel
 
 from schemas.base import BaseModel
 
 if TYPE_CHECKING:
     # Avoid circular import issues by using string annotations
+
     from schemas.agent import Agent
-    from schemas.world import World
-    from schemas.resource import Resource
     from schemas.conversation import Conversation
+    from schemas.resource import Resource
+    from schemas.world import World
 
 
 class Simulation(BaseModel, table=True):

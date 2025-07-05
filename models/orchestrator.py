@@ -1,17 +1,19 @@
 # models/orchestrator.py
-import random
-from typing import Dict, List
-import uuid
+
 import json
-from loguru import logger
+import random
+import uuid
+from typing import Dict, List
 
 from faststream.nats import NatsBroker
+from loguru import logger
 from pymilvus import MilvusClient
 from sqlmodel import Session
 from tinydb import TinyDB
 
-from config.openai import AvailableModels
 from models.configuration import Configuration
+
+from config.openai import AvailableModels
 
 from engine.runners import SimulationRunner
 
@@ -23,9 +25,9 @@ from services.resource import ResourceService
 from services.simulation import SimulationService
 from services.world import WorldService
 
+from schemas.agent import Agent
 from schemas.simulation import Simulation
 from schemas.world import World
-from schemas.agent import Agent
 
 
 class Orchestrator:
@@ -65,9 +67,13 @@ class Orchestrator:
             commit=False,
         )
 
-        world = self.world_service.create(
-            World(simulation_id=simulation.id), commit=False
+        world = World(
+            simulation_id=simulation.id,
+            size_x=cfg.get("settings", {}).get("world", {}).get("size", [10, 10])[0],
+            size_y=cfg.get("settings", {}).get("world", {}).get("size", [10, 10])[1],
         )
+
+        world = self.world_service.create(world, commit=False)
         self._db.add(world)
 
         regions = self.world_service.create_regions_for_world(
@@ -155,17 +161,25 @@ class Orchestrator:
         self._db.add_all(agents)
 
     async def tick(self, sim_id: str):
-        runner = SimulationRunner(db=self._db, nats=self.nats)
-
-        await runner.tick_simulation(sim_id)
+        await SimulationRunner.tick_simulation(
+            db=self._db,
+            nats=self.nats,
+            simulation_id=sim_id,
+        )
         logger.info(f"Orchestrator: ticked simulation {sim_id}")
 
     async def start(self, sim_id: str):
-        sim = Simulation(db=self.db, nats=self.nats, id=sim_id)
-        await sim.start()
+        SimulationRunner.start_simulation(
+            id=sim_id,
+            db=self._db,
+            nats=self.nats,
+        )
         logger.info(f"Orchestrator: started simulation {sim_id}")
 
     async def stop(self, sim_id: str):
-        sim = Simulation(db=self.db, nats=self.nats, id=sim_id)
-        await sim.stop()
+        SimulationRunner.stop_simulation(
+            id=sim_id,
+            db=self._db,
+            nats=self.nats,
+        )
         logger.info(f"Orchestrator: stopped simulation {sim_id}")

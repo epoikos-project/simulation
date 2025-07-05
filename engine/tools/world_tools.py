@@ -1,14 +1,16 @@
+from threading import current_thread
 from typing import Annotated
+
 from fastapi.concurrency import run_in_threadpool
 from langfuse.decorators import observe
 from loguru import logger
 
 from clients.nats import nats_broker
 from clients.sqlite import get_tool_session
-from messages.world.agent_moved import AgentMovedMessage
-from services.agent import AgentService
 
-from threading import current_thread
+from messages.world.agent_moved import AgentMovedMessage
+
+from services.agent import AgentService
 
 
 @observe()
@@ -33,7 +35,9 @@ async def move(
 
             start_location = (agent.x_coord, agent.y_coord)
 
-            new_location = agent_service.move_agent(agent=agent, destination=(x, y))
+            new_location = agent_service.move_agent(
+                agent=agent, destination=(agent.x_coord + 1, agent.y_coord)
+            )
 
             return agent.id, start_location, new_location, nats
 

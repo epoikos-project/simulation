@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager, contextmanager
 from typing import Annotated
+
 from fastapi.params import Depends
 from sqlmodel import Session, create_engine
 from sqlmodel.main import SQLModel
@@ -7,16 +8,16 @@ from sqlmodel.main import SQLModel
 # Have to import all models to ensure they are registered with SQLModel
 from schemas import (
     agent,
-    simulation,
-    resource,
-    world,
-    region,
     configuration,
-    relationship,
-    task,
-    plan,
-    message,
     conversation,
+    message,
+    plan,
+    region,
+    relationship,
+    resource,
+    simulation,
+    task,
+    world,
 )
 
 sqlite_file_name = "data/database.db"

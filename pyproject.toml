@@ -32,5 +32,24 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "isort>=6.0.1",
     "pre-commit>=4.2.0",
 ]
+
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+known_clients = ["clients"]
+known_engine = ["engine"]
+known_messages = ["messages"]
+known_services = ["services"]
+known_schemas = ["schemas"]
+known_subscribers = ["subscribers"]
+known_routers = ["routers"]
+known_utilities = ["utils"]
+known_config = ["config"]
+
+forced_separate = ["clients", "config", "engine", "messages", "services", 
+"schemas", "subscribers", "routers", "utils"]

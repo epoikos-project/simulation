@@ -1,9 +1,13 @@
 from loguru import logger
+
 from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
+
+from services.base import BaseService
+
 from schemas.agent import Agent
 from schemas.resource import Resource
-from services.base import BaseService
+
 from utils import compute_in_radius
 
 

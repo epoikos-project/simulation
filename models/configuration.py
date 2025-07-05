@@ -1,8 +1,9 @@
-from tinydb import TinyDB, Query
-from loguru import logger
-from typing import Optional, Dict, Any, cast, List
 import uuid
+from typing import Any, Dict, List, Optional, cast
+
+from loguru import logger
 from pydantic import BaseModel, Field
+from tinydb import Query, TinyDB
 
 
 class ConfigurationData(BaseModel):

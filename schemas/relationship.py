@@ -1,9 +1,11 @@
 from typing import TYPE_CHECKING
-from sqlmodel import Field, SQLModel, Relationship
+
+from sqlmodel import Field, Relationship, SQLModel
 
 from schemas.base import BaseModel
 
 if TYPE_CHECKING:
+
     from schemas.agent import Agent
 
 

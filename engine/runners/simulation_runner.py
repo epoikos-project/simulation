@@ -1,12 +1,12 @@
 import asyncio
 import json
-import shutil
 import threading
 
 from faststream.nats import NatsBroker
 from loguru import logger
-from pymilvus import MilvusClient
-from sqlmodel import Session, select
+from sqlmodel import Session
+
+from clients.sqlite import get_tool_session
 
 from engine.llm.autogen.agent import AutogenAgent
 from engine.runners.agent_runner import AgentRunner
@@ -14,8 +14,6 @@ from engine.runners.agent_runner import AgentRunner
 from messages.simulation.simulation_tick import SimulationTickMessage
 from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
-from schemas.agent import Agent
-from schemas.simulation import Simulation as SimulationModel
 
 from services.agent import AgentService
 from services.resource import ResourceService
@@ -25,66 +23,111 @@ from services.world import WorldService
 
 class SimulationRunner:
 
-    def __init__(self, db: Session, nats: NatsBroker):
-        self._db = db
-        self._nats = nats
-        self.simulation_service = SimulationService(db, nats)
-        self.world_service = WorldService(db, nats)
-        self.resource_service = ResourceService(db, nats)
-        self._thread = None
-        self._tick_interval = 1
+    _threads: dict[str, threading.Thread] = {}
+    _stop_events: dict[str, threading.Event] = {}
 
-        self.agent_runner = AgentRunner(db, nats)
+    @staticmethod
+    def start_simulation(
+        id: str,
+        db: Session,
+        nats: NatsBroker,
+        tick_interval: int = 0,
+    ):
+        # Update the simulation status in the database
+        logger.info(f"Starting Simulation {id}")
+        simulation_service = SimulationService(db, nats)
+        simulation = simulation_service.get_by_id(id)
+        simulation.running = True
+        db.add(simulation)
+        db.commit()
 
-    async def tick_simulation(self, simulation_id: str):
+        # Start the simulation loop in a separate thread
+        if (
+            simulation.id not in SimulationRunner._threads
+            or not SimulationRunner._threads[simulation.id].is_alive()
+        ):
+            stop_event = threading.Event()
+            SimulationRunner._stop_events[id] = stop_event
+
+            thread = threading.Thread(
+                target=SimulationRunner._run_loop_in_thread,
+                args=(simulation.id, stop_event, tick_interval, nats),
+                daemon=True,
+            )
+            SimulationRunner._threads[id] = thread
+            thread.start()
+
+    @staticmethod
+    def stop_simulation(id: str, db: Session, nats: NatsBroker):
+        # Update the simulation status in the database
+        logger.info(f"Stopping Simulation {id}")
+        simulation_service = SimulationService(db, nats)
+        simulation = simulation_service.get_by_id(id)
+        simulation.running = False
+        db.add(simulation)
+        db.commit()
+
+        logger.debug(SimulationRunner._stop_events)
+        stop_event = SimulationRunner._stop_events.get(id)
+        if stop_event:
+            stop_event.set()  # Signal to stop
+
+        thread = SimulationRunner._threads.get(id)
+        if thread is not None:
+            thread.join()
+            del SimulationRunner._threads[id]
+            del SimulationRunner._stop_events[id]
+
+    @staticmethod
+    async def tick_simulation(db: Session, nats: NatsBroker, simulation_id: str):
         """Tick the simulation.
 
         This method is called by the SimulationRunner for every tick.
         """
-        simulation = self.simulation_service.get_by_id(simulation_id)
+        simulation_service = SimulationService(db, nats)
+        simulation = simulation_service.get_by_id(simulation_id)
         simulation.tick += 1
-        self._db.add(simulation)
-        self._db.commit()
-        logger.debug(f"[SIM {simulation_id}] Tick {simulation.tick}")
+        db.add(simulation)
+        db.commit()
+        logger.debug(f"[SIM {simulation.id}] Tick {simulation.tick}")
 
         # broadcast tick event
         tick_msg = SimulationTickMessage(id=simulation.id, tick=simulation.tick)
-        await self._nats.publish(
-            tick_msg.model_dump_json(), tick_msg.get_channel_name()
-        )
+        await nats.publish(tick_msg.model_dump_json(), tick_msg.get_channel_name())
 
         tick_message = SimulationTickMessage(
             id=simulation.id,
             tick=simulation.tick,
         )
 
-        await self.tick_world(simulation.world.id)
-        await self._nats.publish(
+        await SimulationRunner.tick_world(db, nats, simulation.world.id)
+        await nats.publish(
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
 
-        agent_service = AgentService(self._db, self._nats)
+        agent_service = AgentService(db, nats)
         agents = agent_service.get_by_simulation_id(simulation.id)
 
-        agent_runner = AgentRunner(self._db, self._nats)
-
         tasks = [
-            agent_runner.tick_agent(AutogenAgent(self._db, self._nats, agent))
+            AgentRunner.tick_agent(db, nats, AutogenAgent(db, nats, agent))
             for agent in agents
         ]
         await asyncio.gather(*tasks)
 
-    async def tick_world(self, world_id: str):
+    @staticmethod
+    async def tick_world(db: Session, nats: NatsBroker, world_id: str):
         """Tick the world"""
         logger.info(f"Ticking world {world_id}")
 
-        world = self.world_service.get_by_id(world_id)
+        world_service = WorldService(db, nats)
+
+        world = world_service.get_by_id(world_id)
         tick_counter = world.simulation.tick
 
         for resource in world.resources:
-            await self.tick_resource(resource.id)
+            await SimulationRunner.tick_resource(db, nats, resource.id)
 
-        await self._nats.publish(
+        await nats.publish(
             json.dumps(
                 {
                     "type": "world_ticked",
@@ -94,9 +137,11 @@ class SimulationRunner:
             f"simulation.{world.simulation.id}.world.{world.id}",
         )
 
-    async def tick_resource(self, resource_id: str):
+    @staticmethod
+    async def tick_resource(db: Session, nats: NatsBroker, resource_id: str):
         """Update the resource"""
-        resource = self.resource_service.get_by_id(resource_id)
+        resource_service = ResourceService(db, nats)
+        resource = resource_service.get_by_id(resource_id)
         tick = resource.simulation.tick
 
         # Resource has regrown and is available for harvesting
@@ -108,14 +153,14 @@ class SimulationRunner:
         ):
             resource.available = True
             resource.time_harvest = -1
-            self._db.add(resource)
-            self._db.commit()
+            db.add(resource)
+            db.commit()
             grown_message = ResourceGrownMessage(
-                simulation_id=self.simulation_id,
-                id=self.id,
+                simulation_id=resource.world.simulation_id,
+                id=resource.id,
                 location=(resource.x_coord, resource.y_coord),
             )
-            await grown_message.publish(self._nats)
+            await grown_message.publish(nats)
 
         # Resource is being harvested by enough agents and the harvest is finished
         harvesters = resource.harvesters
@@ -125,58 +170,50 @@ class SimulationRunner:
             and len(harvesters) >= resource.required_agents
             and resource.start_harvest + resource.mining_time <= tick
         ):
-            self._harvesting_finished(tick, harvesters)
+            resource_service.finish_harvest_resource(resource, harvesters)
             resource_harvested_message = ResourceHarvestedMessage(
-                simulation_id=self.simulation_id,
-                id=self.id,
+                simulation_id=resource.world.simulation_id,
+                id=resource.id,
                 harvester=[harvester.id for harvester in harvesters],
                 location=(resource.x_coord, resource.y_coord),
                 start_tick=tick,
                 end_tick=tick + resource.mining_time,
             )
-            await resource_harvested_message.publish(self._nats)
+            await resource_harvested_message.publish(nats)
 
-    def start_simulation(
-        self, id: str, db: Session, nats: NatsBroker, milvus: MilvusClient
+    @staticmethod
+    def _run_loop_in_thread(
+        simulation_id: str,
+        stop_event: threading.Event,
+        tick_interval: int,
+        nats: NatsBroker,
     ):
-        # Update the simulation status in the database
-        logger.info(f"Starting Simulation {id}")
-        simulation = self.get_simulation_by_id(id)
-        simulation.running = True
-        self.save_simulation(simulation)
-
-        # Start the simulation loop in a separate thread
-        if self._thread is None or not self._thread.is_alive():
-            self._thread = threading.Thread(
-                target=self._run_loop_in_thread, daemon=True
+        with get_tool_session() as session:
+            asyncio.run(
+                SimulationRunner._run_tick_loop(
+                    simulation_id=simulation_id,
+                    stop_event=stop_event,
+                    tick_interval=tick_interval,
+                    db=session,
+                    nats=nats,
+                )
             )
-            self._thread.start()
 
-    def stop_simulation(self):
-        # Update the simulation status in the database
-        logger.info(f"Stopping Simulation {self.simulation.id}")
-        simulation = self.get_simulation_by_id(self.simulation.id)
-        simulation.running = False
-        self.save_simulation(simulation)
-
-        # Stop the simulation loop
-        if self._thread is not None:
-            self._thread.join()
-            self._thread = None
-
-    def _run_loop_in_thread(self, simulation_id: str):
-        simulation = self.get_simulation_by_id(simulation_id)
-        # Run the simulation loop in a separate thread
-        asyncio.run(self._run_tick_loop(simulation=simulation))
-
-    async def _run_tick_loop(self, simulation: SimulationModel):
-        self._db.refresh(simulation)
-        while simulation.running:
+    @staticmethod
+    async def _run_tick_loop(
+        simulation_id: str,
+        stop_event: threading.Event,
+        tick_interval: int,
+        db: Session,
+        nats: NatsBroker,
+    ):
+        while not stop_event.is_set():
             try:
-                # Perform simulation tick
-                await self.tick_simulation(simulation)
-
+                await SimulationRunner.tick_simulation(
+                    db=db, nats=nats, simulation_id=simulation_id
+                )
             except Exception as e:
                 logger.exception(f"Error during tick: {e}")
 
-            await asyncio.sleep(self._tick_interval)
+            await asyncio.sleep(tick_interval)
+        logger.info(f"Simulation {simulation_id} shutdown gracefully")
