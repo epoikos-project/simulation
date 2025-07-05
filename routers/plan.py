@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 from clients import Nats
-from clients.sqlite import DB
+from clients.db import DB
 
 from config.base import settings
 

@@ -5,8 +5,8 @@ from fastapi.concurrency import run_in_threadpool
 from langfuse.decorators import observe
 from loguru import logger
 
+from clients.db import get_tool_session
 from clients.nats import nats_broker
-from clients.sqlite import get_tool_session
 
 from messages.world.agent_moved import AgentMovedMessage
 

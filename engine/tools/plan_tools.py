@@ -4,7 +4,7 @@ from typing import Annotated
 from langfuse.decorators import observe
 from loguru import logger
 
-from clients.sqlite import get_session, get_tool_session
+from clients.db import get_session, get_tool_session
 
 from schemas.plan import Plan
 from schemas.task import Task
@@ -36,8 +36,8 @@ async def make_plan(
 ):
     """Form a new plan for resource acquisition. You can only ever have one plan at a time."""
 
+    from clients.db import get_session
     from clients.nats import nats_broker
-    from clients.sqlite import get_session
 
     logger.success("Calling tool make_plan")
 

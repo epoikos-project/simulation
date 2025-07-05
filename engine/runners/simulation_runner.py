@@ -6,7 +6,7 @@ from faststream.nats import NatsBroker
 from loguru import logger
 from sqlmodel import Session
 
-from clients.sqlite import get_tool_session
+from clients.db import get_tool_session
 
 from engine.llm.autogen.agent import AutogenAgent
 from engine.runners.agent_runner import AgentRunner

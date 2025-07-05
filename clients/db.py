@@ -5,6 +5,8 @@ from fastapi.params import Depends
 from sqlmodel import Session, create_engine
 from sqlmodel.main import SQLModel
 
+from config import settings
+
 # Have to import all models to ensure they are registered with SQLModel
 from schemas import (
     agent,
@@ -20,10 +22,7 @@ from schemas import (
     world,
 )
 
-sqlite_file_name = "data/database.db"
-sqlite_url = f"postgresql+psycopg2://postgres@localhost:5432/epoikos"
-
-engine = create_engine(sqlite_url)
+engine = create_engine(settings.db.url)
 
 
 def create_db_and_tables():

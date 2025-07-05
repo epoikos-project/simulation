@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from tinydb import Query
 
 from clients import Nats
-from clients.sqlite import DB
+from clients.db import DB
 
 from services.world import WorldService
 

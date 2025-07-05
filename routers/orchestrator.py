@@ -6,8 +6,8 @@ from loguru import logger
 
 from models.orchestrator import Orchestrator
 
-from clients import DB, Milvus, Nats, sqlite
-from clients.sqlite import DB as SQLiteDB
+from clients import DB, Milvus, Nats, db
+from clients.db import DB as SQLiteDB
 
 router = APIRouter(prefix="/orchestrator", tags=["Orchestrator"])
 

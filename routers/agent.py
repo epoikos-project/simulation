@@ -7,7 +7,7 @@ from tinydb import Query
 
 import clients
 from clients import Nats
-from clients.sqlite import DB
+from clients.db import DB
 
 from services.agent import AgentService
 

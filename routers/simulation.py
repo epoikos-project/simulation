@@ -7,7 +7,7 @@ from sqlmodel import select
 from tinydb import Query
 
 from clients import Milvus, Nats
-from clients.sqlite import DB
+from clients.db import DB
 
 from services.relationship import get_relationship_graph
 from services.simulation import SimulationService

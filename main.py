@@ -6,10 +6,9 @@ from faststream.nats.fastapi import NatsRouter
 from sqlmodel import SQLModel
 
 from clients import milvus, tinydb
-from clients.sqlite import create_db_and_tables
+from clients.db import create_db_and_tables, engine
 
 from config.base import settings
-from config.sqlite import engine
 
 import subscribers
 
