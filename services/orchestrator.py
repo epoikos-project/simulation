@@ -30,7 +30,7 @@ from schemas.simulation import Simulation
 from schemas.world import World
 
 
-class Orchestrator:
+class OrchestratorService:
     """
     Steps:
       1. Loading a named configuration
@@ -40,9 +40,9 @@ class Orchestrator:
       5. Emitting NATS events at each step
     """
 
-    def __init__(self, db: TinyDB, sqlite: Session, nats: NatsBroker):
-        self.tinydb = db
-        self._db = sqlite
+    def __init__(self, tinydb: TinyDB, db: Session, nats: NatsBroker):
+        self.tinydb = tinydb
+        self._db = db
         self.nats = nats
 
         self.simulation_service = SimulationService(self._db, self.nats)
