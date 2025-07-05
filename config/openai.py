@@ -20,6 +20,9 @@ class ModelEntry:
 ModelName = Literal[
     "llama-3.1-8b-instruct",
     "llama-3.3-70b-instruct",
+    "gpt-4o-mini-2024-07-18",
+    "o4-mini-2025-04-16",
+    "gpt-4.1-nano-2025-04-14",
 ]
 
 
