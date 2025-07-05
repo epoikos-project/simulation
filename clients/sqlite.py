@@ -34,9 +34,8 @@ def get_tool_session():
     with Session(engine) as session:
         try:
             yield session
-        except Exception:
-            session.rollback()
-            raise
+        finally:
+            session.close()
 
 
 def get_session():
