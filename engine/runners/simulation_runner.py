@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 import json
 import threading
 
@@ -88,6 +89,7 @@ class SimulationRunner:
         simulation_service = SimulationService(db, nats)
         simulation = simulation_service.get_by_id(simulation_id)
         simulation.tick += 1
+        simulation.last_used = datetime.now(timezone.utc).isoformat()
         db.add(simulation)
         db.commit()
         logger.debug(f"[SIM {simulation.id}] Tick {simulation.tick}")

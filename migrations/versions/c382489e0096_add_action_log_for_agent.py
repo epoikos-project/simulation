@@ -1,7 +1,7 @@
 """add action log for agent
 
 Revision ID: c382489e0096
-Revises: ad169b99b7a8
+Revises: 960d087f10c1
 Create Date: 2025-07-06 17:26:49.712571
 
 """
@@ -12,7 +12,7 @@ import sqlmodel                                 # New
 
 # revision identifiers, used by Alembic.
 revision = 'c382489e0096'
-down_revision = 'ad169b99b7a8'
+down_revision = '960d087f10c1'
 branch_labels = None
 depends_on = None
 
