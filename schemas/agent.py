@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from schemas.resource import Resource
     from schemas.simulation import Simulation
     from schemas.task import Task
+    from schemas.action_log import ActionLog
 
 
 class Agent(BaseModel, table=True):
@@ -27,7 +28,6 @@ class Agent(BaseModel, table=True):
     model: str = Field(default=None, nullable=True)
     energy_level: float = Field(default=20.0)
 
-    last_action: str = Field(default=None, nullable=True)
     last_error: str = Field(nullable=True, default=None)
 
     hunger: float = Field(default=10.0)
@@ -64,4 +64,9 @@ class Agent(BaseModel, table=True):
     task: "Task" = Relationship(
         back_populates="worker",
         sa_relationship_kwargs={"foreign_keys": "[Task.worker_id]"},
+    )
+    action_logs: list["ActionLog"] = Relationship(
+        back_populates="agent",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "[ActionLog.agent_id]"},
     )

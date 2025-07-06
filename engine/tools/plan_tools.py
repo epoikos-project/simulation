@@ -4,7 +4,7 @@ from typing import Annotated
 from langfuse.decorators import observe
 from loguru import logger
 
-from clients.db import get_session, get_tool_session
+from clients.db import get_session
 
 from schemas.plan import Plan
 from schemas.task import Task
@@ -71,7 +71,7 @@ async def add_task(
 
     logger.success("Calling tool add_task")
 
-    with get_tool_session() as db:
+    with get_session() as db:
 
         # TODO: check how error handling effects autogen tool calls
         # try:

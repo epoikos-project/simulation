@@ -5,9 +5,8 @@ from fastapi.concurrency import run_in_threadpool
 from langfuse.decorators import observe
 from loguru import logger
 
-from clients.db import get_tool_session
+from clients.db import get_session
 from clients.nats import nats_broker
-
 from messages.world.agent_moved import AgentMovedMessage
 
 from services.agent import AgentService
@@ -15,28 +14,23 @@ from services.agent import AgentService
 
 @observe()
 async def move(
-    x: Annotated[int, "X Coordinate"],
-    y: Annotated[int, "Y Coordinate"],
+    direction: Annotated[str, "Direction to move in. Only values 'up', 'down', 'left', 'right' or the 'ID' of a resource or agent to move towards are allowed."],
     agent_id: str,
     simulation_id: str,
 ):
-    logger.success("Calling tool move")
+    """Move in the world. You can only move one step 'up', 'down', 'left', 'right' or towards a resource or agent. YOU CANNOT move to an already occupied location."""
 
     def db_logic():
-        with get_tool_session() as db:
-            logger.debug(db.__hash__())
-            logger.debug(db.connection)
-            logger.debug(current_thread().name)
-            logger.debug(f"Agent {agent_id} starts moving to {(x, y)}")
+        with get_session() as db:
+            logger.debug(f"Agent {agent_id} starts moving {direction}")
             nats = nats_broker()
 
             agent_service = AgentService(db=db, nats=nats)
             agent = agent_service.get_by_id(agent_id)
-
             start_location = (agent.x_coord, agent.y_coord)
 
-            new_location = agent_service.move_agent(
-                agent=agent, destination=(agent.x_coord + 1, agent.y_coord)
+            new_location = agent_service.move_agent_in_direction(
+                agent=agent, direction=direction
             )
 
             return agent.id, start_location, new_location, nats
@@ -49,7 +43,7 @@ async def move(
             id=agent_id,
             start_location=start_location,
             new_location=new_location,
-            destination=(x, y),
+            destination=direction,
             num_steps=1,
         )
         await agent_moved_message.publish(nats)

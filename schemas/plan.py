@@ -35,7 +35,7 @@ class Plan(BaseModel, table=True):
             f"[ID: {self.id}; "
             f"Owner: {self.owner}; "
             f"Goal: {self.goal}; "
-            f"Total Expected Payoff: {self.total_payoff}; "
+            f"Total Expected Payoff: {self.total_expected_payoff}; "
             f"Participants: {participants}; "
             f"Tasks: {tasks}]"
         )

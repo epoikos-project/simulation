@@ -30,6 +30,8 @@ from engine.context.observations.resource import ResourceObservation
 from engine.context.system import SystemDescription
 from engine.tools import available_tools
 
+from schemas.action_log import ActionLog
+from services.action_log import ActionLogService
 from services.agent import AgentService
 from services.region import RegionService
 
@@ -53,6 +55,7 @@ class AutogenAgent:
 
         self.agent_service = AgentService(self._db, self._nats)
         self.region_service = RegionService(self._db, self._nats)
+        self.action_log_service = ActionLogService(self._db, self._nats)
 
         self._client, self.autogen_agent = self._initialize_llm()
 
@@ -106,13 +109,14 @@ class AutogenAgent:
         """Load the context from the database or other storage."""
 
         observations = self.agent_service.get_world_context(self.agent)
+        actions = self.agent_service.get_last_k_actions(self.agent, k=5)
 
         parts = [
             HungerContext(self.agent).build(),
             ObservationContext(self.agent).build(observations),
             PlanContext(self.agent).build(),
             # ConversationContext(self.agent).build(self.message, self.conversation_id),
-            # MemoryContext(self.agent).build(self.memory),
+            MemoryContext(self.agent).build(actions=actions),
         ]
         context = "\n".join(parts)
         error = self.agent.last_error
@@ -232,6 +236,12 @@ class AutogenAgent:
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Context for generation: {context}"
         )
 
+        # It is very important to commit all outstanding queries before running the agent,
+        # otherwise any tool calls that the agent makes will run into a concurrency lock
+        # as the agent will try to read from the database while the tool call is trying to
+        # write to it.
+        self._db.commit()
+        
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
@@ -250,14 +260,23 @@ class AutogenAgent:
 
         self.agent.last_error = error
 
-        if not reason and not error:
+        if not reason:
             last_tool_call = extract_tool_call_info(output)
             last_tool_summary = summarize_tool_call(last_tool_call)
-            self.agent.last_action = last_tool_summary
+            
+            action_log = ActionLog(
+                agent_id=self.agent.id,
+                action=last_tool_summary,
+                tick=self.agent.simulation.tick,
+            )
+            self.action_log_service.create(
+                action_log,
+                commit=False,
+            )
         else:
-            last_tool_call = {}
+            last_tool_call = None
             last_tool_summary = None
-            self.agent.last_action = None
+            
 
         self._db.add(self.agent)
         self._db.commit()

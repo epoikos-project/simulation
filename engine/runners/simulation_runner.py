@@ -4,9 +4,9 @@ import threading
 
 from faststream.nats import NatsBroker
 from loguru import logger
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from clients.db import get_tool_session
+from clients.db import get_session
 
 from engine.llm.autogen.agent import AutogenAgent
 from engine.runners.agent_runner import AgentRunner
@@ -15,6 +15,7 @@ from messages.simulation.simulation_tick import SimulationTickMessage
 from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
 
+from schemas.agent import Agent
 from services.agent import AgentService
 from services.resource import ResourceService
 from services.simulation import SimulationService
@@ -105,12 +106,12 @@ class SimulationRunner:
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
 
-        agent_service = AgentService(db, nats)
-        agents = agent_service.get_by_simulation_id(simulation.id)
+        agent_ids = db.exec(select(Agent.id).where(Agent.simulation_id == simulation.id)).all()
+        
 
         tasks = [
-            AgentRunner.tick_agent(db, nats, AutogenAgent(db, nats, agent))
-            for agent in agents
+            AgentRunner.tick_agent(nats, agent_id)
+            for agent_id in agent_ids
         ]
         await asyncio.gather(*tasks)
 
@@ -188,7 +189,7 @@ class SimulationRunner:
         tick_interval: int,
         nats: NatsBroker,
     ):
-        with get_tool_session() as session:
+        with get_session() as session:
             asyncio.run(
                 SimulationRunner._run_tick_loop(
                     simulation_id=simulation_id,

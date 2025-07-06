@@ -7,7 +7,9 @@ from engine.context.observation import ObservationUnion
 from engine.context.observations import AgentObservation, ResourceObservation
 from engine.grid import Grid
 
+from schemas.action_log import ActionLog
 from services.base import BaseService
+from services.resource import ResourceService
 from services.world import WorldService
 
 from schemas.agent import Agent
@@ -101,12 +103,71 @@ class AgentService(BaseService[Agent]):
             agent_observations.append(agent_obs)
 
         return agent_observations
+    
+    def move_agent_in_direction(self, agent: Agent, direction: str) -> tuple[int, int]:
+        """
+        Moves the specified agent in the given direction within the world.
+
+        Args:
+            agent (Agent): The agent instance to move.
+            direction (str): The direction in which to move the agent.
+                Can be 'up', 'down', 'left', 'right', or the 6 character
+                identifier of a resource or agent.
+
+        Returns:
+            tuple[int, int]: The new (x, y) coordinates of the agent after the move.
+
+        Raises:
+            ValueError: If the destination is invalid (e.g., outside world boundaries or blocked by obstacles),
+                or if the agent is already at the destination.
+        """
+        logger.debug(f"Moving agent {agent.id} in direction {direction}")
+
+        resource_service = ResourceService(self._db, self._nats)
+
+        if direction in ["up", "down", "left", "right"]:
+            dx, dy = {
+                "up": (0, -1),
+                "down": (0, 1),
+                "left": (-1, 0),
+                "right": (1, 0),
+            }[direction]
+            destination = (agent.x_coord + dx, agent.y_coord + dy)
+        elif len(direction) == 6:
+            all_agents = self.all()
+            all_resources = resource_service.all()
+
+            # Find the agent or resource with id matching the direction value
+            obj = next((a for a in all_agents if a.id == direction), None)
+            if obj is None:
+                obj = next((r for r in all_resources if r.id == direction), None)
+            if obj is not None:
+                obj_location = (obj.x_coord, obj.y_coord)
+                # Move agent one step towards the object
+                agent_location = (agent.x_coord, agent.y_coord)
+                dx = obj_location[0] - agent_location[0]
+                dy = obj_location[1] - agent_location[1]
+                step_x = 1 if dx > 0 else -1 if dx < 0 else 0
+                step_y = 1 if dy > 0 else -1 if dy < 0 else 0
+                destination = (agent_location[0] + step_x, agent_location[1] + step_y)
+            else:
+                raise ValueError(
+                    f"Object with id {direction} not found among agents or resources."
+                )
+        else:
+            raise ValueError(
+                f"Direction {direction} is invalid. Use 'up', 'down', 'left', 'right', or a valid 6-character object id."
+            )
+        logger.debug(
+            f"Agent {agent.id} moving {direction} to destination {destination}"
+        )
+
+        return self.move_agent(agent, destination)
 
     def move_agent(self, agent: Agent, destination: tuple[int, int]):
         """Move agent to new location in world"""
         logger.debug(f"Moving agent {agent.id} to {destination}")
 
-        agent_service = AgentService(self._db, self._nats)
         world_service = WorldService(self._db, self._nats)
 
         # Check if destination is valid
@@ -131,7 +192,7 @@ class AgentService(BaseService[Agent]):
 
         # Set agent field of view and get path
         # Create grid with obstacles
-        obstacles = agent_service.get_world_obstacles(agent)
+        obstacles = self.get_world_obstacles(agent)
         grid = Grid(agent.simulation.world.size_x, agent.simulation.world.size_y)
         grid.set_agent_field_of_view(agent_location, agent.visibility_range, obstacles)
         # Get shortest path from agent location to destination
@@ -195,3 +256,14 @@ class AgentService(BaseService[Agent]):
             obstacles.append((resource.x_coord, resource.y_coord))
 
         return obstacles
+    
+    def get_last_k_actions(self, agent: Agent, k: int = 5) -> list[ActionLog]:
+        """Get the last k actions of an agent."""
+        actions = self._db.exec(
+            select(ActionLog)
+            .where(ActionLog.agent_id == agent.id)
+            .order_by(ActionLog.tick.desc())
+            .limit(k)
+        ).all()
+        
+        return actions

@@ -23,4 +23,4 @@ class SystemDescription(BaseContext):
     """
 
     def build(self) -> str:
-        return f"These are your personal attributes: ID: {self.agent.id}, Name: {self.agent.name}"  # , personality=personality)
+        return f"These are your personal attributes: ID: {self.agent.id}, Name: {self.agent.name}, Current Location: [{self.agent.x_coord}, {self.agent.y_coord}]"  # , personality=personality)
