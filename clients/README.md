@@ -3,7 +3,7 @@
 We have three clients that are used to interact with the different services in the application. These clients are:
 - `milvus.py`: Contains the Milvus client.
 - `nats.py`: Contains the NATS client.
-- `tinydb.py`: Contains the TinyDB client.
+- `db.py`: Contains the SQL client.
 
 ## Using Clients
 For clients, we use [dependency injection](https://fastapi.tiangolo.com/tutorial/dependencies/) to inject the clients into the routers. This is done using the `Depends` function from FastAPI. For example, in the agent router, we can inject the NATS client like this:
@@ -48,13 +48,13 @@ Nats = Annotated[NatsBroker, Depends(nats_broker)]
 
 ```
 
-This works for all clients, so you can use the same pattern for the Milvus and TinyDB clients:
+This works for all clients, so you can use the same pattern for the Milvus and SQL clients:
 
 ```python
 @router.post("")
 async def create_agent(
     # Dependencies are injected here
-    milvus: Milvus, tinydb: TinyDB
+    milvus: Milvus, db: DB
 ):    
     return "Success"
 ```

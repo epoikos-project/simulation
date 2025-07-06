@@ -5,6 +5,7 @@ from faststream.nats import NatsBroker
 
 
 def nats_broker() -> NatsBroker:
+
     from main import router
 
     return router.broker

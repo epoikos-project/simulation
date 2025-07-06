@@ -1,9 +1,10 @@
+# Third Party
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from config.openai import OpenAISettings
-from config.tinydb import TinyDBSettings
+from config.db import DBSettings
 from config.milvus import MilvusSettings
 from config.nats import NatsSettings
+from config.openai import OpenAISettings
 
 
 class Settings(BaseSettings):
@@ -14,9 +15,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     nats: NatsSettings = NatsSettings()
-    tinydb: TinyDBSettings = TinyDBSettings()
     milvus: MilvusSettings = MilvusSettings()
     openai: OpenAISettings = OpenAISettings()
+    db: DBSettings = DBSettings()
 
 
 settings = Settings()

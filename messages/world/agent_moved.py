@@ -8,7 +8,7 @@ class AgentMovedMessage(WorldBase):
 
     start_location: tuple[int, int]  # Start location of the agent before moving
     new_location: tuple[int, int]  # New location of the agent after moving
-    destination: tuple[int, int]  # Destination of the agent
+    destination: str  # Destination of the agent
     num_steps: int  # Number of steps needed to reach the destination
 
     @override

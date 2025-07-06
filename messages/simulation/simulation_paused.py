@@ -1,7 +1,9 @@
 # messages/simulation.py
 
-from pydantic import BaseModel
+
 from typing import Literal
+
+from pydantic import BaseModel
 
 
 class SimulationPausedMessage(BaseModel):

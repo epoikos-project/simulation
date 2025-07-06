@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from pydantic import BaseModel
+
 from faststream.nats import NatsBroker
+from pydantic import BaseModel
 
 
 class MessageBase(ABC, BaseModel):

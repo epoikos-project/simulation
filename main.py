@@ -3,11 +3,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from faststream.nats.fastapi import NatsRouter
+from sqlmodel import SQLModel
 
-from clients import milvus, tinydb
-import routers
-import subscribers
+from clients import milvus
+from clients.db import create_db_and_tables
+
 from config.base import settings
+
+import subscribers
+
+import routers
 
 router = NatsRouter(settings.nats.url)
 
@@ -27,7 +32,6 @@ async def hello_http():
 async def lifespan(app: FastAPI):
     # Load the ML model
     milvus.create_client()
-    tinydb.create_client()
     yield
 
 
@@ -41,14 +45,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
+
+
 # Include routers
 app.include_router(routers.simulation.router)
 app.include_router(routers.world.router)
 app.include_router(routers.agent.router)
 app.include_router(routers.debug.router)
 app.include_router(routers.configuration.router)
-app.include_router(routers.conversation.router)
-app.include_router(routers.plan.router)
 app.include_router(routers.orchestrator.router)
 
 # Include subscribers
