@@ -7,6 +7,7 @@ from schemas.base import BaseModel
 if TYPE_CHECKING:
 
     from schemas.agent import Agent
+    from schemas.simulation import Simulation
 
 
 class Relationship(BaseModel, table=True):
@@ -14,6 +15,8 @@ class Relationship(BaseModel, table=True):
 
     agent_a_id: str = Field(foreign_key="agent.id")
     agent_b_id: str = Field(foreign_key="agent.id")
+    simulation_id: str = Field(foreign_key="simulation.id", index=True)
+    tick: int = Field(default=0, index=True, description="Tick/revision number")
     total_sentiment: float = Field(
         default=0.0, description="Cumulative sentiment score"
     )
