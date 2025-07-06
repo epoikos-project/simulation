@@ -8,11 +8,10 @@ from typing import Dict, List
 from faststream.nats import NatsBroker
 from loguru import logger
 from pymilvus import MilvusClient
-from sqlmodel import Session
-from tinydb import TinyDB
+from sqlmodel import Session, select
 from datetime import datetime, timezone
 
-from models.configuration import Configuration
+from schemas.configuration import Configuration as ConfigTable
 
 from config.openai import AvailableModels
 
@@ -41,8 +40,7 @@ class OrchestratorService:
       5. Emitting NATS events at each step
     """
 
-    def __init__(self, tinydb: TinyDB, db: Session, nats: NatsBroker):
-        self.tinydb = tinydb
+    def __init__(self, db: Session, nats: NatsBroker):
         self._db = db
         self.nats = nats
 
@@ -59,11 +57,24 @@ class OrchestratorService:
         )
 
     async def run_from_config(self, config_name: str) -> str:
-        config_model = Configuration(self.tinydb)
-        cfg = config_model.get(config_name)
-        if not cfg:
+        stmt = select(ConfigTable).where(ConfigTable.name == config_name)
+        cfg_row = self._db.exec(stmt).one_or_none()
+        if not cfg_row:
             raise ValueError(f"Config '{config_name}' not found")
-        config_model.update_last_used(config_name)
+        # refresh last_used timestamp for config
+        now = datetime.now(timezone.utc).isoformat()
+        cfg_row.last_used = now
+        self._db.add(cfg_row)
+        self._db.commit()
+        # parse stored JSON
+        try:
+            cfg = {
+                "agents": json.loads(cfg_row.agents),
+                "settings": json.loads(cfg_row.settings),
+            }
+        except Exception as e:
+            logger.error(f"Error parsing configuration JSON: {e}")
+            raise
 
         simulation = self.simulation_service.create(
             Simulation(),

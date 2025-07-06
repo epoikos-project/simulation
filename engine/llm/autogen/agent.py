@@ -8,6 +8,7 @@ from autogen_core.tools import BaseTool, FunctionTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from langfuse.decorators import langfuse_context, observe
 from loguru import logger
+import json
 from pymilvus import MilvusClient
 from sqlmodel import Session
 
@@ -231,6 +232,17 @@ class AutogenAgent:
         logger.debug(
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Context for generation: {context}"
         )
+        # Emit raw LLM prompt for frontend debugging
+        await self._nats.publish(
+            json.dumps({
+                "type": "agent_prompt",
+                "agent_id": self.agent.id,
+                "simulation_id": self.agent.simulation.id,
+                "reasoning": reason,
+                "context": context,
+            }),
+            f"simulation.{self.agent.simulation.id}.agent.{self.agent.id}.prompt",
+        )
 
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
@@ -238,6 +250,16 @@ class AutogenAgent:
 
         logger.debug(
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generated output: {output.messages[-1].content}"
+        )
+        # Emit raw LLM response for frontend debugging
+        await self._nats.publish(
+            json.dumps({
+                "type": "agent_response",
+                "agent_id": self.agent.id,
+                "simulation_id": self.agent.simulation.id,
+                "reply": output.messages[-1].content,
+            }),
+            f"simulation.{self.agent.simulation.id}.agent.{self.agent.id}.response",
         )
 
         error = ""
