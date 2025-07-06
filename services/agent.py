@@ -9,6 +9,7 @@ from engine.grid import Grid
 
 from schemas.action_log import ActionLog
 from services.base import BaseService
+from services.region import RegionService
 from services.resource import ResourceService
 from services.world import WorldService
 
@@ -209,6 +210,14 @@ class AgentService(BaseService[Agent]):
 
         agent.x_coord = new_location[0]
         agent.y_coord = new_location[1]
+        
+        region_service = RegionService(self._db, self._nats)
+        
+        current_region = region_service.get_region_at(
+            agent.simulation.world.id, agent.x_coord, agent.y_coord
+        )
+
+        agent.energy_level -= current_region.region_energy_cost
 
         logger.debug("Before db commit")
 
@@ -238,22 +247,22 @@ class AgentService(BaseService[Agent]):
         ).all()
 
         # Filter resources based on agents location and visibility range
-        resources = self._db.exec(
-            select(Resource).where(
-                Resource.simulation_id == agent.simulation_id,
-                Resource.x_coord >= agent_location[0] - agent_fov,
-                Resource.x_coord <= agent_location[0] + agent_fov,
-                Resource.y_coord >= agent_location[1] - agent_fov,
-                Resource.y_coord <= agent_location[1] + agent_fov,
-            )
-        ).all()
+        # resources = self._db.exec(
+        #     select(Resource).where(
+        #         Resource.simulation_id == agent.simulation_id,
+        #         Resource.x_coord >= agent_location[0] - agent_fov,
+        #         Resource.x_coord <= agent_location[0] + agent_fov,
+        #         Resource.y_coord >= agent_location[1] - agent_fov,
+        #         Resource.y_coord <= agent_location[1] + agent_fov,
+        #     )
+        # ).all()
 
         # Create list of obstacles
         obstacles = []
         for agent in agents:
             obstacles.append((agent.x_coord, agent.y_coord))
-        for resource in resources:
-            obstacles.append((resource.x_coord, resource.y_coord))
+        # for resource in resources:
+        #     obstacles.append((resource.x_coord, resource.y_coord))
 
         return obstacles
     
