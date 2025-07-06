@@ -18,7 +18,7 @@ async def move(
     agent_id: str,
     simulation_id: str,
 ):
-    """Move in the world. You can only move one step 'up', 'down', 'left', 'right' or towards a resource or agent. YOU CANNOT move to an already occupied location."""
+    """Move in the world. You can only move one step either 'up', 'down', 'left', 'right' or towards a resource or agent. Coordinates (e.g. 1,1) are an invalid input."""
 
     def db_logic():
         with get_session() as db:

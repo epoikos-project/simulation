@@ -66,6 +66,16 @@ class BaseService(Generic[T]):
             raise ValueError(f"{self._model_class.__name__} with ID {id} not found.")
         return model
 
+    def all(self):
+        """
+        Retrieve all model instances from the database.
+        """
+        statement = select(self._model_class)
+        models = self._db.exec(statement).all()
+        if not models:
+            raise ValueError(f"No {self._model_class.__name__} instances found.")
+        return models
+    
     def get_by_simulation_id(self, simulation_id: str):
         """
         Retrieve a model instance by its simulation ID.
