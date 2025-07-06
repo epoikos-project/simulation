@@ -21,17 +21,17 @@ class ResourceService(BaseService[Resource]):
         in_range = compute_in_radius(
             location_a=(harvester.x_coord, harvester.y_coord),
             location_b=(resource.x_coord, resource.y_coord),
-            radius=resource.harvesting_range,
+            radius=resource.harvesting_area,
         )
 
         if in_range:
             tick = resource.simulation.tick
 
             # Extend harvester list of resource
-            if len(resource["harvester"]) == 0:
-                harvester = [harvester.id]
+            if len(resource.harvesters) == 0:
+                resource.harvesters = [harvester.id]
             else:
-                harvester = resource["harvester"].append(harvester.id)
+                resource.harvesters.append(harvester.id)
 
             # Update resource in database
             resource.being_harvested = True

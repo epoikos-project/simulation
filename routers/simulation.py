@@ -27,7 +27,7 @@ class CreateWorldInput(BaseModel):
 @router.post("")
 async def create_simulation(name: str, broker: Nats, db: DB):
     try:
-        simulation = SimulationService(db=db, nats=broker, id=name)
+        simulation = SimulationService(db=db, nats=broker)
         simulation.create_simulation()
     except Exception as e:
         logger.error(f"Error creating simulation: {e}")

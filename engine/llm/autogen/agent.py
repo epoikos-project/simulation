@@ -288,7 +288,7 @@ class AutogenAgent:
             
             action_log = ActionLog(
                 agent_id=self.agent.id,
-                simulation=self.agent.simulation_id,
+                simulation_id=self.agent.simulation_id,
                 action=last_tool_summary,
                 tick=self.agent.simulation.tick,
             )

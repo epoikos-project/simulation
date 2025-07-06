@@ -38,6 +38,7 @@ class WorldService(BaseService[WorldModel]):
         )
 
         regions = []
+        resources = []
         for r in region_sizes:
             region = Region(
                 simulation_id=world.simulation_id,
@@ -60,6 +61,7 @@ class WorldService(BaseService[WorldModel]):
                 commit=False,
             )
             regions.append(region)
+            resources.extend(resources)
         if commit:
             self._db.commit()
         return (regions, resources)
