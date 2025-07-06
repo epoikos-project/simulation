@@ -89,9 +89,9 @@ class AgentService(BaseService[Agent]):
 
         # Create AgentObservation for each nearby agent
         agent_observations = []
-        for agent in agents:
+        for other_agent in agents:
             agent_distance = compute_distance_raw(
-                agent.x_coord, agent.y_coord, agent.x_coord, agent.y_coord
+                agent.x_coord, agent.y_coord, other_agent.x_coord, other_agent.y_coord
             )
 
             agent_obs = AgentObservation(
