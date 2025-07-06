@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING
+import uuid
 
 from sqlmodel import Field, Relationship
 
@@ -11,6 +12,8 @@ if TYPE_CHECKING:
 
 
 class ActionLog(BaseModel, table=True):
+    id: str = Field(primary_key=True, default_factory=lambda: uuid.uuid4().hex)
+        
     action: str = Field()
     agent_id: str = Field(foreign_key="agent.id")
     tick: int = Field()
