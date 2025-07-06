@@ -66,9 +66,6 @@ async def add_task(
 ):
     """Create a new task for resource collection and add this task to a plan."""
 
-    from clients.nats import nats_broker
-    from clients.tinydb import get_client
-
     logger.success("Calling tool add_task")
 
     with get_session() as db:

@@ -10,6 +10,7 @@ class AgentMovedMessage(WorldBase):
     new_location: tuple[int, int]  # New location of the agent after moving
     destination: str  # Destination of the agent
     num_steps: int  # Number of steps needed to reach the destination
+    new_energy_level: int  # New energy level of the agent after moving
 
     @override
     def get_channel_name(self) -> str:

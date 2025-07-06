@@ -110,16 +110,18 @@ class AutogenAgent:
         """Load the context from the database or other storage."""
 
         observations = self.agent_service.get_world_context(self.agent)
-        actions = self.agent_service.get_last_k_actions(self.agent, k=5)
+        actions = self.agent_service.get_last_k_actions(self.agent, k=10)
 
+        context = "Current Tick: " + str(self.agent.simulation.tick) + "\n"
         parts = [
+            SystemDescription(self.agent).build(),
             HungerContext(self.agent).build(),
             ObservationContext(self.agent).build(observations),
             PlanContext(self.agent).build(),
             # ConversationContext(self.agent).build(self.message, self.conversation_id),
             MemoryContext(self.agent).build(actions=actions),
         ]
-        context = "\n".join(parts)
+        context += "\n".join(parts)
         error = self.agent.last_error
 
         if error:
@@ -201,13 +203,6 @@ class AutogenAgent:
         )
 
         self._update_langfuse_trace(reason=reason)
-
-        # update agent energy
-        current_region = self.region_service.get_region_at(
-            self.agent.simulation.world.id, self.agent.x_coord, self.agent.y_coord
-        )
-
-        self.agent.energy_level -= current_region.region_energy_cost
 
         context = ""
 

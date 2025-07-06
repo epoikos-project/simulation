@@ -165,24 +165,25 @@ class SimulationRunner:
             )
             await grown_message.publish(nats)
 
-        # Resource is being harvested by enough agents and the harvest is finished
-        harvesters = resource.harvesters
-        if (
-            resource.available
-            and not resource.being_harvested
-            and len(harvesters) >= resource.required_agents
-            and resource.start_harvest + resource.mining_time <= tick
-        ):
-            resource_service.finish_harvest_resource(resource, harvesters)
-            resource_harvested_message = ResourceHarvestedMessage(
-                simulation_id=resource.world.simulation_id,
-                id=resource.id,
-                harvester=[harvester.id for harvester in harvesters],
-                location=(resource.x_coord, resource.y_coord),
-                start_tick=tick,
-                end_tick=tick + resource.mining_time,
-            )
-            await resource_harvested_message.publish(nats)
+        # # Resource is being harvested by enough agents and the harvest is finished
+        # harvesters = resource.harvesters
+        # if (
+        #     resource.available
+        #     and not resource.being_harvested
+        #     and len(harvesters) >= resource.required_agents
+        #     and resource.start_harvest + resource.mining_time <= tick
+        # ):
+        #     resource_service.finish_harvest_resource(resource, harvesters)
+        #     resource_harvested_message = ResourceHarvestedMessage(
+        #         simulation_id=resource.world.simulation_id,
+        #         id=resource.id,
+        #         harvester=[harvester.id for harvester in harvesters],
+        #         location=(resource.x_coord, resource.y_coord),
+        #         start_tick=tick,
+        #         end_tick=tick + resource.mining_time,
+        #         new_energy_level=harvester.ener
+        #     )
+        #     await resource_harvested_message.publish(nats)
 
     @staticmethod
     def _run_loop_in_thread(

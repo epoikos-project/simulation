@@ -8,10 +8,11 @@ class ResourceHarvestedMessage(WorldBase):
 
     # simulation_id: str  # Simulation ID
     # resource_id: str  # Rersource ID
-    harvester: list[str]  # Agent ID
+    harvester_id: str# Agent ID
     location: tuple[int, int]  # Location of resource
     start_tick: int  # Tick when harvesting started
     end_tick: int  # Tick when harvesting ended
+    new_energy_level: int # New energy level of the harvester after harvesting
 
     @override
     def get_channel_name(self) -> str:

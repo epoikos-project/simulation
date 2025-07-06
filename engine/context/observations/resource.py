@@ -51,7 +51,7 @@ class ResourceObservation(BaseObservation):
                                   and requires only ONE additional harvester."""
         else:
             resource_message = (
-                f""" This resource is directly available for harvesting!"""
+                f""" This resource is directly available for harvesting! You do not need to move any futher to harvest it."""
             )
 
         return resource_message
@@ -63,7 +63,7 @@ class ResourceObservation(BaseObservation):
             return f""" This resource is currently NOT available for harvesting!"""
         # Resource is out of range
         if self.distance > self.resource.harvesting_area:
-            return f""" The resource is too far away to harvest! (you have to be within {self.resource.harvesting_area} units)"""
+            return f""" You have to be within {self.resource.harvesting_area} units to harvest this resource. Move closer to harvest it!"""
         # Resource is being harvested by enough agents
         if (
             self.resource.being_harvested
