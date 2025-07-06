@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: ../
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ../:/workspace:cached
+    command: uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
+    environment:
+      - DB_URL=postgresql+psycopg2://epoikos:epoikos@postgres:5432/epoikos
+      - NATS_URL=nats://nats:4222
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - nats
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: epoikos
+      POSTGRES_PASSWORD: epoikos
+      POSTGRES_DB: epoikos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  nats:
+    image: nats:2
+    container_name: dev_nats
+    command: ["-c", "/nats/config/nats-server.conf"]
+    volumes:
+      - ../config:/nats/config:ro
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+volumes:
+  postgres_data:
