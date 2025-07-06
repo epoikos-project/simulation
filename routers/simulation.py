@@ -45,7 +45,20 @@ async def list_simulations(db: DB):
     except Exception as e:
         logger.error(f"Error listing simulations: {e}")
         return {"message": f"Error listing simulations"}
-    return simulations
+    # include world size and agent count in each simulation record
+    out: list[dict] = []
+    for sim in simulations:
+        try:
+            world = getattr(sim, "world", None)
+            size = (world.size_x, world.size_y) if world else None
+        except Exception:
+            size = None
+        count = len(getattr(sim, "agents", []))
+        data = sim.dict()
+        data["world_size"] = size
+        data["agent_count"] = count
+        out.append(data)
+    return out
 
 
 @router.get("/{id}")
@@ -58,7 +71,17 @@ async def get_simulation(id: str, db: DB):
         return {"message": f"Error getting simulation"}
     if simulation is None:
         return {"message": "Simulation not found"}
-    return simulation
+    # include world size and agent count in the simulation record
+    try:
+        world = getattr(simulation, "world", None)
+        size = (world.size_x, world.size_y) if world else None
+    except Exception:
+        size = None
+    count = len(getattr(simulation, "agents", []))
+    data = simulation.dict()
+    data["world_size"] = size
+    data["agent_count"] = count
+    return data
 
 
 @router.delete("/{id}")
