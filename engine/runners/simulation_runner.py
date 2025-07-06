@@ -59,6 +59,8 @@ class SimulationRunner:
             SimulationRunner._threads[id] = thread
             thread.start()
 
+        return simulation.tick
+
     @staticmethod
     def stop_simulation(id: str, db: Session, nats: NatsBroker):
         # Update the simulation status in the database
@@ -79,6 +81,7 @@ class SimulationRunner:
             thread.join()
             del SimulationRunner._threads[id]
             del SimulationRunner._stop_events[id]
+        return simulation.tick
 
     @staticmethod
     async def tick_simulation(db: Session, nats: NatsBroker, simulation_id: str):

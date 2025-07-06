@@ -11,6 +11,8 @@ from pymilvus import MilvusClient
 from sqlmodel import Session, select
 from datetime import datetime, timezone
 
+from messages.simulation.simulation_started import SimulationStartedMessage
+from messages.simulation.simulation_stopped import SimulationStoppedMessage
 from schemas.configuration import Configuration as ConfigTable
 
 from config.openai import AvailableModels
@@ -173,7 +175,7 @@ class OrchestratorService:
         logger.info(f"Orchestrator: ticked simulation {sim_id}")
 
     async def start(self, sim_id: str):
-        SimulationRunner.start_simulation(
+        tick = SimulationRunner.start_simulation(
             id=sim_id,
             db=self._db,
             nats=self.nats,
@@ -183,11 +185,23 @@ class OrchestratorService:
         sim.last_used = datetime.now(timezone.utc).isoformat()
         self._db.add(sim)
         self._db.commit()
+        
+        simulation_started_message = SimulationStartedMessage(
+            id=sim.id,
+            tick=tick,
+        )
+        await simulation_started_message.publish(self.nats)
 
     async def stop(self, sim_id: str):
-        SimulationRunner.stop_simulation(
+        tick = SimulationRunner.stop_simulation(
             id=sim_id,
             db=self._db,
             nats=self.nats,
         )
+        
+        simulation_stopped_message = SimulationStoppedMessage(
+            id=sim_id,
+            tick=tick
+        )
+        await simulation_stopped_message.publish(self.nats) 
         logger.info(f"Orchestrator: stopped simulation {sim_id}")
