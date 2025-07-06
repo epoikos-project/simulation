@@ -6,8 +6,7 @@ from sqlmodel import Session, select
 
 from clients.db import DB
 from config.openai import AvailableModels
-from models.configuration import ConfigurationData
-from schemas.configuration import Configuration as ConfigTable
+from schemas.configuration import Configuration
 
 router = APIRouter(prefix="/configuration", tags=["Configuration"])
 
@@ -23,13 +22,13 @@ async def get_available_models():
 
 @router.post("")
 async def save_configuration(
-    config: ConfigurationData,
+    config: Configuration,
     db: DB,
 ):
     """
     Save or update a configuration based on its name in Postgres.
     """
-    stmt = select(ConfigTable).where(ConfigTable.name == config.name)
+    stmt = select(Configuration).where(Configuration.name == config.name)
     existing = db.exec(stmt).one_or_none()
     try:
         if existing:
@@ -37,7 +36,7 @@ async def save_configuration(
             existing.settings = json.dumps(config.settings)
             db.add(existing)
         else:
-            new_conf = ConfigTable(
+            new_conf = Configuration(
                 name=config.name,
                 agents=json.dumps(config.agents),
                 settings=json.dumps(config.settings),
@@ -64,7 +63,7 @@ async def get_configuration(
     """
     Retrieve a specific configuration by its name.
     """
-    stmt = select(ConfigTable).where(ConfigTable.name == name)
+    stmt = select(Configuration).where(Configuration.name == name)
     existing = db.exec(stmt).one_or_none()
     if not existing:
         raise HTTPException(status_code=404, detail="Configuration not found")
@@ -86,7 +85,7 @@ async def get_all_configurations(
     Retrieve all configurations.
     """
     results = []
-    for conf in db.exec(select(ConfigTable)).all():
+    for conf in db.exec(select(Configuration)).all():
         results.append({
             "id": conf.id,
             "name": conf.name,
@@ -106,7 +105,7 @@ async def delete_configuration(
     """
     Delete a configuration by its name.
     """
-    stmt = select(ConfigTable).where(ConfigTable.name == name)
+    stmt = select(Configuration).where(Configuration.name == name)
     existing = db.exec(stmt).one_or_none()
     if not existing:
         raise HTTPException(status_code=404, detail="Configuration not found")

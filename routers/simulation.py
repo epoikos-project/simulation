@@ -3,10 +3,8 @@ import asyncio
 from fastapi import APIRouter
 from loguru import logger
 from pydantic import BaseModel
-from sqlmodel import select
-from tinydb import Query
 
-from clients import Milvus, Nats
+from clients import Nats
 from clients.db import DB
 
 from services.relationship import get_relationship_graph

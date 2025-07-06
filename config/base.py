@@ -5,7 +5,6 @@ from config.db import DBSettings
 from config.milvus import MilvusSettings
 from config.nats import NatsSettings
 from config.openai import OpenAISettings
-from config.tinydb import TinyDBSettings
 
 
 class Settings(BaseSettings):
@@ -16,7 +15,6 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     nats: NatsSettings = NatsSettings()
-    tinydb: TinyDBSettings = TinyDBSettings()
     milvus: MilvusSettings = MilvusSettings()
     openai: OpenAISettings = OpenAISettings()
     db: DBSettings = DBSettings()

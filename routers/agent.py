@@ -1,9 +1,6 @@
-import json
-
 from fastapi import APIRouter
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
-from tinydb import Query
 
 import clients
 from clients import Nats
@@ -12,7 +9,6 @@ from clients.db import DB
 from services.agent import AgentService
 
 from schemas.agent import Agent
-from schemas.world import World
 
 router = APIRouter(prefix="/simulation/{simulation_id}/agent", tags=["Agent"])
 
