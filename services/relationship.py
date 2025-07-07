@@ -1,13 +1,12 @@
-
-from sqlmodel import Session, select
 from sqlalchemy import func
+from sqlmodel import Session, select
 
 from engine.sentiment import analyze_message_sentiment
 
-from schemas.agent import Agent as AgentModel
-from schemas.relationship import Relationship as RelationshipModel
 from services.base import BaseService
 
+from schemas.agent import Agent as AgentModel
+from schemas.relationship import Relationship as RelationshipModel
 
 
 class RelationshipService(BaseService[RelationshipModel]):
@@ -42,7 +41,8 @@ class RelationshipService(BaseService[RelationshipModel]):
         # legacy mode: without simulation context, just update live relationship (tick 0)
         if simulation_id is None or tick is None:
             stmt = select(RelationshipModel).where(
-                (RelationshipModel.agent_a_id == id_a) & (RelationshipModel.agent_b_id == id_b),
+                (RelationshipModel.agent_a_id == id_a)
+                & (RelationshipModel.agent_b_id == id_b),
                 RelationshipModel.tick == 0,
             )
             existing = self._db.exec(stmt).one_or_none()
@@ -88,20 +88,16 @@ class RelationshipService(BaseService[RelationshipModel]):
         if commit:
             self._db.commit()
             self._db.refresh(rel)
-        
+
         if tick and tick > 0:
             self.snapshot_relationship_graph(simulation_id=simulation_id, tick=tick)
-
-    
-
 
     def snapshot_relationship_graph(self, simulation_id: str, tick: int) -> None:
         """
         Take a full snapshot of the current (live) graph at the given tick for the simulation.
         """
         current = self._db.exec(
-            select(RelationshipModel)
-            .where(
+            select(RelationshipModel).where(
                 RelationshipModel.simulation_id == simulation_id,
                 RelationshipModel.tick == 0,
             )
@@ -119,7 +115,6 @@ class RelationshipService(BaseService[RelationshipModel]):
             )
         self._db.commit()
 
-
     def get_relationship_graph(
         self,
         simulation_id: str,
@@ -135,21 +130,21 @@ class RelationshipService(BaseService[RelationshipModel]):
         # determine which tick to use
         if tick is None:
             max_tick = self._db.exec(
-                select(func.max(RelationshipModel.tick))
-                .where(RelationshipModel.simulation_id == simulation_id)
+                select(func.max(RelationshipModel.tick)).where(
+                    RelationshipModel.simulation_id == simulation_id
+                )
             ).one()
             tick = max_tick or 0
 
-        stmt = (
-            select(RelationshipModel)
-            .where(
-                RelationshipModel.simulation_id == simulation_id,
-                RelationshipModel.tick == tick,
-            )
+        stmt = select(RelationshipModel).where(
+            RelationshipModel.simulation_id == simulation_id,
+            RelationshipModel.tick == tick,
         )
         rels = self._db.exec(stmt).all()
         if agent_id:
-            rels = [r for r in rels if r.agent_a_id == agent_id or r.agent_b_id == agent_id]
+            rels = [
+                r for r in rels if r.agent_a_id == agent_id or r.agent_b_id == agent_id
+            ]
 
         # build node set
         ids: set[str] = set()
@@ -158,15 +153,16 @@ class RelationshipService(BaseService[RelationshipModel]):
             ids.add(r.agent_b_id)
 
         nodes = [
-            {"id": nid, "label": self._db.get(AgentModel, nid).name}
-            for nid in ids
+            {"id": nid, "label": self._db.get(AgentModel, nid).name} for nid in ids
         ]
         edges = [
             {
-                "source":    r.agent_a_id,
-                "target":    r.agent_b_id,
-                "sentiment": (r.total_sentiment / r.update_count if r.update_count > 0 else 0.0),
-                "count":     r.update_count,
+                "source": r.agent_a_id,
+                "target": r.agent_b_id,
+                "sentiment": (
+                    r.total_sentiment / r.update_count if r.update_count > 0 else 0.0
+                ),
+                "count": r.update_count,
             }
             for r in rels
         ]

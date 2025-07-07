@@ -14,4 +14,3 @@ class AgentResponseMessage(MessageBase):
     def get_channel_name(self) -> str:
         """Get the channel name for the recipient agent."""
         return f"simulation.{self.simulation_id}.agent.{self.agent_id}.response"
-

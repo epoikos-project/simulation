@@ -1,4 +1,3 @@
-   
 from typing import override
 
 from messages.message_base import MessageBase

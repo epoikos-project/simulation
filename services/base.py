@@ -75,7 +75,7 @@ class BaseService(Generic[T]):
         if not models:
             raise ValueError(f"No {self._model_class.__name__} instances found.")
         return models
-    
+
     def get_by_simulation_id(self, simulation_id: str):
         """
         Retrieve a model instance by its simulation ID.

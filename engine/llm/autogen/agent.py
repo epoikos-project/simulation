@@ -1,3 +1,4 @@
+import json
 import re
 from functools import partial
 from typing import Callable, List
@@ -8,7 +9,6 @@ from autogen_core.tools import BaseTool, FunctionTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from langfuse.decorators import langfuse_context, observe
 from loguru import logger
-import json
 from pymilvus import MilvusClient
 from sqlmodel import Session
 
@@ -35,11 +35,12 @@ from engine.tools import available_tools
 
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
-from schemas.action_log import ActionLog
+
 from services.action_log import ActionLogService
 from services.agent import AgentService
 from services.region import RegionService
 
+from schemas.action_log import ActionLog
 from schemas.agent import Agent
 
 from utils import extract_tool_call_info, summarize_tool_call
@@ -63,7 +64,6 @@ class AutogenAgent(BaseAgent):
         self.region_service = RegionService(self._db, self._nats)
         self.action_log_service = ActionLogService(self._db, self._nats)
 
-
     def get_context(self):
         """Load the context from the database or other storage."""
 
@@ -86,13 +86,15 @@ class AutogenAgent(BaseAgent):
             context += (
                 "\n ERROR!! Last turn you experienced the following error: " + error
             )
-        outstanding_requests = self.agent_service.get_outstanding_conversation_requests(self.agent.id)
-        
+        outstanding_requests = self.agent_service.get_outstanding_conversation_requests(
+            self.agent.id
+        )
+
         if outstanding_requests:
-            context += OutstandingConversationContext(self.agent).build(outstanding_requests)
-            context += (
-                "\n Given this information devide whether you would like to accept and engange in the conversation request or not. You may only use ONE (1) tool at a time."
+            context += OutstandingConversationContext(self.agent).build(
+                outstanding_requests
             )
+            context += "\n Given this information devide whether you would like to accept and engange in the conversation request or not. You may only use ONE (1) tool at a time."
         else:
             context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
         return (observations, context)
@@ -112,11 +114,14 @@ class AutogenAgent(BaseAgent):
 
     def _adapt_tools(self, observations: List[ResourceObservation]):
         """Adapt the tools based on the agent's context."""
-        
+
         if self.agent_service.has_outstanding_conversation_request(self.agent.id):
             self.autogen_agent._tools = [
-                tool for tool in self.autogen_agent._tools if tool.name == "accept_conversation_request" or tool.name == "decline_conversation_request"
-            ]   
+                tool
+                for tool in self.autogen_agent._tools
+                if tool.name == "accept_conversation_request"
+                or tool.name == "decline_conversation_request"
+            ]
             return
 
         # remove make_plan if agent already owns a plan
@@ -203,7 +208,7 @@ class AutogenAgent(BaseAgent):
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Context for generation: {context}"
         )
         # Emit raw LLM prompt for frontend debugging
-        
+
         agent_prompt_message = AgentPromptMessage(
             id=self.agent.id,
             simulation_id=self.agent.simulation.id,
@@ -218,7 +223,7 @@ class AutogenAgent(BaseAgent):
         # as the agent will try to read from the database while the tool call is trying to
         # write to it.
         self._db.commit()
-        
+
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
@@ -227,7 +232,7 @@ class AutogenAgent(BaseAgent):
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generated output: {output.messages[-1].content}"
         )
         # Emit raw LLM response for frontend debugging
-        
+
         agent_response_message = AgentResponseMessage(
             id=self.agent.id,
             simulation_id=self.agent.simulation.id,
@@ -249,7 +254,7 @@ class AutogenAgent(BaseAgent):
         if not reason:
             last_tool_call = extract_tool_call_info(output)
             last_tool_summary = summarize_tool_call(last_tool_call)
-            
+
             action_log = ActionLog(
                 agent_id=self.agent.id,
                 simulation_id=self.agent.simulation_id,
@@ -263,7 +268,6 @@ class AutogenAgent(BaseAgent):
         else:
             last_tool_call = None
             last_tool_summary = None
-            
 
         self._db.add(self.agent)
         self._db.commit()

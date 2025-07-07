@@ -1,7 +1,7 @@
 import asyncio
-from datetime import datetime, timezone
 import json
 import threading
+from datetime import datetime, timezone
 
 from faststream.nats import NatsBroker
 from loguru import logger
@@ -16,11 +16,12 @@ from messages.simulation.simulation_tick import SimulationTickMessage
 from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
 
-from schemas.agent import Agent
 from services.agent import AgentService
 from services.resource import ResourceService
 from services.simulation import SimulationService
 from services.world import WorldService
+
+from schemas.agent import Agent
 
 
 class SimulationRunner:
@@ -111,13 +112,11 @@ class SimulationRunner:
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
 
-        agent_ids = db.exec(select(Agent.id).where(Agent.simulation_id == simulation.id)).all()
-        
+        agent_ids = db.exec(
+            select(Agent.id).where(Agent.simulation_id == simulation.id)
+        ).all()
 
-        tasks = [
-            AgentRunner.tick_agent(nats, agent_id)
-            for agent_id in agent_ids
-        ]
+        tasks = [AgentRunner.tick_agent(nats, agent_id) for agent_id in agent_ids]
         await asyncio.gather(*tasks)
 
     @staticmethod

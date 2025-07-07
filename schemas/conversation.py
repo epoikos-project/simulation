@@ -6,9 +6,9 @@ from schemas.base import BaseModel
 
 if TYPE_CHECKING:
 
+    from schemas.agent import Agent
     from schemas.message import Message
     from schemas.simulation import Simulation
-    from schemas.agent import Agent
 
 
 class Conversation(BaseModel, table=True):
@@ -20,11 +20,11 @@ class Conversation(BaseModel, table=True):
         foreign_key="agent.id", nullable=True, default=None, index=True
     )
     tick: int = Field(default=0)
-    
+
     declined: bool = Field(default=False)
 
     active: bool = Field(default=True)
-    
+
     finished: bool = Field(default=False)
 
     simulation: "Simulation" = Relationship(back_populates="conversations")
@@ -32,7 +32,7 @@ class Conversation(BaseModel, table=True):
     messages: list["Message"] = Relationship(
         back_populates="conversation", cascade_delete=True
     )
-    
+
     agent_a: "Agent" = Relationship(
         back_populates="outgoing_conversations",
         sa_relationship_kwargs={"foreign_keys": "[Conversation.agent_a_id]"},

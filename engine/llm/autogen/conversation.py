@@ -1,8 +1,10 @@
 from autogen_core import CancellationToken
+from langfuse.decorators import langfuse_context, observe
 from loguru import logger
 from sqlmodel import Session
-from langfuse.decorators import langfuse_context, observe
+
 from clients.nats import Nats
+
 from engine.context.conversation import ConversationContext
 from engine.context.hunger import HungerContext
 from engine.context.memory import MemoryContext
@@ -11,16 +13,21 @@ from engine.context.plan import PlanContext
 from engine.context.system import SystemDescription, SystemPrompt
 from engine.llm.autogen.base import BaseAgent
 from engine.tools.conversation_tools import end_conversation
+
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
+
+from services.action_log import ActionLogService
+from services.agent import AgentService
+from services.conversation import ConversationService
+from services.relationship import RelationshipService
+from services.resource import ResourceService
+
 from schemas.agent import Agent
 from schemas.conversation import Conversation
 from schemas.message import Message
-from services.action_log import ActionLogService
-from services.agent import AgentService
-from services.resource import ResourceService
-from services.conversation import ConversationService
-from services.relationship import RelationshipService
+
+a
 
 
 class ConversationAgent(BaseAgent):
@@ -40,27 +47,29 @@ class ConversationAgent(BaseAgent):
             nats=nats,
             agent=agent,
             tools=[end_conversation],
-            system_prompt=SystemPrompt(agent), 
+            system_prompt=SystemPrompt(agent),
             description=SystemDescription(agent),
         )
         self.conversation = conversation
-        
+
         self.resource_service = ResourceService(self._db, self._nats)
         self.action_log_service = ActionLogService(self._db, self._nats)
         self.conversation_service = ConversationService(self._db, self._nats)
         self.relationship_service = RelationshipService(self._db, self._nats)
-        
+
         self.agent_service = AgentService(self._db, self._nats)
         self.other_agent = self.agent_service.get_by_id(
-            self.conversation.agent_b_id if self.conversation.agent_a_id == self.agent.id else self.conversation.agent_a_id
+            self.conversation.agent_b_id
+            if self.conversation.agent_a_id == self.agent.id
+            else self.conversation.agent_a_id
         )
 
     @observe(as_type="generation", name="Agent Conversation Tick")
     async def generate(self):
         observations, context = self.get_context()
-        
+
         self._update_langfuse_trace()
-        
+
         agent_prompt_message = AgentPromptMessage(
             id=self.agent.id,
             simulation_id=self.agent.simulation.id,
@@ -69,13 +78,13 @@ class ConversationAgent(BaseAgent):
             context=context,
         )
         await agent_prompt_message.publish(self._nats)
-        
+
         self._db.commit()
-        
+
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
-        
+
         if output.messages[-1].content is not None:
             self.relationship_service.update_relationship(
                 agent1_id=self.agent.id,
@@ -85,14 +94,14 @@ class ConversationAgent(BaseAgent):
                 tick=self.agent.simulation.tick,
                 commit=False,
             )
-            
+
             message = Message(
                 conversation_id=self.conversation.id,
                 agent_id=self.agent.id,
                 content=output.messages[-1].content,
                 tick=self.agent.simulation.tick,
             )
-        
+
             self._db.add(message)
             self._db.commit()
 
@@ -100,7 +109,7 @@ class ConversationAgent(BaseAgent):
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generated output: {output.messages[-1].content}"
         )
         # Emit raw LLM response for frontend debugging
-        
+
         agent_response_message = AgentResponseMessage(
             id=self.agent.id,
             simulation_id=self.agent.simulation.id,
@@ -108,7 +117,7 @@ class ConversationAgent(BaseAgent):
             reply=output.messages[-1].content,
         )
         await agent_response_message.publish(self._nats)
-        
+
         langfuse_context.update_current_observation(
             usage_details={
                 "input_tokens": self._client.actual_usage().prompt_tokens,
@@ -118,14 +127,11 @@ class ConversationAgent(BaseAgent):
                 "system_message": self.autogen_agent._system_messages[0].content,
                 "description": self.autogen_agent._description,
                 "context": context,
-                "tools": (
-                    [tool.schema for tool in self.autogen_agent._tools]
-                ),
-            }
+                "tools": ([tool.schema for tool in self.autogen_agent._tools]),
+            },
         )
         return output
-        
-    
+
     def get_context(self):
         """Load the context from the database or other storage."""
 
@@ -139,7 +145,9 @@ class ConversationAgent(BaseAgent):
             ObservationContext(self.agent).build(observations),
             PlanContext(self.agent).build(),
             MemoryContext(self.agent).build(actions=actions),
-            ConversationContext(self.agent).build(other_agent=self.other_agent, messages=self.conversation.messages),
+            ConversationContext(self.agent).build(
+                other_agent=self.other_agent, messages=self.conversation.messages
+            ),
         ]
         context += "\n".join(parts)
         error = self.agent.last_error
@@ -153,7 +161,7 @@ class ConversationAgent(BaseAgent):
         return (observations, context)
 
     def _update_langfuse_trace(self):
-        
+
         name = f"Conversation Tick {self.agent.name}"
 
         langfuse_context.update_current_trace(
@@ -162,20 +170,6 @@ class ConversationAgent(BaseAgent):
             session_id=self.agent.simulation_id,
         )
         langfuse_context.update_current_observation(model=self.model.name, name=name)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     #### === Turn-based communication -> TODO: consider to rework this! === ###
     # TODO: check if conversation has id/ name of other agent so llm know who its talking to

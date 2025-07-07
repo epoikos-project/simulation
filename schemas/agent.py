@@ -7,13 +7,13 @@ from schemas.conversation import Conversation
 
 if TYPE_CHECKING:
 
+    from schemas.action_log import ActionLog
+    from schemas.message import Message
     from schemas.plan import Plan
     from schemas.relationship import Relationship
     from schemas.resource import Resource
     from schemas.simulation import Simulation
     from schemas.task import Task
-    from schemas.action_log import ActionLog
-    from schemas.message import Message
 
 
 class Agent(BaseModel, table=True):
@@ -72,24 +72,18 @@ class Agent(BaseModel, table=True):
         cascade_delete=True,
         sa_relationship_kwargs={"foreign_keys": "[ActionLog.agent_id]"},
     )
-    
+
     incoming_conversations: list["Conversation"] = Relationship(
         back_populates="agent_b",
-        sa_relationship_kwargs={
-            "foreign_keys": "[Conversation.agent_b_id]"
-        },
+        sa_relationship_kwargs={"foreign_keys": "[Conversation.agent_b_id]"},
     )
-    
+
     outgoing_conversations: list["Conversation"] = Relationship(
         back_populates="agent_a",
-        sa_relationship_kwargs={
-            "foreign_keys": "[Conversation.agent_a_id]"
-        },
+        sa_relationship_kwargs={"foreign_keys": "[Conversation.agent_a_id]"},
     )
-    
+
     sent_messages: list["Message"] = Relationship(
         back_populates="sender",
-        sa_relationship_kwargs={
-            "foreign_keys": "[Message.agent_id]"
-        },
+        sa_relationship_kwargs={"foreign_keys": "[Message.agent_id]"},
     )

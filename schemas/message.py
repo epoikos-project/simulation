@@ -7,8 +7,8 @@ from schemas.base import BaseModel
 
 if TYPE_CHECKING:
 
-    from schemas.conversation import Conversation
     from schemas.agent import Agent
+    from schemas.conversation import Conversation
 
 
 class Message(BaseModel, table=True):

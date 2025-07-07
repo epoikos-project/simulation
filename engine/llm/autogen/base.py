@@ -1,19 +1,25 @@
-from functools import partial
 import re
+from functools import partial
 from typing import Callable, List
-from sqlmodel import Session
-from clients.nats import Nats
-from config import settings
-from config.openai import AvailableModels
-from engine.context.base import BaseContext
-from engine.context.system import SystemDescription, SystemPrompt
-from schemas.agent import Agent
-from services.agent import AgentService
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_core import CancellationToken
 from autogen_core.tools import BaseTool, FunctionTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
+from sqlmodel import Session
+
+from clients.nats import Nats
+
+from config import settings
+from config.openai import AvailableModels
+
+from engine.context.base import BaseContext
+from engine.context.system import SystemDescription, SystemPrompt
+
+from services.agent import AgentService
+
+from schemas.agent import Agent
+
 
 class BaseAgent:
     def __init__(
@@ -23,7 +29,7 @@ class BaseAgent:
         agent: Agent,
         tools: List[BaseTool],
         system_prompt: BaseContext,
-        description: BaseContext
+        description: BaseContext,
     ):
         self.agent = agent
         self.model = AvailableModels.get(agent.model)
@@ -46,10 +52,7 @@ class BaseAgent:
             api_key=settings.openai.apikey,
         )
 
-        tools: List[BaseTool] = [
-            self._make_bound_tool(tool) for tool in self.tools
-        ]
-
+        tools: List[BaseTool] = [self._make_bound_tool(tool) for tool in self.tools]
 
         autogen = AssistantAgent(
             name=re.sub(r"\W|^(?=\d)", "_", self.agent.name),
@@ -62,7 +65,7 @@ class BaseAgent:
         )
 
         return (client, autogen)
-    
+
     def _make_bound_tool(
         self, func: Callable, *, name: str | None = None, description: str | None = None
     ) -> FunctionTool:

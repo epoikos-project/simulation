@@ -6,6 +6,7 @@ from clients import Nats
 from clients.db import DB
 
 from messages.world.agent_moved import AgentMovedMessage
+
 from services.agent import AgentService
 
 from schemas.agent import Agent
@@ -64,7 +65,7 @@ async def move_agent(
 
     agent.x_coord = move_agent_input.x_coord
     agent.y_coord = move_agent_input.y_coord
-    
+
     db.add(agent)
     db.commit()
 
@@ -79,4 +80,6 @@ async def move_agent(
     )
     await agent_moved_message.publish(broker)
 
-    return {"message": f"Agent {agent_id} moved to location {agent.x_coord, agent.y_coord}"}
+    return {
+        "message": f"Agent {agent_id} moved to location {agent.x_coord, agent.y_coord}"
+    }
