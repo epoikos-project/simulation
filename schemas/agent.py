@@ -6,12 +6,13 @@ from schemas.base import BaseModel
 
 if TYPE_CHECKING:
 
+    from schemas.action_log import ActionLog
+    from schemas.memory_log import MemoryLog
     from schemas.plan import Plan
     from schemas.relationship import Relationship
     from schemas.resource import Resource
     from schemas.simulation import Simulation
     from schemas.task import Task
-    from schemas.action_log import ActionLog
 
 
 class Agent(BaseModel, table=True):
@@ -69,4 +70,10 @@ class Agent(BaseModel, table=True):
         back_populates="agent",
         cascade_delete=True,
         sa_relationship_kwargs={"foreign_keys": "[ActionLog.agent_id]"},
+    )
+
+    memory_logs: list["MemoryLog"] = Relationship(
+        back_populates="agent",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "[MemoryLog.agent_id]"},
     )

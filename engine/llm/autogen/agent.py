@@ -1,3 +1,4 @@
+import json
 import re
 from functools import partial
 from typing import Callable, List
@@ -8,7 +9,6 @@ from autogen_core.tools import BaseTool, FunctionTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from langfuse.decorators import langfuse_context, observe
 from loguru import logger
-import json
 from pymilvus import MilvusClient
 from sqlmodel import Session
 
@@ -31,11 +31,11 @@ from engine.context.observations.resource import ResourceObservation
 from engine.context.system import SystemDescription
 from engine.tools import available_tools
 
-from schemas.action_log import ActionLog
 from services.action_log import ActionLogService
 from services.agent import AgentService
 from services.region import RegionService
 
+from schemas.action_log import ActionLog
 from schemas.agent import Agent
 
 from utils import extract_tool_call_info, summarize_tool_call
@@ -111,6 +111,7 @@ class AutogenAgent:
 
         observations = self.agent_service.get_world_context(self.agent)
         actions = self.agent_service.get_last_k_actions(self.agent, k=10)
+        memory_logs = self.agent_service.get_last_k_memory_logs(self.agent, k=3)
 
         context = "Current Tick: " + str(self.agent.simulation.tick) + "\n"
         parts = [
@@ -119,7 +120,7 @@ class AutogenAgent:
             ObservationContext(self.agent).build(observations),
             PlanContext(self.agent).build(),
             # ConversationContext(self.agent).build(self.message, self.conversation_id),
-            MemoryContext(self.agent).build(actions=actions),
+            MemoryContext(self.agent).build(actions=actions, memory_logs=memory_logs),
         ]
         context += "\n".join(parts)
         error = self.agent.last_error
@@ -211,11 +212,13 @@ class AutogenAgent:
         self._adapt_tools(observations=observations)
 
         if reason:
-            tools_summary = "These are possible actions you can perform in the world: "
+            available_tools_summary = (
+                "These are possible actions you can perform in the world: "
+            )
             # TODO: maybe provide a few more details on the tools
             for tool in available_tools:
-                tools_summary += tool.__name__ + ", "
-            context += f"{tools_summary}\nGiven this information reason about your next action. Think step by step. Answer with a comprehensive explanation about what and why you want to do next."
+                available_tools_summary += tool.__name__ + ", "
+            context += f"{available_tools_summary}\nGiven this information reason about your next action. Think step by step. Answer with a comprehensive explanation about what and why you want to do next."
         else:
             error = self.agent.last_error
 
@@ -225,7 +228,7 @@ class AutogenAgent:
                 )
             if reasoning_output:
                 context += f"\nYour reasoning about what to do next: {reasoning_output}"
-            context += "\nGiven this reasoning now decide on your next action by performing a tool call."
+            context += "\nGiven this reasoning now decide on your next action by performing a tool call. You should always first use the tool 'add_memory' to store your reasoning about your long term goal i.e. the overarching thing you want to achive not your next action. Then additionaly use another tool to perform an action. If you do not want to perform an action, just use the tool add_memory and then stop."
             self._adapt_tools(observations)
 
         logger.debug(
@@ -233,13 +236,15 @@ class AutogenAgent:
         )
         # Emit raw LLM prompt for frontend debugging
         await self._nats.publish(
-            json.dumps({
-                "type": "agent_prompt",
-                "agent_id": self.agent.id,
-                "simulation_id": self.agent.simulation.id,
-                "reasoning": reason,
-                "context": context,
-            }),
+            json.dumps(
+                {
+                    "type": "agent_prompt",
+                    "agent_id": self.agent.id,
+                    "simulation_id": self.agent.simulation.id,
+                    "reasoning": reason,
+                    "context": context,
+                }
+            ),
             f"simulation.{self.agent.simulation.id}.agent.{self.agent.id}.prompt",
         )
 
@@ -248,7 +253,7 @@ class AutogenAgent:
         # as the agent will try to read from the database while the tool call is trying to
         # write to it.
         self._db.commit()
-        
+
         output = await self.autogen_agent.run(
             task=context, cancellation_token=CancellationToken()
         )
@@ -258,12 +263,14 @@ class AutogenAgent:
         )
         # Emit raw LLM response for frontend debugging
         await self._nats.publish(
-            json.dumps({
-                "type": "agent_response",
-                "agent_id": self.agent.id,
-                "simulation_id": self.agent.simulation.id,
-                "reply": output.messages[-1].content,
-            }),
+            json.dumps(
+                {
+                    "type": "agent_response",
+                    "agent_id": self.agent.id,
+                    "simulation_id": self.agent.simulation.id,
+                    "reply": output.messages[-1].content,
+                }
+            ),
             f"simulation.{self.agent.simulation.id}.agent.{self.agent.id}.response",
         )
 
@@ -278,13 +285,13 @@ class AutogenAgent:
         self.agent.last_error = error
 
         if not reason:
-            last_tool_call = extract_tool_call_info(output)
-            last_tool_summary = summarize_tool_call(last_tool_call)
-            
+            tool_calls = extract_tool_call_info(output)
+            tool_calls_summary = summarize_tool_call(tool_calls)
+
             action_log = ActionLog(
                 agent_id=self.agent.id,
                 simulation_id=self.agent.simulation_id,
-                action=last_tool_summary,
+                action=tool_calls_summary,
                 tick=self.agent.simulation.tick,
             )
             self.action_log_service.create(
@@ -292,9 +299,8 @@ class AutogenAgent:
                 commit=False,
             )
         else:
-            last_tool_call = None
-            last_tool_summary = None
-            
+            tool_calls = None
+            tool_calls_summary = None
 
         self._db.add(self.agent)
         self._db.commit()
@@ -311,10 +317,10 @@ class AutogenAgent:
                 "tools": (
                     [tool.schema for tool in self.autogen_agent._tools]
                     if not reason
-                    else tools_summary
+                    else available_tools_summary
                 ),
             },
-            metadata=last_tool_call,
+            metadata=tool_calls,
         )
         return output
 

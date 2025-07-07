@@ -31,7 +31,7 @@ async def hello_http():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load the ML model
-    milvus.create_client()
+    # milvus.create_client()
     yield
 
 

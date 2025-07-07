@@ -7,13 +7,14 @@ from engine.context.observation import ObservationUnion
 from engine.context.observations import AgentObservation, ResourceObservation
 from engine.grid import Grid
 
-from schemas.action_log import ActionLog
 from services.base import BaseService
 from services.region import RegionService
 from services.resource import ResourceService
 from services.world import WorldService
 
+from schemas.action_log import ActionLog
 from schemas.agent import Agent
+from schemas.memory_log import MemoryLog
 from schemas.resource import Resource
 
 from utils import compute_distance, compute_distance_raw
@@ -104,7 +105,7 @@ class AgentService(BaseService[Agent]):
             agent_observations.append(agent_obs)
 
         return agent_observations
-    
+
     def move_agent_in_direction(self, agent: Agent, direction: str) -> tuple[int, int]:
         """
         Moves the specified agent in the given direction within the world.
@@ -210,9 +211,9 @@ class AgentService(BaseService[Agent]):
 
         agent.x_coord = new_location[0]
         agent.y_coord = new_location[1]
-        
+
         region_service = RegionService(self._db, self._nats)
-        
+
         current_region = region_service.get_region_at(
             agent.simulation.world.id, agent.x_coord, agent.y_coord
         )
@@ -265,7 +266,7 @@ class AgentService(BaseService[Agent]):
         #     obstacles.append((resource.x_coord, resource.y_coord))
 
         return obstacles
-    
+
     def get_last_k_actions(self, agent: Agent, k: int = 5) -> list[ActionLog]:
         """Get the last k actions of an agent."""
         actions = self._db.exec(
@@ -274,5 +275,16 @@ class AgentService(BaseService[Agent]):
             .order_by(ActionLog.tick.desc())
             .limit(k)
         ).all()
-        
+
         return actions
+
+    def get_last_k_memory_logs(self, agent: Agent, k: int = 5) -> list[MemoryLog]:
+        """Get the last k memory logs of an agent."""
+        memory_logs = self._db.exec(
+            select(MemoryLog)
+            .where(MemoryLog.agent_id == agent.id)
+            .order_by(MemoryLog.tick.desc())
+            .limit(k)
+        ).all()
+
+        return memory_logs
