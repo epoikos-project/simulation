@@ -14,6 +14,8 @@ class SystemPrompt(BaseContext):
             "(2) harvest resources by forming plans and executing them and "
             "(3) talk and cooperate with other agents to execute more favorable plans and collect more resources. "
             "\nTo guide your actions, you should use the information about your environment and talk to other people that are around."
+            "The grid you are moving on has 0,0 as its top left corner and x increases to the right and y increases downwards. E.g. moving down from (0,0) will result in (0,1) and moving right from (0,0) will result in (1,0). "
+            "IMPORTANT: You may only use one tool at a time, so you have to decide which tool to use next."
         )
 
 

@@ -8,7 +8,6 @@ from loguru import logger
 from models.conversation import Conversation
 
 from clients.nats import nats_broker
-from clients.tinydb import get_client
 
 
 @observe()
