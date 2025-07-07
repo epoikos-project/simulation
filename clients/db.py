@@ -10,8 +10,8 @@ from config import settings
 
 # Have to import all models to ensure they are registered with SQLModel
 from schemas import (
-    agent,
     action_log,
+    agent,
     configuration,
     conversation,
     message,

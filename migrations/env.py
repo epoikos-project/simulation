@@ -23,8 +23,8 @@ if config.config_file_name is not None:
 
 # Import schemas to ensure they are registered with SQLModel
 from schemas import (
-    agent,
     action_log,
+    agent,
     configuration,
     conversation,
     message,

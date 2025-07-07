@@ -76,6 +76,9 @@ def summarize_tool_call(call: Dict[str, Any]) -> str:
     if req_key is None:
         raise ValueError("No key containing 'RequestEvent' found in the call.")
     req = call[req_key]
+    
+    if len(req) == 0:
+        return "No tool call made."
 
     name = req.get("name", "")
     raw_args = req.get("arguments", "{}")

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from clients import Nats
 from clients.db import DB
 
-from services.relationship import get_relationship_graph
+from services.relationship import RelationshipService
 from services.simulation import SimulationService
 
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
@@ -106,8 +106,8 @@ async def relationship_graph(
     - tick: if provided, graph at that tick; otherwise latest.
     - agent_id: if provided, only return that agent + its neighbors.
     """
-    graph = get_relationship_graph(
-        session=db,
+    relationship_service = RelationshipService(db=db, nats=None)
+    graph = relationship_service.get_relationship_graph(
         simulation_id=simulation_id,
         tick=tick,
         agent_id=agent_id,

@@ -1,23 +1,35 @@
 from engine.context.base import BaseContext
 
+from schemas.agent import Agent
+from schemas.conversation import Conversation
 from schemas.message import Message
 
 
 class ConversationContext(BaseContext):
-    def build(self, message: Message) -> str:
-        if self.agent.conversation_id:
-            conversation_context = f"You are currently engaged in a conversation (ID: {self.agent.conversation_id}). "
-            conversation_context += f"New message from person {message.agent_id}: <Message start> {message.content} <Message end> "
-            conversation_context += "If appropriate consider replying. If you do not reply the conversation will be terminated. "
+    def build(self, other_agent: Agent, messages: list[Message]) -> str:
+        conversation_context = f"You are currently engaged in a conversation with Agent {other_agent.name} (ID: {other_agent.id}). "
+        conversation_context += (
+            f"\n So far, you have exchanged the following messages: "
+        )
+        for message in messages:
+            conversation_context += (
+                f"\n - {message.sender.name}: {message.content} (Tick: {message.tick})"
+            )
 
-        else:
-            conversation_context = "You are currently not engaged in a conversation with another person. If you meet someone, consider starting a conversation. "
+        return conversation_context
 
-        # TODO: add termination logic or reconsider how this should work. Consider how message history is handled.
-        # Should not overflow the context. Maybe have summary of conversation and newest message.
-        # Then if decide to reply this is handled by other agent (MessageAgent) that gets the entire history and sends the message.
-        # While this MessageAgent would also need quite the same context as here, its task would only be the reply and not deciding on a tool call.
+class PreviousConversationContext(BaseContext):
+    def build(self, conversation: Conversation) -> str:
+        context = f"In your last conversation (ID: {conversation.id}) with Agent {conversation.agent_b.name} (ID: {conversation.agent_b.id}), you discussed the following:\n"
+        for message in conversation.messages:
+            context += f"- {message.sender.name}: {message.content} (Tick: {message.tick})\n"
+        return context
 
-        conversation_description = "Conversation: " + conversation_context
-
-        return conversation_description
+class OutstandingConversationContext(BaseContext):
+    def build(self, conversations: list[Conversation]) -> str:
+        context = "You have the following outstanding conversation requests:\n"
+        for conversation in conversations:
+            context += f"- Conversation {conversation.id} with Agent {conversation.agent_b.name} at Tick {conversation.tick}.\n"
+            context += f"  Status: {'Request pending'}\n"
+            context += f"  Messages: {conversation.messages[-1].content if conversation.messages else 'No messages exchanged'}\n"
+        return context

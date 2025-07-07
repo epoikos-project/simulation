@@ -7,13 +7,16 @@ from engine.context.observation import ObservationUnion
 from engine.context.observations import AgentObservation, ResourceObservation
 from engine.grid import Grid
 
-from schemas.action_log import ActionLog
 from services.base import BaseService
+from services.conversation import ConversationService
 from services.region import RegionService
 from services.resource import ResourceService
 from services.world import WorldService
 
+from schemas.action_log import ActionLog
 from schemas.agent import Agent
+from schemas.conversation import Conversation
+from schemas.message import Message
 from schemas.relationship import Relationship as RelationshipModel
 from schemas.resource import Resource
 
@@ -116,15 +119,57 @@ class AgentService(BaseService[Agent]):
             )
 
             agent_obs = AgentObservation(
-                location=(agent.x_coord, agent.y_coord),
+                location=(other_agent.x_coord, other_agent.y_coord),
                 distance=agent_distance,
-                id=agent.id,
-                agent=agent,
+                id=other_agent.id,
+                agent=other_agent,
             )
             agent_observations.append(agent_obs)
 
         return agent_observations
-    
+
+    def get_outstanding_conversation_requests(
+        self, agent_id: str
+    ) -> list[Conversation]:
+        """Get all agents that have an outstanding conversation request with the given agent."""
+
+        conversations = self._db.exec(
+            select(Conversation).where(
+                (Conversation.agent_b_id == agent_id),
+                Conversation.finished == False,
+                Conversation.active == False,
+            )
+        ).all()
+
+        return conversations
+
+    def get_initialized_conversation_requests(
+        self, agent_id: str
+    ) -> list[Conversation]:
+        """Get all initialized conversation requests for the given agent."""
+        conversations = self._db.exec(
+            select(Conversation).where(
+                (Conversation.agent_a_id == agent_id),
+                Conversation.finished == False,
+                Conversation.active == False,
+            )
+        ).all()
+
+        logger.warning(
+            f"Agent {agent_id} has {len(conversations)} initialized conversations."
+        )
+
+        return conversations
+
+    def has_outstanding_conversation_request(self, agent_id: str) -> bool:
+        """Check if the agent has an outstanding conversation request."""
+
+        return len(self.get_outstanding_conversation_requests(agent_id)) > 0
+
+    def has_initialized_conversation(self, agent_id: str) -> bool:
+        """Check if the agent has an initialized conversation."""
+        return len(self.get_initialized_conversation_requests(agent_id)) > 0
+
     def move_agent_in_direction(self, agent: Agent, direction: str) -> tuple[int, int]:
         """
         Moves the specified agent in the given direction within the world.
@@ -230,9 +275,9 @@ class AgentService(BaseService[Agent]):
 
         agent.x_coord = new_location[0]
         agent.y_coord = new_location[1]
-        
+
         region_service = RegionService(self._db, self._nats)
-        
+
         current_region = region_service.get_region_at(
             agent.simulation.world.id, agent.x_coord, agent.y_coord
         )
@@ -285,7 +330,7 @@ class AgentService(BaseService[Agent]):
         #     obstacles.append((resource.x_coord, resource.y_coord))
 
         return obstacles
-    
+
     def get_last_k_actions(self, agent: Agent, k: int = 5) -> list[ActionLog]:
         """Get the last k actions of an agent."""
         actions = self._db.exec(
@@ -294,5 +339,16 @@ class AgentService(BaseService[Agent]):
             .order_by(ActionLog.tick.desc())
             .limit(k)
         ).all()
-        
+
         return actions
+
+    def get_last_k_messages(self, agent: Agent, k: int = 5) -> list[Message]:
+        """Get the last k messages of an agent."""
+        messages = self._db.exec(
+            select(Message)
+            .where(Message.agent_id == agent.id)
+            .order_by(Message.tick.desc())
+            .limit(k)
+        ).all()
+
+        return messages
