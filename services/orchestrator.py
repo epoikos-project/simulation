@@ -25,6 +25,7 @@ from services.agent import AgentService
 from services.region import RegionService
 from services.resource import ResourceService
 from services.simulation import SimulationService
+from services.relationship import snapshot_relationship_graph
 from services.world import WorldService
 
 from schemas.agent import Agent
@@ -173,6 +174,14 @@ class OrchestratorService:
             simulation_id=sim_id,
         )
         logger.info(f"Orchestrator: ticked simulation {sim_id}")
+        # snapshot relationship graph for this simulation at new tick
+        sim = self.simulation_service.get_by_id(sim_id)
+        snapshot_relationship_graph(
+            session=self._db,
+            simulation_id=sim_id,
+            tick=sim.tick,
+        )
+        logger.info(f"Orchestrator: snapshot relationships at tick {sim.tick}")
 
     async def start(self, sim_id: str):
         tick = SimulationRunner.start_simulation(

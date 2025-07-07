@@ -97,10 +97,21 @@ async def delete_simulation(id: str, db: DB, nats: Nats):
 async def relationship_graph(
     simulation_id: str,
     db: DB,
-):
-    """Get the full relationship graph for all agents in a simulation"""
-    # simulation_id param provided to match path; not currently used to filter
-    graph = get_relationship_graph(db)
+    tick: int | None = None,
+    agent_id: str | None = None,
+) -> dict:
+    """
+    Get a snapshot of the relationship graph for a simulation.
+
+    - tick: if provided, graph at that tick; otherwise latest.
+    - agent_id: if provided, only return that agent + its neighbors.
+    """
+    graph = get_relationship_graph(
+        session=db,
+        simulation_id=simulation_id,
+        tick=tick,
+        agent_id=agent_id,
+    )
     return graph
 
 
