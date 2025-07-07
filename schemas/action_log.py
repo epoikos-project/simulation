@@ -17,6 +17,7 @@ class ActionLog(BaseModel, table=True):
     simulation_id: str = Field(foreign_key="simulation.id", index=True)
 
     action: str = Field()
+    feedback: str | None = Field(default=None)
     agent_id: str = Field(foreign_key="agent.id")
     tick: int = Field()
 

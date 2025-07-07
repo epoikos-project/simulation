@@ -8,6 +8,7 @@ from config.openai import AvailableModels
 from engine.llm.autogen.agent import AutogenAgent
 from engine.llm.autogen.conversation import ConversationAgent
 
+from engine.llm.autogen.harvest import HarvestingAgent
 from services.agent import AgentService
 from services.conversation import ConversationService
 
@@ -46,6 +47,19 @@ class AgentRunner:
                     conversation=conversation,
                 )
                 await conversation_agent.generate()
+                return
+            if agent.harvesting_resource_id is not None:
+                logger.debug(
+                    f"[SIM {agent.simulation.id}][AGENT {agent.id}] Agent is harvesting resource"
+                )
+                harvesting_agent = HarvestingAgent(
+                    db=db,
+                    nats=nats,
+                    agent=agent,
+                )
+                await harvesting_agent.generate()
+                return
+            
             else:
                 agent = AutogenAgent(
                     agent=agent,

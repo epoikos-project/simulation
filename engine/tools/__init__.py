@@ -3,8 +3,9 @@ from .conversation_tools import (
     decline_conversation_request,
     start_conversation,
 )
+from .harvesting_tools import harvest_resource
 from .plan_tools import add_task, make_plan
-from .world_tools import harvest_resource, move
+from .world_tools import move
 
 available_tools = [
     move,

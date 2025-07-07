@@ -8,7 +8,7 @@ class MemoryContext(BaseContext):
     def build(self, actions: list[ActionLog]) -> str:
 
         memory = "\n".join(
-            [f" - {action.action} (Tick: {action.tick})" for action in actions]
+            [f" - {action.action} {'Feedback: ' + action.feedback if action.feedback else 'Succeeded'} (Tick: {action.tick})" for action in actions]
         )
         memory_description = "Memory: You have the following memory: " + memory
 

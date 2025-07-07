@@ -43,14 +43,25 @@ class ResourceService(BaseService[Resource]):
                     resource.last_harvest = resource.simulation.tick
 
                     harvester.energy_level += resource.energy_yield
-
-                    self.db.add(resource)
-                    self.db.add(harvester)
-                    self.db.commit()
+                    
+                elif len(resource.harvesters) >= resource.required_agents:
+                    resource.available = False
+                    resource.last_harvest = resource.simulation.tick
+                    resource.being_harvested = False
+                    
+                    for harv in resource.harvesters:
+                        harv.energy_level += resource.energy_yield
+                        harv.harvesting_resource_id = None
+                        self.db.add(harv)
                 else:
-                    raise ValueError(
-                        f"Resource {resource.id} requires more than one agent to harvest. Required agents: {resource.required_agents}"
-                    )
+                    harvester.harvesting_resource_id = resource.id
+                    resource.start_harvest = resource.simulation.tick
+                    resource.being_harvested = True
+                    
+                self.db.add(resource)
+                self.db.add(harvester)
+                self.db.commit()
+
 
     def start_harvest_resource(self, resource: Resource, harvester: Agent):
         # Check if agent(s) is/are in the harvesting area

@@ -5,15 +5,15 @@ from sqlmodel import Session
 
 from clients.nats import Nats
 
-from engine.context.conversation import ConversationContext
+from engine.context.conversation import ConversationContext, PreviousConversationContext
 from engine.context.hunger import HungerContext
 from engine.context.memory import MemoryContext
 from engine.context.observation import ObservationContext
 from engine.context.plan import PlanContext
 from engine.context.system import SystemDescription, SystemPrompt
 from engine.llm.autogen.base import BaseAgent
-from engine.tools.conversation_tools import end_conversation
 
+from engine.tools.harvesting_tools import continue_waiting, stop_waiting
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
 
@@ -29,9 +29,9 @@ from schemas.message import Message
 
 
 
-class ConversationAgent(BaseAgent):
+class HarvestingAgent(BaseAgent):
     """
-    Conversation agent that manages conversations and interactions with other agents.
+    Harvesting agent that manages the harvesting process and interactions with other agents.
     """
 
     def __init__(
@@ -39,57 +39,26 @@ class ConversationAgent(BaseAgent):
         db: Session,
         nats: Nats,
         agent: Agent,
-        conversation: Conversation,
     ):
         super().__init__(
             db=db,
             nats=nats,
             agent=agent,
-            tools=[end_conversation],
+            tools=[continue_waiting, stop_waiting],
             system_prompt=SystemPrompt(agent),
             description=SystemDescription(agent),
         )
-        self.conversation = conversation
-
-        self.resource_service = ResourceService(self._db, self._nats)
-        self.action_log_service = ActionLogService(self._db, self._nats)
         self.conversation_service = ConversationService(self._db, self._nats)
-        self.relationship_service = RelationshipService(self._db, self._nats)
+        
 
-        self.other_agent = self.agent_service.get_by_id(
-            self.conversation.agent_b_id
-            if self.conversation.agent_a_id == self.agent.id
-            else self.conversation.agent_a_id
-        )
-
-    @observe(as_type="generation", name="Agent Conversation Tick")
+    @observe(as_type="generation", name="Agent Harvesting Tick")
     async def generate(self):
         observations, context = self.get_context()
 
-        self._update_langfuse_trace_name(f"Conversation Tick {self.agent.name}")
+        self._update_langfuse_trace_name(f"Harvesting Tick {self.agent.name}")
 
         output = await self.run_autogen_agent(context=context)
 
-        if output.messages[-1].content is not None:
-            self.relationship_service.update_relationship(
-                agent1_id=self.agent.id,
-                agent2_id=self.other_agent.id,
-                message=output.messages[-1].content,
-                simulation_id=self.agent.simulation.id,
-                tick=self.agent.simulation.tick,
-                commit=False,
-            )
-
-            message = Message(
-                conversation_id=self.conversation.id,
-                agent_id=self.agent.id,
-                content=output.messages[-1].content,
-                tick=self.agent.simulation.tick,
-            )
-
-            self._db.add(message)
-            self._db.commit()
-    
         return output
 
     def get_context(self):
@@ -97,19 +66,28 @@ class ConversationAgent(BaseAgent):
 
         observations = self.agent_service.get_world_context(self.agent)
         actions = self.agent_service.get_last_k_actions(self.agent, k=10)
+        
+        last_conversation = self.conversation_service.get_last_conversation_by_agent_id(
+            self.agent.id,
+            max_tick_age=self.agent.simulation.tick - 10
+        )
 
         context = "Current Tick: " + str(self.agent.simulation.tick) + "\n"
         parts = [
             SystemDescription(self.agent).build(),
             HungerContext(self.agent).build(),
             ObservationContext(self.agent).build(observations),
+            PreviousConversationContext(self.agent).build(conversation=last_conversation) if last_conversation else "",
             #PlanContext(self.agent).build(),
             MemoryContext(self.agent).build(actions=actions),
-            ConversationContext(self.agent).build(
-                other_agent=self.other_agent, messages=self.conversation.messages
-            ),
+            f"\n-----\nYou are currently waiting for others to join you to harvest resource {self.agent.harvesting_resource.id}. Given the current state, decide whether to continue waiting or to stop. Think step by step.",
         ]
         context += "\n".join(parts)
+        error = self.agent.last_error
 
-        context += "\nGiven this information, write a message to the other agent or decide to end the conversation."
+        if error:
+            context += (
+                "\n ERROR!! Last turn you experienced the following error: " + error
+            )
+
         return (observations, context)

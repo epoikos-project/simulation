@@ -48,9 +48,12 @@ class ResourceObservation(BaseObservation):
 
         if self.resource.being_harvested:
             resource_message = f""" This resource is currently harvested by {len(self.resource.harvesters)} agent(s)
-                                  and requires only ONE additional harvester."""
+                                  and requires only ${self.resource.required_agents - len(self.resource.harvesters)} additional harvester(s)."""
         else:
-            resource_message = f""" This resource is directly available for harvesting! You do not need to move any futher to harvest it."""
+            if self.resource.required_agents > 1:
+                resource_message = f""" This resource is currently not harvested by anybody but requires {self.resource.required_agents} harvester(s)."""
+            else:
+                resource_message = f""" This resource is directly available for harvesting! You do not need to move any futher to harvest it."""
 
         return resource_message
 
