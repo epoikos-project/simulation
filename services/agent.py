@@ -8,6 +8,8 @@ from engine.context.observations import AgentObservation, ResourceObservation
 from engine.grid import Grid
 
 from schemas.action_log import ActionLog
+from schemas.conversation import Conversation
+from schemas.message import Message
 from services.base import BaseService
 from services.region import RegionService
 from services.resource import ResourceService
@@ -18,6 +20,8 @@ from schemas.relationship import Relationship as RelationshipModel
 from schemas.resource import Resource
 
 from utils import compute_distance, compute_distance_raw
+
+from services.conversation import ConversationService
 
 
 class AgentService(BaseService[Agent]):
@@ -116,15 +120,51 @@ class AgentService(BaseService[Agent]):
             )
 
             agent_obs = AgentObservation(
-                location=(agent.x_coord, agent.y_coord),
+                location=(other_agent.x_coord, other_agent.y_coord),
                 distance=agent_distance,
-                id=agent.id,
-                agent=agent,
+                id=other_agent.id,
+                agent=other_agent,
             )
             agent_observations.append(agent_obs)
 
         return agent_observations
     
+    def get_outstanding_conversation_requests(self, agent_id: str) -> list[Conversation]:
+        """Get all agents that have an outstanding conversation request with the given agent."""
+
+        conversations = self._db.exec(
+            select(Conversation).where(
+                (Conversation.agent_b_id == agent_id),
+                Conversation.finished == False,
+                Conversation.active == False
+            )
+        ).all()
+
+        return conversations
+    
+    def get_initialized_conversation_requests(self, agent_id: str) -> list[Conversation]:
+        """Get all initialized conversation requests for the given agent."""
+        conversations = self._db.exec(
+            select(Conversation).where(
+                (Conversation.agent_a_id == agent_id),
+                Conversation.finished == False,
+                Conversation.active == False
+            )
+        ).all()
+        
+        logger.warning(f"Agent {agent_id} has {len(conversations)} initialized conversations.")
+
+        return conversations
+
+    def has_outstanding_conversation_request(self, agent_id: str) -> bool:
+        """Check if the agent has an outstanding conversation request."""
+
+        return len(self.get_outstanding_conversation_requests(agent_id)) > 0
+
+    def has_initialized_conversation(self, agent_id: str) -> bool:
+        """Check if the agent has an initialized conversation."""
+        return len(self.get_initialized_conversation_requests(agent_id)) > 0
+
     def move_agent_in_direction(self, agent: Agent, direction: str) -> tuple[int, int]:
         """
         Moves the specified agent in the given direction within the world.
@@ -296,3 +336,14 @@ class AgentService(BaseService[Agent]):
         ).all()
         
         return actions
+
+    def get_last_k_messages(self, agent: Agent, k: int = 5) -> list[Message]:
+        """Get the last k messages of an agent."""
+        messages = self._db.exec(
+            select(Message)
+            .where(Message.agent_id == agent.id)
+            .order_by(Message.tick.desc())
+            .limit(k)
+        ).all()
+
+        return messages

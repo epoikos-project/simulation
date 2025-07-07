@@ -76,7 +76,7 @@ async def harvest_resource(
             resource_service = ResourceService(db=db, nats=nats)
             
             agent = agent_service.get_by_id(agent_id)
-            resource = resource_service.get_by_location(x, y)
+            resource = resource_service.get_by_location(agent.simulation.world.id, x, y)
 
             resource_service.harvest_resource(resource=resource, harvester=agent)
 

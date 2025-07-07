@@ -5,6 +5,7 @@ import clients
 from clients import Nats
 from clients.db import DB
 
+from messages.world.agent_moved import AgentMovedMessage
 from services.agent import AgentService
 
 from schemas.agent import Agent
@@ -61,8 +62,21 @@ async def move_agent(
     agent_service = AgentService(db=db, nats=broker)
     agent = agent_service.get_by_id(agent_id)
 
-    new_location = await agent_service.move_agent(
-        agent=agent, x_coord=move_agent_input.x_coord, y_coord=move_agent_input.y_coord
-    )
+    agent.x_coord = move_agent_input.x_coord
+    agent.y_coord = move_agent_input.y_coord
+    
+    db.add(agent)
+    db.commit()
 
-    return {"message": f"Agent {agent_id} moved to location {new_location}"}
+    agent_moved_message = AgentMovedMessage(
+        id=agent_id,
+        new_location=(agent.x_coord, agent.y_coord),
+        start_location=(agent.x_coord, agent.y_coord),
+        simulation_id=simulation_id,
+        destination=f"({move_agent_input.x_coord}, {move_agent_input.y_coord})",
+        num_steps=1,
+        new_energy_level=agent.energy_level,
+    )
+    await agent_moved_message.publish(broker)
+
+    return {"message": f"Agent {agent_id} moved to location {agent.x_coord, agent.y_coord}"}

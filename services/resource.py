@@ -17,7 +17,7 @@ class ResourceService(BaseService[Resource]):
         super().__init__(Resource, db, nats)
         
         
-    def get_by_location(self, x: int, y: int) -> Resource | None:
+    def get_by_location(self, world_id: str, x: int, y: int) -> Resource | None:
         """Get a resource by its location."""
         return (
             self.db.exec(
@@ -25,6 +25,7 @@ class ResourceService(BaseService[Resource]):
                 .where(
                     Resource.x_coord == x,
                     Resource.y_coord == y,
+                    Resource.world_id == world_id,
                 )
             ).one()
         )
@@ -42,14 +43,19 @@ class ResourceService(BaseService[Resource]):
         )
         if in_range:
             if resource.available:
-                resource.available = False
-                resource.last_harvest = resource.simulation.tick
-                
-                harvester.energy_level += resource.energy_yield
-                
-                self.db.add(resource)
-                self.db.add(harvester)
-                self.db.commit()
+                if resource.required_agents <= 1:
+                    resource.available = False
+                    resource.last_harvest = resource.simulation.tick
+                    
+                    harvester.energy_level += resource.energy_yield
+                    
+                    self.db.add(resource)
+                    self.db.add(harvester)
+                    self.db.commit()
+                else:
+                    raise ValueError(
+                        f"Resource {resource.id} requires more than one agent to harvest. Required agents: {resource.required_agents}"
+                    )
 
     def start_harvest_resource(self, resource: Resource, harvester: Agent):
         # Check if agent(s) is/are in the harvesting area

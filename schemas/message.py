@@ -8,6 +8,7 @@ from schemas.base import BaseModel
 if TYPE_CHECKING:
 
     from schemas.conversation import Conversation
+    from schemas.agent import Agent
 
 
 class Message(BaseModel, table=True):
@@ -23,3 +24,7 @@ class Message(BaseModel, table=True):
     tick: int = Field(default=0, index=True)
 
     conversation: "Conversation" = Relationship(back_populates="messages")
+    sender: "Agent" = Relationship(
+        back_populates="sent_messages",
+        sa_relationship_kwargs={"foreign_keys": "[Message.agent_id]"},
+    )

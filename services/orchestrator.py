@@ -25,7 +25,7 @@ from services.agent import AgentService
 from services.region import RegionService
 from services.resource import ResourceService
 from services.simulation import SimulationService
-from services.relationship import snapshot_relationship_graph
+from services.relationship import RelationshipService
 from services.world import WorldService
 
 from schemas.agent import Agent
@@ -176,8 +176,9 @@ class OrchestratorService:
         logger.info(f"Orchestrator: ticked simulation {sim_id}")
         # snapshot relationship graph for this simulation at new tick
         sim = self.simulation_service.get_by_id(sim_id)
-        snapshot_relationship_graph(
-            session=self._db,
+        
+        relationship_service = RelationshipService(self._db, self.nats)
+        relationship_service.snapshot_relationship_graph(
             simulation_id=sim_id,
             tick=sim.tick,
         )

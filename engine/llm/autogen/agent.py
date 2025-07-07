@@ -26,11 +26,15 @@ from engine.context import (
     SystemDescription,
     SystemPrompt,
 )
+from engine.context.conversation import OutstandingConversationContext
 from engine.context.observations.agent import AgentObservation
 from engine.context.observations.resource import ResourceObservation
 from engine.context.system import SystemDescription
+from engine.llm.autogen.base import BaseAgent
 from engine.tools import available_tools
 
+from messages.agent.agent_prompt import AgentPromptMessage
+from messages.agent.agent_response import AgentResponseMessage
 from schemas.action_log import ActionLog
 from services.action_log import ActionLogService
 from services.agent import AgentService
@@ -41,70 +45,24 @@ from schemas.agent import Agent
 from utils import extract_tool_call_info, summarize_tool_call
 
 
-class AutogenAgent:
+class AutogenAgent(BaseAgent):
     def __init__(
         self,
         db: Session,
         nats: Nats,
         agent: Agent,
     ):
-        self.agent = agent
-        self.model = AvailableModels.get(agent.model)
-
-        self._db = db
-        self._nats = nats
-
-        self.agent_service = AgentService(self._db, self._nats)
+        super().__init__(
+            db=db,
+            nats=nats,
+            agent=agent,
+            tools=available_tools,
+            system_prompt=SystemPrompt(agent),
+            description=SystemDescription(agent),
+        )
         self.region_service = RegionService(self._db, self._nats)
         self.action_log_service = ActionLogService(self._db, self._nats)
 
-        self._client, self.autogen_agent = self._initialize_llm()
-
-    def _initialize_llm(self):
-        client = OpenAIChatCompletionClient(
-            model=self.model.name,
-            model_info=self.model.info,
-            base_url=settings.openai.baseurl,
-            api_key=settings.openai.apikey,
-        )
-
-        tools: List[BaseTool] = [
-            self._make_bound_tool(tool) for tool in available_tools
-        ]
-
-        def make_identifier(name: str) -> str:
-            # Replace invalid characters with underscores and ensure it doesn't start with a digit
-            identifier = re.sub(r"\W|^(?=\d)", "_", name)
-            return identifier
-
-        autogen = AssistantAgent(
-            name=make_identifier(f"{self.agent.name}"),
-            model_client=client,
-            system_message=SystemPrompt(self.agent).build(),
-            description=SystemDescription(self.agent).build(),
-            reflect_on_tool_use=False,  # False as our current tools do not return text
-            model_client_stream=False,
-            tools=tools,
-            # memory=[]
-        )
-
-        return (client, autogen)
-
-    def _make_bound_tool(
-        self, func: Callable, *, name: str | None = None, description: str | None = None
-    ) -> FunctionTool:
-        """
-        Wraps `func` so that every call gets self.id and self.simulation_id
-        injected as the last two positional args, then wraps that in a FunctionTool.
-        """
-        bound = partial(
-            func, agent_id=self.agent.id, simulation_id=self.agent.simulation_id
-        )
-        return FunctionTool(
-            name=name or func.__name__,
-            description=description or (func.__doc__ or ""),
-            func=bound,
-        )
 
     def get_context(self):
         """Load the context from the database or other storage."""
@@ -128,8 +86,15 @@ class AutogenAgent:
             context += (
                 "\n ERROR!! Last turn you experienced the following error: " + error
             )
-
-        context += "\nGiven this information now decide on your next action by performing a tool call."
+        outstanding_requests = self.agent_service.get_outstanding_conversation_requests(self.agent.id)
+        
+        if outstanding_requests:
+            context += OutstandingConversationContext(self.agent).build(outstanding_requests)
+            context += (
+                "\n Given this information devide whether you would like to accept and engange in the conversation request or not. You may only use ONE (1) tool at a time."
+            )
+        else:
+            context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
         return (observations, context)
 
     def toggle_tools(self, use_tools: bool):
@@ -147,6 +112,12 @@ class AutogenAgent:
 
     def _adapt_tools(self, observations: List[ResourceObservation]):
         """Adapt the tools based on the agent's context."""
+        
+        if self.agent_service.has_outstanding_conversation_request(self.agent.id):
+            self.autogen_agent._tools = [
+                tool for tool in self.autogen_agent._tools if tool.name == "accept_conversation_request" or tool.name == "decline_conversation_request"
+            ]   
+            return
 
         # remove make_plan if agent already owns a plan
         if self.agent.owned_plan:
@@ -232,16 +203,15 @@ class AutogenAgent:
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Context for generation: {context}"
         )
         # Emit raw LLM prompt for frontend debugging
-        await self._nats.publish(
-            json.dumps({
-                "type": "agent_prompt",
-                "agent_id": self.agent.id,
-                "simulation_id": self.agent.simulation.id,
-                "reasoning": reason,
-                "context": context,
-            }),
-            f"simulation.{self.agent.simulation.id}.agent.{self.agent.id}.prompt",
+        
+        agent_prompt_message = AgentPromptMessage(
+            id=self.agent.id,
+            simulation_id=self.agent.simulation.id,
+            agent_id=self.agent.id,
+            reasoning=reason,
+            context=context,
         )
+        await agent_prompt_message.publish(self._nats)
 
         # It is very important to commit all outstanding queries before running the agent,
         # otherwise any tool calls that the agent makes will run into a concurrency lock
@@ -257,15 +227,14 @@ class AutogenAgent:
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generated output: {output.messages[-1].content}"
         )
         # Emit raw LLM response for frontend debugging
-        await self._nats.publish(
-            json.dumps({
-                "type": "agent_response",
-                "agent_id": self.agent.id,
-                "simulation_id": self.agent.simulation.id,
-                "reply": output.messages[-1].content,
-            }),
-            f"simulation.{self.agent.simulation.id}.agent.{self.agent.id}.response",
+        
+        agent_response_message = AgentResponseMessage(
+            id=self.agent.id,
+            simulation_id=self.agent.simulation.id,
+            agent_id=self.agent.id,
+            reply=output.messages[-1].content,
         )
+        await agent_response_message.publish(self._nats)
 
         error = ""
 

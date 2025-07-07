@@ -58,21 +58,21 @@ class ResourceObservation(BaseObservation):
 
     def _harvest_not_possible(self) -> str:
         """Message to be sent to the agent if the resource cannot be harvested"""
+        
+        message = ""
         # Resource is not available
         if not self.resource.available:
-            return f""" This resource is currently NOT available for harvesting!"""
+           return f""" This resource is currently NOT available for harvesting!"""
         # Resource is out of range
         if self.distance > self.resource.harvesting_area:
-            return f""" You have to be within {self.resource.harvesting_area} units to harvest this resource. Move closer to harvest it!"""
+            message += f""" You have to be within {self.resource.harvesting_area} units to harvest this resource. Move closer to harvest it!"""
         # Resource is being harvested by enough agents
         if (
             self.resource.being_harvested
             and len(self.resource.harvesters) >= self.resource.required_agents
         ):
-            return f""" The resource is currently harvested by {len(self.resource.harvesters)} agent(s)
-                        and is therefore not available."""
+            message += f""" The resource is currently harvested by {len(self.resource.harvesters)} agent(s) and is therefore not available."""
         if len(self.resource.harvesters) == 0 and self.resource.required_agents > 1:
-            return f""" The resource is currently not harvested by anybody
-                        but requires {self.resource.required_agents} harvester."""
+            message += f""" The resource is currently not harvested by anybody but requires {self.resource.required_agents} harvester."""
 
-        return f""" The resource is currently NOT available for harvesting!"""
+        return message
