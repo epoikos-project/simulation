@@ -10,8 +10,8 @@ from .world_tools import move
 available_tools = [
     move,
     harvest_resource,
-    make_plan,
-    add_task,
+    #   make_plan,
+    #   add_task,
     start_conversation,
     accept_conversation_request,
     decline_conversation_request,

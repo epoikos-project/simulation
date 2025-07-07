@@ -31,36 +31,34 @@ class ConversationService(BaseService[Conversation]):
             .where(Message.conversation_id == conversation_id)
             .order_by(Message.tick.desc())
         ).first()
-        
-    def get_last_conversation_by_agent_id(self, agent_id: str, max_tick_age=-1) -> Conversation | None:
+
+    def get_last_conversation_by_agent_id(
+        self, agent_id: str, max_tick_age=-1
+    ) -> Conversation | None:
         """Get the last conversation by agent ID."""
-        
+
         if max_tick_age >= 0:
-            return self.db.exec(
+            message = self.db.exec(
                 select(Message)
                 .where(
-                    (Message.agent_id == agent_id)
-                    & (Message.tick >= max_tick_age),
+                    (Message.agent_id == agent_id) & (Message.tick >= max_tick_age),
                 )
                 .order_by(Message.tick.desc())
             ).first()
-            
+            return message.conversation if message else None
+
         last_message = self.db.exec(
             select(Message)
-            .where(
-                (Message.agent_id == agent_id)
-            )
+            .where((Message.agent_id == agent_id))
             .order_by(Message.tick.desc())
         ).first()
-        
+
         if last_message:
             return last_message.conversation
-        
-    def get_last_k_messages(
-        self, conversation_id: str, k: int
-    ) -> list[Message]:
+
+    def get_last_k_messages(self, conversation_id: str, k: int) -> list[Message]:
         """Get the last k messages in a conversation."""
-        
+
         return self.db.exec(
             select(Message)
             .where(Message.conversation_id == conversation_id)

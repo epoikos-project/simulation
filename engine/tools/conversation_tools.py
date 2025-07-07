@@ -10,6 +10,7 @@ from clients.nats import nats_broker
 
 from services.agent import AgentService
 from services.conversation import ConversationService
+from services.relationship import RelationshipService
 from services.simulation import SimulationService
 
 from schemas.conversation import Conversation
@@ -48,12 +49,20 @@ async def start_conversation(
                     request.agent_b_id == other_agent_id
                     or request.agent_a_id == other_agent_id
                 ):
-                    logger.warn(
+                    logger.error(
                         f"Conversation request with {other_agent_id} already exists."
                     )
                     raise ValueError(
                         "Conversation request already exists with this agent."
                     )
+            other_agent = agent_service.get_by_id(other_agent_id)
+            if other_agent.harvesting_resource_id is not None:
+                logger.error(
+                    f"Agent {other_agent_id} is currently harvesting a resource and cannot start a conversation."
+                )
+                raise ValueError(
+                    "Cannot start a conversation with an agent that is currently harvesting a resource."
+                )
 
             simulation_service = SimulationService(db=db, nats=nats)
 
@@ -167,6 +176,57 @@ async def decline_conversation_request(
 
         except Exception as e:
             logger.error(f"Error accepting conversation request: {e}")
+            raise e
+
+
+@observe()
+async def continue_conversation(
+    message: Annotated[
+        str,
+        "The message to send in the conversation. This will be sent to the other agent.",
+    ],
+    agent_id: str,
+    simulation_id: str,
+) -> None:
+    """Send a message in an active conversation. This will take one tick."""
+
+    logger.success("Calling tool continue_conversation")
+
+    with get_session() as db:
+        try:
+            nats = nats_broker()
+            conversation_service = ConversationService(db=db, nats=nats)
+            relationship_service = RelationshipService(db=db, nats=nats)
+
+            conversation = conversation_service.get_active_by_agent_id(agent_id)
+            if not conversation:
+                logger.error(f"No active conversation found for agent {agent_id}.")
+                raise ValueError("No active conversation found.")
+
+            relationship_service.update_relationship(
+                agent1_id=agent_id,
+                agent2_id=(
+                    conversation.agent_a_id
+                    if conversation.agent_b_id == agent_id
+                    else conversation.agent_b_id
+                ),
+                message=message,
+                simulation_id=conversation.simulation.id,
+                tick=conversation.simulation.tick,
+                commit=False,
+            )
+
+            message = Message(
+                tick=conversation.simulation.tick,
+                content=message,
+                agent_id=agent_id,
+                conversation_id=conversation.id,
+            )
+            db.add(message)
+            db.commit()
+
+        except Exception as e:
+            logger.error(f"Error continuing conversation: {e}")
             raise e
 
 

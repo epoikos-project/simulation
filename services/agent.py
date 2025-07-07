@@ -268,7 +268,7 @@ class AgentService(BaseService[Agent]):
             )
         except ValueError:
             raise ValueError(
-                f"Path from {agent_location} to {destination} not found. Agent may be blocked by obstacles."
+                f"Path from {agent_location} to {destination} not found. Agent may be blocked by obstacles. Remember that you do not have to stand on top of a resource to harvest it! "
             )
 
         new_location = path[min(agent.range_per_move, distance)]
@@ -300,16 +300,16 @@ class AgentService(BaseService[Agent]):
         agent_fov = agent.visibility_range
         agent_location = (agent.x_coord, agent.y_coord)
 
-        agents = self._db.exec(
-            select(Agent).where(
-                Agent.simulation_id == agent.simulation_id,
-                Agent.id != agent.id,  # Exclude the current agent
-                Agent.x_coord >= agent_location[0] - agent_fov,
-                Agent.x_coord <= agent_location[0] + agent_fov,
-                Agent.y_coord >= agent_location[1] - agent_fov,
-                Agent.y_coord <= agent_location[1] + agent_fov,
-            )
-        ).all()
+        # agents = self._db.exec(
+        #     select(Agent).where(
+        #         Agent.simulation_id == agent.simulation_id,
+        #         Agent.id != agent.id,  # Exclude the current agent
+        #         Agent.x_coord >= agent_location[0] - agent_fov,
+        #         Agent.x_coord <= agent_location[0] + agent_fov,
+        #         Agent.y_coord >= agent_location[1] - agent_fov,
+        #         Agent.y_coord <= agent_location[1] + agent_fov,
+        #     )
+        # ).all()
 
         # Filter resources based on agents location and visibility range
         # resources = self._db.exec(
@@ -324,8 +324,8 @@ class AgentService(BaseService[Agent]):
 
         # Create list of obstacles
         obstacles = []
-        for agent in agents:
-            obstacles.append((agent.x_coord, agent.y_coord))
+        # for agent in agents:
+        #     obstacles.append((agent.x_coord, agent.y_coord))
         # for resource in resources:
         #     obstacles.append((resource.x_coord, resource.y_coord))
 

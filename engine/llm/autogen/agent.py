@@ -1,10 +1,11 @@
 import json
 import re
 from functools import partial
-from typing import Callable, List
+from typing import Callable, List, override
 
 from autogen_agentchat.agents import AssistantAgent
-from autogen_core import CancellationToken
+from autogen_agentchat.base import TaskResult
+from autogen_core import CancellationToken, FunctionCall
 from autogen_core.tools import BaseTool, FunctionTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from langfuse.decorators import langfuse_context, observe
@@ -26,7 +27,10 @@ from engine.context import (
     SystemDescription,
     SystemPrompt,
 )
-from engine.context.conversation import OutstandingConversationContext, PreviousConversationContext
+from engine.context.conversation import (
+    OutstandingConversationContext,
+    PreviousConversationContext,
+)
 from engine.context.observations.agent import AgentObservation
 from engine.context.observations.resource import ResourceObservation
 from engine.context.system import SystemDescription
@@ -40,6 +44,7 @@ from services.action_log import ActionLogService
 from services.agent import AgentService
 from services.conversation import ConversationService
 from services.region import RegionService
+from services.resource import ResourceService
 
 from schemas.action_log import ActionLog
 from schemas.agent import Agent
@@ -65,6 +70,7 @@ class AutogenAgent(BaseAgent):
         self.region_service = RegionService(self._db, self._nats)
         self.action_log_service = ActionLogService(self._db, self._nats)
         self.conversation_service = ConversationService(self._db, self._nats)
+        self.resource_service = ResourceService(self._db, self._nats)
 
     def get_context(self):
         """Load the context from the database or other storage."""
@@ -72,8 +78,7 @@ class AutogenAgent(BaseAgent):
         observations = self.agent_service.get_world_context(self.agent)
         actions = self.agent_service.get_last_k_actions(self.agent, k=10)
         last_conversation = self.conversation_service.get_last_conversation_by_agent_id(
-            self.agent.id,
-            max_tick_age=self.agent.simulation.tick - 10
+            self.agent.id, max_tick_age=self.agent.simulation.tick - 20
         )
 
         context = "Current Tick: " + str(self.agent.simulation.tick) + "\n"
@@ -81,8 +86,14 @@ class AutogenAgent(BaseAgent):
             SystemDescription(self.agent).build(),
             HungerContext(self.agent).build(),
             ObservationContext(self.agent).build(observations),
-            #PlanContext(self.agent).build(),
-            PreviousConversationContext(self.agent).build(conversation=last_conversation) if last_conversation else "",
+            # PlanContext(self.agent).build(),
+            (
+                PreviousConversationContext(self.agent).build(
+                    conversation=last_conversation
+                )
+                if last_conversation
+                else ""
+            ),
             MemoryContext(self.agent).build(actions=actions),
         ]
         context += "\n---\n".join(parts)
@@ -156,9 +167,7 @@ class AutogenAgent(BaseAgent):
 
         # remove start_conversation if the agent does not observe any other agents or if already in active conversation
         # TODO: check if this works correctly after communication rework
-        if (
-            not any(type(obs) == AgentObservation for obs in observations)
-        ):
+        if not any(type(obs) == AgentObservation for obs in observations):
             self.autogen_agent._tools = [
                 tool
                 for tool in self.autogen_agent._tools
@@ -178,9 +187,11 @@ class AutogenAgent(BaseAgent):
         )
 
         self._update_langfuse_trace_name(
-            name=f"Reasoning Tick {self.agent.name}"
-            if reason
-            else f"Action Tick {self.agent.name}"
+            name=(
+                f"Reasoning Tick {self.agent.name}"
+                if reason
+                else f"Action Tick {self.agent.name}"
+            )
         )
 
         context = ""
@@ -192,7 +203,7 @@ class AutogenAgent(BaseAgent):
         if reason:
             tools_summary = "These are possible actions you can perform in the world: "
             # TODO: maybe provide a few more details on the tools
-            for tool in available_tools:
+            for tool in self.tools:
                 tools_summary += tool.__name__ + ", "
             context += f"{tools_summary}\nGiven this information reason about your next action. Think step by step. Answer with a comprehensive explanation about what and why you want to do next."
         else:
@@ -212,8 +223,29 @@ class AutogenAgent(BaseAgent):
         )
         # Emit raw LLM prompt for frontend debugging
 
-
         output = await self.run_autogen_agent(context=context, reason=reason)
 
         return output
 
+    @override
+    def _add_feedback(self, output: TaskResult, tool_calls: list[FunctionCall]) -> bool:
+        for tool_call in tool_calls:
+            if tool_call.name == "harvest_resource":
+                logger.debug(tool_call)
+                x = json.loads(tool_call.arguments).get("x")
+                y = json.loads(tool_call.arguments).get("y")
+                resource = self.resource_service.get_by_location(
+                    world_id=self.agent.simulation.world.id, x=x, y=y
+                )
+                if resource.required_agents > 1:
+                    return "You only started harvesting a resource that requires multiple agents to harvest and never finished it. "
+
+    async def generate_with_reasoning(self, reasoning_output: str | None = None):
+        """
+        Generate the next action with reasoning.
+        This is a wrapper around the generate method with reason=True.
+        """
+        reasoning_output = await self.generate(reason=True)
+        return await self.generate(
+            reason=False, reasoning_output=reasoning_output.messages[-1].content
+        )

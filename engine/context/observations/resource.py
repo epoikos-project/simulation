@@ -30,11 +30,6 @@ class ResourceObservation(BaseObservation):
         """Check if the can be harvested by the agent under current conditions"""
         if self.distance > self.resource.harvesting_area:
             return False
-        elif (
-            self.resource.being_harvested
-            and len(self.resource.harvesters) >= self.resource.required_agents
-        ):
-            return False
         elif len(self.resource.harvesters) == 0 and self.resource.required_agents > 1:
             return False
         elif not self.resource.available:
@@ -46,7 +41,7 @@ class ResourceObservation(BaseObservation):
         """Message to be sent to the agent if the resource can be harvested"""
         resource_message = ""
 
-        if self.resource.being_harvested:
+        if len(self.resource.harvesters) > 0:
             resource_message = f""" This resource is currently harvested by {len(self.resource.harvesters)} agent(s)
                                   and requires only ${self.resource.required_agents - len(self.resource.harvesters)} additional harvester(s)."""
         else:
@@ -67,13 +62,8 @@ class ResourceObservation(BaseObservation):
         # Resource is out of range
         if self.distance > self.resource.harvesting_area:
             message += f""" You have to be within {self.resource.harvesting_area} units to harvest this resource. Move closer to harvest it!"""
-        # Resource is being harvested by enough agents
-        if (
-            self.resource.being_harvested
-            and len(self.resource.harvesters) >= self.resource.required_agents
-        ):
-            message += f""" The resource is currently harvested by {len(self.resource.harvesters)} agent(s) and is therefore not available."""
+        # Resource is not harvested by enough agents
         if len(self.resource.harvesters) == 0 and self.resource.required_agents > 1:
-            message += f""" The resource is currently not harvested by anybody but requires {self.resource.required_agents} harvester."""
+            message = f""" The resource is currently not harvested by anybody but requires {self.resource.required_agents} harvester."""
 
         return message

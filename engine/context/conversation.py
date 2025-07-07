@@ -18,12 +18,21 @@ class ConversationContext(BaseContext):
 
         return conversation_context
 
+
 class PreviousConversationContext(BaseContext):
     def build(self, conversation: Conversation) -> str:
-        context = f"In your last conversation (ID: {conversation.id}) with Agent {conversation.agent_b.name} (ID: {conversation.agent_b.id}), you discussed the following:\n"
+        other_agent = (
+            conversation.agent_b
+            if conversation.agent_a.id == self.agent.id
+            else conversation.agent_a
+        )
+        context = f"In your last conversation (ID: {conversation.id}) with Agent {other_agent.name} (ID: {other_agent.id}), you discussed the following:\n"
         for message in conversation.messages:
-            context += f"- {message.sender.name}: {message.content} (Tick: {message.tick})\n"
+            context += (
+                f"- {message.sender.name}: {message.content} (Tick: {message.tick})\n"
+            )
         return context
+
 
 class OutstandingConversationContext(BaseContext):
     def build(self, conversations: list[Conversation]) -> str:
