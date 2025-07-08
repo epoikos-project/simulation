@@ -343,24 +343,8 @@ class AgentService(BaseService[Agent]):
 
         return actions
 
-    def get_last_k_messages(self, agent: Agent, k: int = 5) -> list[Message]:
-        """Get the last k messages of an agent."""
-        messages = self._db.exec(
-            select(Message)
-            .where(Message.agent_id == agent.id)
-            .order_by(Message.tick.desc())
-            .limit(k)
-        ).all()
-
-        return messages
-
-    def get_last_k_memory_logs(self, agent: Agent, k: int = 5) -> list[MemoryLog]:
-        """Get the last k memory logs of an agent."""
-        memory_logs = self._db.exec(
-            select(MemoryLog)
-            .where(MemoryLog.agent_id == agent.id)
-            .order_by(MemoryLog.tick.desc())
-            .limit(k)
-        ).all()
-
-        return memory_logs
+    def get_last_conversation(self, agent: Agent) -> list[Message]:
+        conversation = ConversationService(self._db, self._nats).get_last_conversation_by_agent_id(
+            agent.id
+        )
+        return conversation
