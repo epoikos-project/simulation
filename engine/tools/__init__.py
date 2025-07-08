@@ -1,6 +1,12 @@
+from .conversation_tools import (
+    accept_conversation_request,
+    decline_conversation_request,
+    start_conversation,
+)
+from .harvesting_tools import harvest_resource
 from .memory_tools import add_memory
 from .plan_tools import add_task, make_plan
-from .world_tools import harvest_resource, move
+from .world_tools import move
 
 available_tools = [
     move,
@@ -8,7 +14,7 @@ available_tools = [
     add_memory,
     # make_plan,
     # add_task,
-    # take_on_task,
     # start_conversation,
-    # engage_conversation,
+    # accept_conversation_request,
+    # decline_conversation_request,
 ]

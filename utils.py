@@ -123,6 +123,10 @@ def summarize_tool_call(calls: Union[Dict[str, Any], List[Dict[str, Any]]]) -> s
             "or a dict containing 'ToolCallRequestEvent'"
         )
 
+    # If no calls present, return early
+    if len(call_list) == 0:
+        return "No tool call made."
+
     # Build summary strings
     summaries = [_summarize_one(c) for c in call_list]
 

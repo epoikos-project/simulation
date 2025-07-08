@@ -38,7 +38,6 @@ class RegionService(BaseService[Region]):
                 region_id=region.id,
                 energy_yield=random.randint(1, 10),
                 regrow_time=random.randint(-1, 30),
-                
             )
             resource = resource_service.create(model=resource, commit=commit)
             resources.append(resource)

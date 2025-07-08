@@ -8,13 +8,17 @@ from engine.context.observations import AgentObservation, ResourceObservation
 from engine.grid import Grid
 
 from services.base import BaseService
+from services.conversation import ConversationService
 from services.region import RegionService
 from services.resource import ResourceService
 from services.world import WorldService
 
 from schemas.action_log import ActionLog
 from schemas.agent import Agent
+from schemas.conversation import Conversation
 from schemas.memory_log import MemoryLog
+from schemas.message import Message
+from schemas.relationship import Relationship as RelationshipModel
 from schemas.resource import Resource
 
 from utils import compute_distance, compute_distance_raw
@@ -30,6 +34,25 @@ class AgentService(BaseService[Agent]):
         # self._milvus.create_collection(
         #     collection_name=agent.collection_name, dimension=128
         # )
+        # for testing: add an example (dummy) relationship between this agent and one existing agent
+        if agent.simulation_id is not None:
+            stmt = select(Agent).where(
+                Agent.simulation_id == agent.simulation_id,
+                Agent.id != agent.id,
+            )
+            other = self._db.exec(stmt).first()
+            if other:
+                # seed a dummy tick=0 relationship for testing
+                rel = RelationshipModel(
+                    simulation_id=agent.simulation_id,
+                    agent_a_id=agent.id,
+                    agent_b_id=other.id,
+                    total_sentiment=0.0,
+                    update_count=1,
+                    tick=0,
+                )
+                self._db.add(rel)
+                self._db.commit()
         return agent
 
     def get_world_context(self, agent: Agent) -> list[ObservationUnion]:
@@ -97,14 +120,56 @@ class AgentService(BaseService[Agent]):
             )
 
             agent_obs = AgentObservation(
-                location=(agent.x_coord, agent.y_coord),
+                location=(other_agent.x_coord, other_agent.y_coord),
                 distance=agent_distance,
-                id=agent.id,
-                agent=agent,
+                id=other_agent.id,
+                agent=other_agent,
             )
             agent_observations.append(agent_obs)
 
         return agent_observations
+
+    def get_outstanding_conversation_requests(
+        self, agent_id: str
+    ) -> list[Conversation]:
+        """Get all agents that have an outstanding conversation request with the given agent."""
+
+        conversations = self._db.exec(
+            select(Conversation).where(
+                (Conversation.agent_b_id == agent_id),
+                Conversation.finished == False,
+                Conversation.active == False,
+            )
+        ).all()
+
+        return conversations
+
+    def get_initialized_conversation_requests(
+        self, agent_id: str
+    ) -> list[Conversation]:
+        """Get all initialized conversation requests for the given agent."""
+        conversations = self._db.exec(
+            select(Conversation).where(
+                (Conversation.agent_a_id == agent_id),
+                Conversation.finished == False,
+                Conversation.active == False,
+            )
+        ).all()
+
+        logger.warning(
+            f"Agent {agent_id} has {len(conversations)} initialized conversations."
+        )
+
+        return conversations
+
+    def has_outstanding_conversation_request(self, agent_id: str) -> bool:
+        """Check if the agent has an outstanding conversation request."""
+
+        return len(self.get_outstanding_conversation_requests(agent_id)) > 0
+
+    def has_initialized_conversation(self, agent_id: str) -> bool:
+        """Check if the agent has an initialized conversation."""
+        return len(self.get_initialized_conversation_requests(agent_id)) > 0
 
     def move_agent_in_direction(self, agent: Agent, direction: str) -> tuple[int, int]:
         """
@@ -204,7 +269,7 @@ class AgentService(BaseService[Agent]):
             )
         except ValueError:
             raise ValueError(
-                f"Path from {agent_location} to {destination} not found. Agent may be blocked by obstacles."
+                f"Path from {agent_location} to {destination} not found. Agent may be blocked by obstacles. Remember that you do not have to stand on top of a resource to harvest it! "
             )
 
         new_location = path[min(agent.range_per_move, distance)]
@@ -236,16 +301,16 @@ class AgentService(BaseService[Agent]):
         agent_fov = agent.visibility_range
         agent_location = (agent.x_coord, agent.y_coord)
 
-        agents = self._db.exec(
-            select(Agent).where(
-                Agent.simulation_id == agent.simulation_id,
-                Agent.id != agent.id,  # Exclude the current agent
-                Agent.x_coord >= agent_location[0] - agent_fov,
-                Agent.x_coord <= agent_location[0] + agent_fov,
-                Agent.y_coord >= agent_location[1] - agent_fov,
-                Agent.y_coord <= agent_location[1] + agent_fov,
-            )
-        ).all()
+        # agents = self._db.exec(
+        #     select(Agent).where(
+        #         Agent.simulation_id == agent.simulation_id,
+        #         Agent.id != agent.id,  # Exclude the current agent
+        #         Agent.x_coord >= agent_location[0] - agent_fov,
+        #         Agent.x_coord <= agent_location[0] + agent_fov,
+        #         Agent.y_coord >= agent_location[1] - agent_fov,
+        #         Agent.y_coord <= agent_location[1] + agent_fov,
+        #     )
+        # ).all()
 
         # Filter resources based on agents location and visibility range
         # resources = self._db.exec(
@@ -260,8 +325,8 @@ class AgentService(BaseService[Agent]):
 
         # Create list of obstacles
         obstacles = []
-        for agent in agents:
-            obstacles.append((agent.x_coord, agent.y_coord))
+        # for agent in agents:
+        #     obstacles.append((agent.x_coord, agent.y_coord))
         # for resource in resources:
         #     obstacles.append((resource.x_coord, resource.y_coord))
 
@@ -277,6 +342,17 @@ class AgentService(BaseService[Agent]):
         ).all()
 
         return actions
+
+    def get_last_k_messages(self, agent: Agent, k: int = 5) -> list[Message]:
+        """Get the last k messages of an agent."""
+        messages = self._db.exec(
+            select(Message)
+            .where(Message.agent_id == agent.id)
+            .order_by(Message.tick.desc())
+            .limit(k)
+        ).all()
+
+        return messages
 
     def get_last_k_memory_logs(self, agent: Agent, k: int = 5) -> list[MemoryLog]:
         """Get the last k memory logs of an agent."""

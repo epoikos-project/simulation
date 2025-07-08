@@ -3,31 +3,31 @@
 import json
 import random
 import uuid
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from faststream.nats import NatsBroker
 from loguru import logger
 from pymilvus import MilvusClient
 from sqlmodel import Session, select
-from datetime import datetime, timezone
-
-from messages.simulation.simulation_started import SimulationStartedMessage
-from messages.simulation.simulation_stopped import SimulationStoppedMessage
-from schemas.configuration import Configuration as ConfigTable
 
 from config.openai import AvailableModels
 
 from engine.runners import SimulationRunner
 
 from messages.simulation import SimulationCreatedMessage
+from messages.simulation.simulation_started import SimulationStartedMessage
+from messages.simulation.simulation_stopped import SimulationStoppedMessage
 
 from services.agent import AgentService
 from services.region import RegionService
+from services.relationship import RelationshipService
 from services.resource import ResourceService
 from services.simulation import SimulationService
 from services.world import WorldService
 
 from schemas.agent import Agent
+from schemas.configuration import Configuration as ConfigTable
 from schemas.simulation import Simulation
 from schemas.world import World
 
@@ -173,6 +173,15 @@ class OrchestratorService:
             simulation_id=sim_id,
         )
         logger.info(f"Orchestrator: ticked simulation {sim_id}")
+        # snapshot relationship graph for this simulation at new tick
+        sim = self.simulation_service.get_by_id(sim_id)
+
+        relationship_service = RelationshipService(self._db, self.nats)
+        relationship_service.snapshot_relationship_graph(
+            simulation_id=sim_id,
+            tick=sim.tick,
+        )
+        logger.info(f"Orchestrator: snapshot relationships at tick {sim.tick}")
 
     async def start(self, sim_id: str):
         tick = SimulationRunner.start_simulation(
@@ -185,7 +194,7 @@ class OrchestratorService:
         sim.last_used = datetime.now(timezone.utc).isoformat()
         self._db.add(sim)
         self._db.commit()
-        
+
         simulation_started_message = SimulationStartedMessage(
             id=sim.id,
             tick=tick,
@@ -198,10 +207,7 @@ class OrchestratorService:
             db=self._db,
             nats=self.nats,
         )
-        
-        simulation_stopped_message = SimulationStoppedMessage(
-            id=sim_id,
-            tick=tick
-        )
-        await simulation_stopped_message.publish(self.nats) 
+
+        simulation_stopped_message = SimulationStoppedMessage(id=sim_id, tick=tick)
+        await simulation_stopped_message.publish(self.nats)
         logger.info(f"Orchestrator: stopped simulation {sim_id}")

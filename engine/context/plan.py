@@ -1,10 +1,11 @@
 from loguru import logger
+
 from engine.context.base import BaseContext
 
 
 class PlanContext(BaseContext):
 
-    def build(self) -> str:        
+    def build(self) -> str:
         # ownership
         if self.agent.owned_plan:
             plan_ownership_context = "You are the owner of the following plan: "

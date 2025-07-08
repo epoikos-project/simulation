@@ -5,7 +5,9 @@ from loguru import logger
 from sqlmodel import Session, select
 
 from clients.db import DB
+
 from config.openai import AvailableModels
+
 from schemas.configuration import Configuration
 
 router = APIRouter(prefix="/configuration", tags=["Configuration"])
@@ -86,14 +88,16 @@ async def get_all_configurations(
     """
     results = []
     for conf in db.exec(select(Configuration)).all():
-        results.append({
-            "id": conf.id,
-            "name": conf.name,
-            "agents": json.loads(conf.agents),
-            "settings": json.loads(conf.settings),
-            "created_at": conf.created_at,
-            "last_used": conf.last_used,
-        })
+        results.append(
+            {
+                "id": conf.id,
+                "name": conf.name,
+                "agents": json.loads(conf.agents),
+                "settings": json.loads(conf.settings),
+                "created_at": conf.created_at,
+                "last_used": conf.last_used,
+            }
+        )
     return results
 
 

@@ -1,7 +1,9 @@
+from typing import Optional
+
 from sqlmodel import Field
 
 from schemas.base import BaseModel
-from typing import Optional
+
 
 class Configuration(BaseModel, table=True):
     name: str = Field()

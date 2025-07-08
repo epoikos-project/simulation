@@ -11,7 +11,10 @@ class MemoryContext(BaseContext):
         memory_logs: list[MemoryLog] = kwargs.get("memory_logs", [])
 
         action_log = "\n".join(
-            [f" - {action.action} (Tick: {action.tick})" for action in actions]
+            [
+                f" - {action.action} {'Feedback: ' + action.feedback if action.feedback else 'Succeeded'} (Tick: {action.tick})"
+                for action in actions
+            ]
         )
 
         memory_log = "\n".join(
