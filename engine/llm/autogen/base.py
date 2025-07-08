@@ -22,7 +22,8 @@ from engine.context.system import SystemDescription, SystemPrompt
 
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
-
+from messages.agent.agent_action import AgentActionMessage
+from schemas.action_log import ActionLog
 from services.action_log import ActionLogService
 from services.agent import AgentService
 
@@ -136,6 +137,15 @@ class BaseAgent:
         )
 
         await agent_response_message.publish(self._nats)
+        if last_tool_summary:
+            action_message = AgentActionMessage(
+                id=self.agent.id,
+                simulation_id=self.agent.simulation.id,
+                agent_id=self.agent.id,
+                action=last_tool_summary,
+                tick=self.agent.simulation.tick,
+            )
+            await action_message.publish(self._nats)
 
         langfuse_context.update_current_observation(
             usage_details={
