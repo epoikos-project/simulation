@@ -3,14 +3,13 @@ from functools import partial
 from types import CoroutineType
 from typing import Any, Callable, List
 
-from loguru import logger
-from langfuse.decorators import langfuse_context
-
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.base import TaskResult
-from autogen_core import CancellationToken
+from autogen_core import CancellationToken, FunctionCall
 from autogen_core.tools import BaseTool, FunctionTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
+from langfuse.decorators import langfuse_context
+from loguru import logger
 from sqlmodel import Session
 
 from clients.nats import Nats
@@ -28,7 +27,9 @@ from schemas.action_log import ActionLog
 from services.action_log import ActionLogService
 from services.agent import AgentService
 
+from schemas.action_log import ActionLog
 from schemas.agent import Agent
+
 from utils import extract_tool_call_info, summarize_tool_call
 
 
@@ -116,25 +117,25 @@ class BaseAgent:
         # as the agent will try to read from the database while the tool call is trying to
         # write to it.
         self._db.commit()
-        
+
         output = await self.autogen_agent.run(
             task=context,
             cancellation_token=CancellationToken(),
         )
-        
+
         last_tool_call, last_tool_summary = self._update_action_log(output, reason)
 
         logger.debug(
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generated output: {output.messages[-1].content}"
         )
-        
+
         agent_response_message = AgentResponseMessage(
             id=self.agent.id,
             simulation_id=self.agent.simulation.id,
             agent_id=self.agent.id,
             reply=output.messages[-1].content,
         )
-        
+
         await agent_response_message.publish(self._nats)
         if last_tool_summary:
             action_message = AgentActionMessage(
@@ -158,32 +159,41 @@ class BaseAgent:
                 "tools": (
                     [tool.schema for tool in self.autogen_agent._tools]
                     if not reason
-                    else last_tool_summary
+                    else ", ".join(tool.__name__ for tool in self.autogen_agent._tools)
                 ),
             },
             metadata=last_tool_call,
         )
-        
+
         return output
-     
+
+    def _add_feedback(self, output: TaskResult, tool_calls: list[FunctionCall]) -> bool:
+        return None
 
     def _update_action_log(self, output: TaskResult, reason: bool):
         if not reason:
             last_tool_call = extract_tool_call_info(output)
             last_tool_summary = summarize_tool_call(last_tool_call)
 
+            tool_calls: FunctionCall = []
             error = None
             for message in output.messages:
                 if message.type == "ToolCallExecutionEvent":
                     for result in message.content:
                         if result.is_error:
                             error = result.content
-                            
+                if message.type == "ToolCallRequestEvent":
+                    tool_calls = message.content
+
             action_log = ActionLog(
                 agent_id=self.agent.id,
                 simulation_id=self.agent.simulation_id,
                 action=last_tool_summary,
-                feedback="Error + " + error if error else None,
+                feedback=(
+                    "Error + " + error
+                    if error
+                    else self._add_feedback(output, tool_calls)
+                ),
                 tick=self.agent.simulation.tick,
             )
             self.action_log_service.create(
@@ -193,8 +203,7 @@ class BaseAgent:
         else:
             last_tool_call = None
             last_tool_summary = None
-            
-        
+
         return last_tool_call, last_tool_summary
 
     def _update_langfuse_trace_name(self, name: str):
@@ -204,6 +213,3 @@ class BaseAgent:
             session_id=self.agent.simulation_id,
         )
         langfuse_context.update_current_observation(model=self.model.name, name=name)
-
-        
-        

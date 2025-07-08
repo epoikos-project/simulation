@@ -12,7 +12,7 @@ from engine.context.observation import ObservationContext
 from engine.context.plan import PlanContext
 from engine.context.system import SystemDescription, SystemPrompt
 from engine.llm.autogen.base import BaseAgent
-from engine.tools.conversation_tools import end_conversation
+from engine.tools.conversation_tools import continue_conversation, end_conversation
 
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
@@ -26,7 +26,6 @@ from services.resource import ResourceService
 from schemas.agent import Agent
 from schemas.conversation import Conversation
 from schemas.message import Message
-
 
 
 class ConversationAgent(BaseAgent):
@@ -45,7 +44,7 @@ class ConversationAgent(BaseAgent):
             db=db,
             nats=nats,
             agent=agent,
-            tools=[end_conversation],
+            tools=[end_conversation, continue_conversation],
             system_prompt=SystemPrompt(agent),
             description=SystemDescription(agent),
         )
@@ -63,33 +62,23 @@ class ConversationAgent(BaseAgent):
         )
 
     @observe(as_type="generation", name="Agent Conversation Tick")
-    async def generate(self):
+    async def generate(self, reason: bool = False, reasoning_output: str | None = None):
         observations, context = self.get_context()
 
         self._update_langfuse_trace_name(f"Conversation Tick {self.agent.name}")
 
+        if reason:
+            self.tools = []
+            self._initialize_llm()
+            self._update_langfuse_trace_name(
+                f"Conversation Reason Tick {self.agent.name}"
+            )
+            context += "\n---\nYou are reasoning about the next action to take. Please think step by step and provide a detailed explanation of your reasoning."
+
+        if reasoning_output:
+            context += f"\n---\nYour reasoning output from the last tick was:\n{reasoning_output}"
         output = await self.run_autogen_agent(context=context)
 
-        if output.messages[-1].content is not None:
-            self.relationship_service.update_relationship(
-                agent1_id=self.agent.id,
-                agent2_id=self.other_agent.id,
-                message=output.messages[-1].content,
-                simulation_id=self.agent.simulation.id,
-                tick=self.agent.simulation.tick,
-                commit=False,
-            )
-
-            message = Message(
-                conversation_id=self.conversation.id,
-                agent_id=self.agent.id,
-                content=output.messages[-1].content,
-                tick=self.agent.simulation.tick,
-            )
-
-            self._db.add(message)
-            self._db.commit()
-    
         return output
 
     def get_context(self):
@@ -100,10 +89,11 @@ class ConversationAgent(BaseAgent):
 
         context = "Current Tick: " + str(self.agent.simulation.tick) + "\n"
         parts = [
+            SystemPrompt(self.agent).build(),
             SystemDescription(self.agent).build(),
             HungerContext(self.agent).build(),
             ObservationContext(self.agent).build(observations),
-            #PlanContext(self.agent).build(),
+            # PlanContext(self.agent).build(),
             MemoryContext(self.agent).build(actions=actions),
             ConversationContext(self.agent).build(
                 other_agent=self.other_agent, messages=self.conversation.messages
@@ -111,5 +101,15 @@ class ConversationAgent(BaseAgent):
         ]
         context += "\n".join(parts)
 
-        context += "\nGiven this information, write a message to the other agent or decide to end the conversation."
+        context += "\nGiven this information, write a message to the other agent or decide to end the conversation. If you want to perform world actions, you must end the conversation first."
         return (observations, context)
+
+    async def generate_with_reasoning(self, reasoning_output: str | None = None):
+        """
+        Generate the next action with reasoning.
+        This is a wrapper around the generate method with reason=True.
+        """
+        reasoning_output = await self.generate(reason=True)
+        return await self.generate(
+            reason=False, reasoning_output=reasoning_output.messages[-1].content
+        )

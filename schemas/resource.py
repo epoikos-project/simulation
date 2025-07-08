@@ -28,7 +28,6 @@ class Resource(BaseModel, table=True):
     required_agents: int = Field(default=1)
     energy_yield_var: float = Field(default=1.0)
     regrow_var: float = Field(default=1.0)
-    being_harvested: bool = Field(default=False)
     start_harvest: int = Field(default=-1)
     time_harvest: int = Field(default=-1)
 

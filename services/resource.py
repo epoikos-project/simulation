@@ -30,12 +30,13 @@ class ResourceService(BaseService[Resource]):
         self,
         resource: Resource,
         harvester: Agent,
-    ):
+    ) -> bool:
         in_range = compute_in_radius(
             location_a=(harvester.x_coord, harvester.y_coord),
             location_b=(resource.x_coord, resource.y_coord),
             radius=resource.harvesting_area,
         )
+        harvested = False
         if in_range:
             if resource.available:
                 if resource.required_agents <= 1:
@@ -43,25 +44,18 @@ class ResourceService(BaseService[Resource]):
                     resource.last_harvest = resource.simulation.tick
 
                     harvester.energy_level += resource.energy_yield
-                    
-                elif len(resource.harvesters) >= resource.required_agents:
-                    resource.available = False
-                    resource.last_harvest = resource.simulation.tick
-                    resource.being_harvested = False
-                    
-                    for harv in resource.harvesters:
-                        harv.energy_level += resource.energy_yield
-                        harv.harvesting_resource_id = None
-                        self.db.add(harv)
+                    harvested = True
+
                 else:
                     harvester.harvesting_resource_id = resource.id
                     resource.start_harvest = resource.simulation.tick
-                    resource.being_harvested = True
-                    
+
                 self.db.add(resource)
                 self.db.add(harvester)
                 self.db.commit()
-
+                
+        return harvested
+        
 
     def start_harvest_resource(self, resource: Resource, harvester: Agent):
         # Check if agent(s) is/are in the harvesting area
@@ -81,7 +75,6 @@ class ResourceService(BaseService[Resource]):
                 resource.harvesters.append(harvester.id)
 
             # Update resource in database
-            resource.being_harvested = True
             resource.start_harvest = tick
             resource.time_harvest = tick + resource.mining_time
             resource.last_harvest = tick

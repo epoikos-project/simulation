@@ -27,6 +27,7 @@ from schemas import (
     agent,
     configuration,
     conversation,
+    memory_log,
     message,
     plan,
     region,
