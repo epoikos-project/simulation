@@ -1,7 +1,7 @@
 import asyncio
-from datetime import datetime, timezone
 import json
 import threading
+from datetime import datetime, timezone
 
 from faststream.nats import NatsBroker
 from loguru import logger
@@ -12,15 +12,18 @@ from clients.db import get_session
 from engine.llm.autogen.agent import AutogenAgent
 from engine.runners.agent_runner import AgentRunner
 
+from messages.agent.agent_action import AgentActionMessage
 from messages.simulation.simulation_tick import SimulationTickMessage
 from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
 
-from schemas.agent import Agent
 from services.agent import AgentService
 from services.resource import ResourceService
 from services.simulation import SimulationService
 from services.world import WorldService
+
+from schemas.action_log import ActionLog
+from schemas.agent import Agent
 
 
 class SimulationRunner:
@@ -111,13 +114,11 @@ class SimulationRunner:
             tick_message.model_dump_json(), tick_message.get_channel_name()
         )
 
-        agent_ids = db.exec(select(Agent.id).where(Agent.simulation_id == simulation.id)).all()
-        
+        agent_ids = db.exec(
+            select(Agent.id).where(Agent.simulation_id == simulation.id)
+        ).all()
 
-        tasks = [
-            AgentRunner.tick_agent(nats, agent_id)
-            for agent_id in agent_ids
-        ]
+        tasks = [AgentRunner.tick_agent(nats, agent_id) for agent_id in agent_ids]
         await asyncio.gather(*tasks)
 
     @staticmethod
@@ -153,7 +154,7 @@ class SimulationRunner:
         # Resource has regrown and is available for harvesting
         if (
             not resource.available
-            and not resource.being_harvested
+            and len(resource.harvesters) == 0
             and resource.last_harvest != -1
             and resource.last_harvest + resource.regrow_time <= tick
         ):
@@ -168,25 +169,57 @@ class SimulationRunner:
             )
             await grown_message.publish(nats)
 
-        # # Resource is being harvested by enough agents and the harvest is finished
-        # harvesters = resource.harvesters
-        # if (
-        #     resource.available
-        #     and not resource.being_harvested
-        #     and len(harvesters) >= resource.required_agents
-        #     and resource.start_harvest + resource.mining_time <= tick
-        # ):
-        #     resource_service.finish_harvest_resource(resource, harvesters)
-        #     resource_harvested_message = ResourceHarvestedMessage(
-        #         simulation_id=resource.world.simulation_id,
-        #         id=resource.id,
-        #         harvester=[harvester.id for harvester in harvesters],
-        #         location=(resource.x_coord, resource.y_coord),
-        #         start_tick=tick,
-        #         end_tick=tick + resource.mining_time,
-        #         new_energy_level=harvester.ener
-        #     )
-        #     await resource_harvested_message.publish(nats)
+        # Resource is being harvested by enough agents and the harvest is finished
+        harvesters = resource.harvesters
+        if (
+            resource.available
+            and len(harvesters) >= resource.required_agents
+            #            and resource.start_harvest + resource.mining_time <= tick
+        ):
+            resource.available = False
+            resource.last_harvest = tick
+
+            all_harvesters = ",".join([f"{h.name} (ID:{h.id})" for h in harvesters])
+
+            for harv in harvesters:
+
+                # Update harvester's energy level
+                harv.energy_level += resource.energy_yield
+                harv.harvesting_resource_id = None
+                db.add(harv)
+
+                action_log = ActionLog(
+                    agent_id=harv.id,
+                    simulation_id=resource.world.simulation_id,
+                    tick=resource.simulation.tick,
+                    action=f"harvested_resource_finished(resource_id={resource.id}, location=({resource.x_coord}, {resource.y_coord}), energy_yield={resource.energy_yield}) together with {all_harvesters}. You successfully harvested the resource and gained {resource.energy_yield} energy. It is now not available anymore.",
+                )
+                db.add(action_log)
+
+                agent_action_message = AgentActionMessage(
+                    id=action_log.id,
+                    simulation_id=action_log.simulation_id,
+                    agent_id=action_log.agent_id,
+                    action=action_log.action,
+                    tick=action_log.tick,
+                    created_at=action_log.created_at,
+                )
+                await agent_action_message.publish(nats)
+
+                resource_harvested_message = ResourceHarvestedMessage(
+                    simulation_id=resource.world.simulation_id,
+                    id=resource.id,
+                    harvester_id=str([harv.id for harv in harvesters]),
+                    location=(resource.x_coord, resource.y_coord),
+                    start_tick=tick,
+                    end_tick=tick,
+                    new_energy_level=harv.energy_level,
+                )
+
+                await resource_harvested_message.publish(nats)
+
+            db.add(resource)
+            db.commit()
 
     @staticmethod
     def _run_loop_in_thread(

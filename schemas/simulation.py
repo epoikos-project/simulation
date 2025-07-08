@@ -7,9 +7,10 @@ from schemas.base import BaseModel
 if TYPE_CHECKING:
     # Avoid circular import issues by using string annotations
 
-    from schemas.agent import Agent
     from schemas.action_log import ActionLog
+    from schemas.agent import Agent
     from schemas.conversation import Conversation
+    from schemas.memory_log import MemoryLog
     from schemas.resource import Resource
     from schemas.world import World
 
@@ -26,7 +27,11 @@ class Simulation(BaseModel, table=True):
     action_logs: list["ActionLog"] = Relationship(
         back_populates="simulation",
     )
-    
+
+    memory_logs: list["MemoryLog"] = Relationship(
+        back_populates="simulation",
+    )
+
     world: "World" = Relationship(back_populates="simulation", cascade_delete=True)
     resources: list["Resource"] = Relationship(
         back_populates="simulation", cascade_delete=True

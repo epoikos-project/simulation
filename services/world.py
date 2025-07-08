@@ -30,15 +30,17 @@ class WorldService(BaseService[WorldModel]):
         world: WorldModel,
         num_regions: int,
         base_energy_cost: int = 1,
-        total_resources: int = 25,
         commit: bool = True,
     ):
+        """
+        Divide the world into regions, persist them, and return the region list.
+        Resource creation is handled separately via user-provided configuration.
+        """
         region_sizes = self._divide_grid_into_regions(
-            [world.size_x, world.size_y], num_regions
+            (world.size_x, world.size_y), num_regions
         )
 
-        regions = []
-        resources = []
+        regions: list[Region] = []
         for r in region_sizes:
             region = Region(
                 simulation_id=world.simulation_id,
@@ -49,22 +51,14 @@ class WorldService(BaseService[WorldModel]):
                 y_2=r["y2"],
                 region_energy_cost=base_energy_cost,
             )
-            region_service = RegionService(db=self._db, nats=self._nats)
-            region_service.create(
+            RegionService(db=self._db, nats=self._nats).create(
                 model=region,
                 commit=False,
             )
-
-            resources = region_service.create_resources_for_region(
-                region=region,
-                num_resources=total_resources // num_regions,
-                commit=False,
-            )
             regions.append(region)
-            resources.extend(resources)
         if commit:
             self._db.commit()
-        return (regions, resources)
+        return regions
 
     def _divide_grid_into_regions(
         self, size: tuple[int, int], num_regions: int, min_region_size: int = 3

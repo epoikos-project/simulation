@@ -6,9 +6,20 @@ from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTok
 Sentiment analysis using the CardiffNLP Twitter RoBERTa model.
 """
 MODEL_NAME = "cardiffnlp/twitter-roberta-base-sentiment-latest"
-_tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-_config = AutoConfig.from_pretrained(MODEL_NAME)
-_model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
+
+# Lazy initialization: skip automatic download in offline environments
+_tokenizer = None
+_config = None
+_model = None
+try:
+    _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    _config = AutoConfig.from_pretrained(MODEL_NAME)
+    _model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
+except Exception:
+    # likely offline or no HF access: disable sentiment analysis
+    _tokenizer = None
+    _config = None
+    _model = None
 
 
 def preprocess(text: str) -> str:
@@ -28,6 +39,9 @@ def analyze_message_sentiment(message: str) -> float:
     Returns a sentiment score between -1.0 (negative) and 1.0 (positive)
     based on the CardiffNLP Twitter RoBERTa model.
     """
+    # If model failed to load (offline), return neutral sentiment
+    if _model is None or _tokenizer is None or _config is None:
+        return 0.0
     text = preprocess(message)
     inputs = _tokenizer(text, return_tensors="pt")
     outputs = _model(**inputs)

@@ -3,15 +3,18 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship
 
 from schemas.base import BaseModel
+from schemas.conversation import Conversation
 
 if TYPE_CHECKING:
 
+    from schemas.action_log import ActionLog
+    from schemas.memory_log import MemoryLog
+    from schemas.message import Message
     from schemas.plan import Plan
     from schemas.relationship import Relationship
     from schemas.resource import Resource
     from schemas.simulation import Simulation
     from schemas.task import Task
-    from schemas.action_log import ActionLog
 
 
 class Agent(BaseModel, table=True):
@@ -34,7 +37,7 @@ class Agent(BaseModel, table=True):
     x_coord: int = Field(default=0)
     y_coord: int = Field(default=0)
     visibility_range: int = Field(default=5)
-    range_per_move: int = Field(default=1)
+    range_per_move: int = Field(default=5)
 
     simulation: "Simulation" = Relationship(back_populates="agents")
     harvesting_resource: "Resource" = Relationship(back_populates="harvesters")
@@ -69,4 +72,25 @@ class Agent(BaseModel, table=True):
         back_populates="agent",
         cascade_delete=True,
         sa_relationship_kwargs={"foreign_keys": "[ActionLog.agent_id]"},
+    )
+
+    incoming_conversations: list["Conversation"] = Relationship(
+        back_populates="agent_b",
+        sa_relationship_kwargs={"foreign_keys": "[Conversation.agent_b_id]"},
+    )
+
+    outgoing_conversations: list["Conversation"] = Relationship(
+        back_populates="agent_a",
+        sa_relationship_kwargs={"foreign_keys": "[Conversation.agent_a_id]"},
+    )
+
+    sent_messages: list["Message"] = Relationship(
+        back_populates="sender",
+        sa_relationship_kwargs={"foreign_keys": "[Message.agent_id]"},
+    )
+
+    memory_logs: list["MemoryLog"] = Relationship(
+        back_populates="agent",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "[MemoryLog.agent_id]"},
     )

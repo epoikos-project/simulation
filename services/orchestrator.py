@@ -3,31 +3,32 @@
 import json
 import random
 import uuid
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from faststream.nats import NatsBroker
 from loguru import logger
 from pymilvus import MilvusClient
 from sqlmodel import Session, select
-from datetime import datetime, timezone
-
-from messages.simulation.simulation_started import SimulationStartedMessage
-from messages.simulation.simulation_stopped import SimulationStoppedMessage
-from schemas.configuration import Configuration as ConfigTable
 
 from config.openai import AvailableModels
 
 from engine.runners import SimulationRunner
 
 from messages.simulation import SimulationCreatedMessage
+from messages.simulation.simulation_started import SimulationStartedMessage
+from messages.simulation.simulation_stopped import SimulationStoppedMessage
 
 from services.agent import AgentService
 from services.region import RegionService
+from services.relationship import RelationshipService
 from services.resource import ResourceService
 from services.simulation import SimulationService
 from services.world import WorldService
 
 from schemas.agent import Agent
+from schemas.configuration import Configuration as ConfigTable
+from schemas.resource import Resource
 from schemas.simulation import Simulation
 from schemas.world import World
 
@@ -93,16 +94,50 @@ class OrchestratorService:
         world = self.world_service.create(world, commit=False)
         self._db.add(world)
 
-        (regions, resources) = self.world_service.create_regions_for_world(
+        settings = cfg.get("settings", {})
+        world_settings = settings.get("world", {})
+        resource_configs = world_settings.get("resources", [])
+        num_regions = world_settings.get("num_regions", 1)
+
+        # Create regions; resource creation is handled by user-provided config
+        regions = self.world_service.create_regions_for_world(
             world=world,
-            num_regions=cfg.get("settings", {}).get("num_regions", 1),
+            num_regions=num_regions,
             commit=False,
-            total_resources=cfg.get("settings", {})
-            .get("world", {})
-            .get("total_resources", 25),
         )
         self._db.add_all(regions)
-        self._db.add_all(resources)
+
+        resources: list[Resource] = []
+        for res_cfg in resource_configs:
+            count = res_cfg.get("count", 0)
+            min_agents = res_cfg.get("minAgents", 1)
+            mining_time = res_cfg.get("miningTime", 0)
+            energy_yield = res_cfg.get("energyYield", 0)
+            regrow_time = res_cfg.get("regrowTime", 0)
+            harvesting_area = res_cfg.get("harvestingArea", 1)
+            energy_yield_var = res_cfg.get("energyYieldVar", 1.0)
+            regrow_var = res_cfg.get("regrowVar", 1.0)
+            for _ in range(count):
+                region = random.choice(regions)
+                x_coord, y_coord = self.region_service._create_resource_coords(
+                    x_coords=(region.x_1, region.x_2),
+                    y_coords=(region.y_1, region.y_2),
+                    num_resources=1,
+                )[0]
+                resource = Resource(
+                    x_coord=x_coord,
+                    y_coord=y_coord,
+                    simulation_id=simulation.id,
+                    world_id=world.id,
+                    region_id=region.id,
+                    energy_yield=energy_yield,
+                    mining_time=mining_time,
+                    regrow_time=regrow_time,
+                    harvesting_area=harvesting_area,
+                    required_agents=min_agents,
+                )
+                resource = self.resource_service.create(resource, commit=False)
+                resources.append(resource)
 
         for agent_cfg in cfg.get("agents", []):
             await self._spawn_agents(simulation.id, world, agent_cfg)
@@ -144,7 +179,9 @@ class OrchestratorService:
                 hunger=hunger,
                 energy_level=energy_level,
                 visibility_range=agent_cfg.get("visibility_range", 5),
-                range_per_move=agent_cfg.get("range_per_move", 1),
+                range_per_move=agent_cfg.get(
+                    "range_per_move", 5
+                ),  # TODO: make configurable
                 name=name,
                 x_coord=x,
                 y_coord=y,
@@ -173,6 +210,15 @@ class OrchestratorService:
             simulation_id=sim_id,
         )
         logger.info(f"Orchestrator: ticked simulation {sim_id}")
+        # snapshot relationship graph for this simulation at new tick
+        sim = self.simulation_service.get_by_id(sim_id)
+
+        relationship_service = RelationshipService(self._db, self.nats)
+        relationship_service.snapshot_relationship_graph(
+            simulation_id=sim_id,
+            tick=sim.tick,
+        )
+        logger.info(f"Orchestrator: snapshot relationships at tick {sim.tick}")
 
     async def start(self, sim_id: str):
         tick = SimulationRunner.start_simulation(
@@ -185,7 +231,7 @@ class OrchestratorService:
         sim.last_used = datetime.now(timezone.utc).isoformat()
         self._db.add(sim)
         self._db.commit()
-        
+
         simulation_started_message = SimulationStartedMessage(
             id=sim.id,
             tick=tick,
@@ -198,10 +244,7 @@ class OrchestratorService:
             db=self._db,
             nats=self.nats,
         )
-        
-        simulation_stopped_message = SimulationStoppedMessage(
-            id=sim_id,
-            tick=tick
-        )
-        await simulation_stopped_message.publish(self.nats) 
+
+        simulation_stopped_message = SimulationStoppedMessage(id=sim_id, tick=tick)
+        await simulation_stopped_message.publish(self.nats)
         logger.info(f"Orchestrator: stopped simulation {sim_id}")

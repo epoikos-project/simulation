@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict
+from typing import Any, Dict, List, Union
 
 
 def compute_distance(a: tuple[int, int], b: tuple[int, int]):
@@ -24,18 +24,19 @@ def compute_in_radius(
     return distance <= radius
 
 
-def extract_tool_call_info(data):
+def extract_tool_call_info(data: Any) -> Dict[str, List[Dict[str, Any]]]:
     """
     Pulls out:
-      - from each ToolCallRequestEvent: name & arguments
+      - from each ToolCallRequestEvent: name & arguments (always as a dict)
       - from each ToolCallExecutionEvent: is_error flag
 
-    Works on both dicts and objects (e.g. TaskResult), by falling
-    back to getattr when .get isn’t available.
+    Works on both dicts and objects by using _get(). Flattens any nested lists
+    inside ToolCallRequestEvent. Always returns lists (even if empty or singleton).
+    If `arguments` is a JSON string, it will attempt to decode it; otherwise it's
+    returned as-is.
     """
 
-    def _get(o, key, default=None):
-        # dict first, then attribute, then default
+    def _get(o: Any, key: str, default: Any = None) -> Any:
         if isinstance(o, dict):
             return o.get(key, default)
         return getattr(o, key, default)
@@ -48,54 +49,91 @@ def extract_tool_call_info(data):
         content = _get(msg, "content", []) or []
 
         if msg_type == "ToolCallRequestEvent":
+            # flatten any nested lists
             for call in content:
-                result["ToolCallRequestEvent"].append(
-                    {"name": _get(call, "name"), "arguments": _get(call, "arguments")}
-                )
+                calls = call if isinstance(call, list) else [call]
+                for single in calls:
+                    name = _get(single, "name")
+                    args = _get(single, "arguments", {})
+
+                    # if args is a JSON string, decode it; otherwise leave as-is
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except json.JSONDecodeError:
+                            pass
+
+                    result["ToolCallRequestEvent"].append(
+                        {"name": name, "arguments": args}
+                    )
 
         elif msg_type == "ToolCallExecutionEvent":
-            for call in content:
+            for exec_res in content:
                 result["ToolCallExecutionEvent"].append(
-                    {"is_error": _get(call, "is_error")}
+                    {"is_error": _get(exec_res, "is_error", False)}
                 )
-
-    # If exactly one of each, unwrap into a single dict
-    if len(result["ToolCallRequestEvent"]) == 1:
-        result["ToolCallRequestEvent"] = result["ToolCallRequestEvent"][0]
-    if len(result["ToolCallExecutionEvent"]) == 1:
-        result["ToolCallExecutionEvent"] = result["ToolCallExecutionEvent"][0]
 
     return result
 
 
-def summarize_tool_call(call: Dict[str, Any]) -> str:
+def summarize_tool_call(calls: Union[Dict[str, Any], List[Dict[str, Any]]]) -> str:
     """
-    Summarize a tool-call dict by extracting the 'name' and its 'arguments'.
+    Summarize tool calls into a single string.
+    - Accepts a dict with "ToolCallRequestEvent", a single call-dict, or a list of call-dicts.
+    - Parses JSON-string arguments if needed.
+    - Drops any 'add_memory' entry when there are multiple calls.
+    - Returns a single string: if multiple summaries, concatenated with ", ";
+      if only one, returns it directly.
     """
-    req_key = next((k for k in call if "RequestEvent" in k), None)
-    if req_key is None:
-        raise ValueError("No key containing 'RequestEvent' found in the call.")
-    req = call[req_key]
 
-    name = req.get("name", "")
-    raw_args = req.get("arguments", "{}")
+    def _summarize_one(call: Dict[str, Any]) -> str:
+        name = call.get("name", "")
+        raw_args = call.get("arguments", {})
 
-    if isinstance(raw_args, str):
-        try:
-            args_dict = json.loads(raw_args)
-        except json.JSONDecodeError:
-            return f"{name}({raw_args})"
-    elif isinstance(raw_args, dict):
-        args_dict = raw_args
-    else:
-        return f"{name}({raw_args!r})"
-
-    parts = []
-    for k, v in args_dict.items():
-        if isinstance(v, str):
-            parts.append(f"{k}={json.dumps(v)}")
+        # Decode JSON if needed
+        if isinstance(raw_args, str):
+            try:
+                args = json.loads(raw_args)
+            except json.JSONDecodeError:
+                return f"{name}({raw_args})"
+        elif isinstance(raw_args, dict):
+            args = raw_args
         else:
-            parts.append(f"{k}={v!r}")
+            return f"{name}({raw_args!r})"
 
-    joined = ", ".join(parts)
-    return f"{name}({joined})"
+        parts = []
+        for k, v in args.items():
+            if isinstance(v, str):
+                parts.append(f"{k}={json.dumps(v)}")
+            else:
+                parts.append(f"{k}={v!r})")
+        joined = ", ".join(parts)
+        return f"{name}({joined})"
+
+    # Normalize into flat list of call-dicts
+    if isinstance(calls, dict) and "ToolCallRequestEvent" in calls:
+        call_list = calls["ToolCallRequestEvent"] or []
+    elif isinstance(calls, dict) and "name" in calls:
+        call_list = [calls]
+    elif isinstance(calls, list):
+        call_list = calls
+    else:
+        raise ValueError(
+            "Input must be a list of call-dicts, a single call-dict, "
+            "or a dict containing 'ToolCallRequestEvent'"
+        )
+
+    # If no calls present, return early
+
+    # Build summary strings
+    summaries = [_summarize_one(c) for c in call_list]
+
+    # Filter out 'update_plan' if more than one
+    if len(summaries) > 1:
+        summaries = [s for s in summaries if not s.startswith("update_plan(")]
+
+    if len(call_list) == 0 or len(summaries) == 0:
+        return "No tool call made."
+
+    # Join into one string
+    return ", ".join(summaries)

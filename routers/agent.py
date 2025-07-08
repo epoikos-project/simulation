@@ -5,7 +5,11 @@ import clients
 from clients import Nats
 from clients.db import DB
 
+from messages.world.agent_moved import AgentMovedMessage
+
+from services.action_log import ActionLogService
 from services.agent import AgentService
+from services.conversation import ConversationService
 
 from schemas.agent import Agent
 
@@ -33,16 +37,54 @@ async def create_agent(
 async def get_agent(id: str, simulation_id: str, db: DB, broker: Nats):
     """Get an agent by ID"""
     agents_service = AgentService(db=db, nats=broker)
-    return agents_service.get_by_id(id)
+    conversation_service = ConversationService(db=db, nats=broker)
+
+    agent = agents_service.get_by_id(id)
+    action_logs = agents_service.get_last_k_actions(agent, k=10)
+    last_conversation = conversation_service.get_last_conversation_by_agent_id(
+        agent.id, max_tick_age=-1
+    )
+    messages = (
+        conversation_service.get_last_k_messages(last_conversation.id, k=10)
+        if last_conversation
+        else []
+    )
+    return {
+        **agent.model_dump(),
+        "last_10_action_logs": action_logs,
+        "last_10_messages": messages,
+    }
 
 
 @router.get("")
 async def list_agents(simulation_id: str, db: DB, broker: Nats):
     """List all agents in the simulation"""
     agents_service = AgentService(db=db, nats=broker)
+    conversation_service = ConversationService(db=db, nats=broker)
 
     try:
         agents = agents_service.get_by_simulation_id(simulation_id)
+        action_logs = []
+        messages = []
+        for agent in agents:
+            action_logs.append(agents_service.get_last_k_actions(agent, k=10))
+            last_conversation = conversation_service.get_last_conversation_by_agent_id(
+                agent.id, max_tick_age=-1
+            )
+            messages.append(
+                conversation_service.get_last_k_messages(last_conversation.id, k=10)
+                if last_conversation
+                else []
+            )
+
+        return [
+            {
+                **agent.model_dump(),
+                "last_10_action_logs": logs,
+                "last_10_messages": msgs,
+            }
+            for agent, logs, msgs in zip(agents, action_logs, messages)
+        ]
     except ValueError:
         # return empty list if no agents found for this simulation
         agents = []
@@ -61,8 +103,23 @@ async def move_agent(
     agent_service = AgentService(db=db, nats=broker)
     agent = agent_service.get_by_id(agent_id)
 
-    new_location = await agent_service.move_agent(
-        agent=agent, x_coord=move_agent_input.x_coord, y_coord=move_agent_input.y_coord
-    )
+    agent.x_coord = move_agent_input.x_coord
+    agent.y_coord = move_agent_input.y_coord
 
-    return {"message": f"Agent {agent_id} moved to location {new_location}"}
+    db.add(agent)
+    db.commit()
+
+    agent_moved_message = AgentMovedMessage(
+        id=agent_id,
+        new_location=(agent.x_coord, agent.y_coord),
+        start_location=(agent.x_coord, agent.y_coord),
+        simulation_id=simulation_id,
+        destination=f"({move_agent_input.x_coord}, {move_agent_input.y_coord})",
+        num_steps=1,
+        new_energy_level=agent.energy_level,
+    )
+    await agent_moved_message.publish(broker)
+
+    return {
+        "message": f"Agent {agent_id} moved to location {agent.x_coord, agent.y_coord}"
+    }

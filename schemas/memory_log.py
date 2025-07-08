@@ -11,17 +11,16 @@ if TYPE_CHECKING:
     from schemas.simulation import Simulation
 
 
-class ActionLog(BaseModel, table=True):
+class MemoryLog(BaseModel, table=True):
     id: str = Field(primary_key=True, default_factory=lambda: uuid.uuid4().hex)
 
     simulation_id: str = Field(foreign_key="simulation.id", index=True)
 
-    action: str = Field()
-    feedback: str | None = Field(default=None)
+    memory: str = Field()
     agent_id: str = Field(foreign_key="agent.id")
     tick: int = Field()
 
-    agent: "Agent" = Relationship(back_populates="action_logs")
+    agent: "Agent" = Relationship(back_populates="memory_logs")
     simulation: "Simulation" = Relationship(
-        back_populates="action_logs",
+        back_populates="memory_logs",
     )
