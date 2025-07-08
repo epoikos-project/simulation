@@ -53,12 +53,12 @@ class ResourceService(BaseService[Resource]):
                 self.db.add(resource)
                 self.db.add(harvester)
                 self.db.commit()
-            else: 
+            else:
                 logger.error(
                     f"Resource at {(resource.x_coord, resource.y_coord)} is not available for harvesting."
                 )
                 raise ValueError(
-                    f"Resource at {(resource.x_coord, resource.y_coord)} is not available for harvesting."
+                    f"Resource at {(resource.x_coord, resource.y_coord)} is not available for harvesting YOU MUST FIND ANOTHER RESOURCE."
                 )
         else:
             logger.error(
@@ -67,9 +67,8 @@ class ResourceService(BaseService[Resource]):
             raise ValueError(
                 f"Agent {harvester.id} is not in harvesting range for the resource at {(resource.x_coord, resource.y_coord)}."
             )
-                
+
         return harvested
-        
 
     def start_harvest_resource(self, resource: Resource, harvester: Agent):
         # Check if agent(s) is/are in the harvesting area

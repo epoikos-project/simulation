@@ -9,6 +9,7 @@ from clients.db import get_session
 from clients.nats import nats_broker
 
 from messages.agent.agent_communication import AgentCommunicationMessage
+
 from services.agent import AgentService
 from services.conversation import ConversationService
 from services.relationship import RelationshipService
@@ -40,12 +41,14 @@ async def start_conversation(
                 raise ValueError("Cannot start a conversation with oneself.")
             nats = nats_broker()
             agent_service = AgentService(db=db, nats=nats)
-            other_agent = agent_service.get_by_id_or_name(other_agent_id, simulation_id=simulation_id)
+            other_agent = agent_service.get_by_id_or_name(
+                other_agent_id, simulation_id=simulation_id
+            )
 
             open_requests = agent_service.get_outstanding_conversation_requests(
                 agent_id
             )
-            
+
             logger.warning(f"Open requests for agent {agent_id}: {open_requests}")
             logger.warning(f"Other agent ID: {other_agent_id}")
 
@@ -90,14 +93,14 @@ async def start_conversation(
             db.add(conversation)
             db.add(message_model)
             db.commit()
-            
+
             agent_communication_message = AgentCommunicationMessage(
                 agent_id=agent_id,
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
                 to_agent_id=message_model.to_agent_id,
-                created_at=message_model.created_at
+                created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
 
@@ -144,14 +147,14 @@ async def accept_conversation_request(
             db.add(conversation)
             db.add(message_model)
             db.commit()
-            
+
             agent_communication_message = AgentCommunicationMessage(
                 agent_id=agent_id,
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
                 to_agent_id=message_model.to_agent_id,
-                created_at=message_model.created_at
+                created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
 
@@ -205,8 +208,7 @@ async def decline_conversation_request(
                 content=message,
                 id=message_model.id,
                 to_agent_id=message_model.to_agent_id,
-                created_at=message_model.created_at
-                
+                created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
 
@@ -260,15 +262,14 @@ async def continue_conversation(
             )
             db.add(message_model)
             db.commit()
-            
+
             agent_communication_message = AgentCommunicationMessage(
                 agent_id=agent_id,
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
                 to_agent_id=message_model.to_agent_id,
-                created_at=message_model.created_at
-                
+                created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
 
@@ -309,14 +310,14 @@ async def end_conversation(
             db.add(conversation)
             db.add(message_model)
             db.commit()
-            
+
             agent_communication_message = AgentCommunicationMessage(
                 agent_id=agent_id,
                 simulation_id=simulation_id,
                 content=reason,
                 id=message_model.id,
                 to_agent_id=message_model.to_agent_id,
-                created_at=message_model.created_at
+                created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
 

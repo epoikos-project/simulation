@@ -80,9 +80,7 @@ class AgentRunner:
                         f"[SIM {agent.agent.simulation.id}][AGENT {agent.agent.id}] Ticked with reasoning output: {reasoning_output.messages[1].content}"
                     )
                     agent.toggle_tools(use_tools=True)
-                    agent.toggle_parallel_tool_calls(
-                        use_parallel=True
-                    )
+                    agent.toggle_parallel_tool_calls(use_parallel=False)
                     await agent.generate(
                         reason=False,
                         reasoning_output=reasoning_output.messages[1].content,
@@ -91,7 +89,5 @@ class AgentRunner:
                 else:
                     db.refresh(agent.agent)
                     agent.toggle_tools(use_tools=True)
-                    agent.toggle_parallel_tool_calls(
-                        use_parallel=True
-                    )
+                    agent.toggle_parallel_tool_calls(use_parallel=False)
                     await agent.generate(reason=False, reasoning_output=None)

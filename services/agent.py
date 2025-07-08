@@ -33,20 +33,18 @@ class MovementTruncated(ValueError):
 class AgentService(BaseService[Agent]):
     def __init__(self, db, nats):
         super().__init__(Agent, db, nats)
-        
-        
+
     def get_by_id_or_name(
         self, id_or_name: str, simulation_id: str | None = None
     ) -> Agent | None:
         """Get agent by id or name"""
         stmt = select(Agent).where(
-            ((Agent.id == id_or_name) | (Agent.name == id_or_name)) & (Agent.simulation_id == simulation_id)
+            ((Agent.id == id_or_name) | (Agent.name == id_or_name))
+            & (Agent.simulation_id == simulation_id)
         )
         agent = self._db.exec(stmt).first()
         if not agent:
-            raise ValueError(
-                f"Agent with id or name '{id_or_name}' not found."
-            )
+            raise ValueError(f"Agent with id or name '{id_or_name}' not found.")
         return agent
 
     @override
@@ -323,7 +321,7 @@ class AgentService(BaseService[Agent]):
             )
 
         return new_location
-    
+
     def move_agent_in_random_direction(self, agent: Agent) -> tuple[int, int]:
         """
         Moves the specified agent in a random direction within the world.
@@ -406,7 +404,7 @@ class AgentService(BaseService[Agent]):
         ).all()
 
         return actions
-    
+
     def get_last_k_memory_logs(self, agent: Agent, k: int = 5) -> list[MemoryLog]:
         """Get the last k memory logs of an agent."""
         memory_logs = self._db.exec(

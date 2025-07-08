@@ -28,8 +28,8 @@ async def move(
     agent_id: str,
     simulation_id: str,
 ):
-    """Move in the world. Specify the exact coordinate you want to move to. 
-    You may move up to 5 coordinates away from your current location with each tool call. 
+    """Move in the world. Specify the exact coordinate you want to move to.
+    You may move up to 5 coordinates away from your current location with each tool call.
     YOU CANNOT MOVE TO YOUR OWN POSITION."""
 
     logger.success("Calling tool move")
@@ -61,7 +61,6 @@ async def move(
                 new_energy_level=agent.energy_level,
             )
             await agent_moved_message.publish(nats)
-            logger.debug("Agent moved message published")
 
             if truncated_exc is not None:
                 raise truncated_exc
@@ -70,6 +69,7 @@ async def move(
         logger.exception(e)
         logger.error(f"Error moving agent: {e}")
         raise
+
 
 @observe()
 async def random_move(
@@ -86,11 +86,24 @@ async def random_move(
 
             agent_service = AgentService(db=db, nats=nats)
             agent = agent_service.get_by_id(agent_id)
-            agent_service.move_agent_in_random_direction(
+            new_location = agent_service.move_agent_in_random_direction(
                 agent=agent,
             )
+
+            start_location = (agent.x_coord, agent.y_coord)
+            destination = str((new_location[0], new_location[1]))
+
+            agent_moved_message = AgentMovedMessage(
+                simulation_id=simulation_id,
+                id=agent_id,
+                start_location=start_location,
+                new_location=new_location,
+                destination=destination,
+                num_steps=compute_distance(start_location, new_location),
+                new_energy_level=agent.energy_level,
+            )
+            await agent_moved_message.publish(nats)
     except Exception as e:
         logger.exception(e)
         logger.error(f"Error getting agent service: {e}")
         raise
- 

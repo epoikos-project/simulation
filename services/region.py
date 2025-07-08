@@ -41,7 +41,7 @@ class RegionService(BaseService[Region]):
                 simulation_id=region.simulation_id,
                 world_id=region.world_id,
                 region_id=region.id,
-                energy_yield=random.randint(1, 10),
+                energy_yield=random.randint(30, 100),
                 regrow_time=regrow_time,
             )
             resource = resource_service.create(model=resource, commit=commit)

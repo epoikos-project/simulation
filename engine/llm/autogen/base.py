@@ -3,14 +3,13 @@ from functools import partial
 from types import CoroutineType
 from typing import Any, Callable, List
 
-from loguru import logger
-from langfuse.decorators import langfuse_context
-
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.base import TaskResult
 from autogen_core import CancellationToken, FunctionCall
 from autogen_core.tools import BaseTool, FunctionTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
+from langfuse.decorators import langfuse_context
+from loguru import logger
 from sqlmodel import Session
 
 from clients.nats import Nats
@@ -25,11 +24,12 @@ from messages.agent.agent_action import AgentActionMessage
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
 
-from schemas.action_log import ActionLog
 from services.action_log import ActionLogService
 from services.agent import AgentService
 
+from schemas.action_log import ActionLog
 from schemas.agent import Agent
+
 from utils import extract_tool_call_info, summarize_tool_call
 
 
@@ -58,33 +58,31 @@ class BaseAgent:
         self.tools = list(tools)  # Make a shallow copy to avoid sharing memory address
         self.next_tools = list(tools)
         self.parallel_tool_calls = False
-                
-                
+
         self._client, self.autogen_agent = self._initialize_llm()
-        
 
     def _initialize_llm(self):
-        
+
         if len(self.tools) == 0:
             client = OpenAIChatCompletionClient(
                 model=self.model.name,
                 model_info=self.model.info,
                 base_url=settings.openai.baseurl,
-                api_key=settings.openai.apikey,    
+                api_key=settings.openai.apikey,
             )
-            
+
             tools = []
-            
-        else: 
+
+        else:
             client = OpenAIChatCompletionClient(
                 model=self.model.name,
                 model_info=self.model.info,
                 base_url=settings.openai.baseurl,
-                api_key=settings.openai.apikey,  
+                api_key=settings.openai.apikey,
                 parallel_tool_calls=self.parallel_tool_calls,
             )
             tools: List[BaseTool] = [self._make_bound_tool(tool) for tool in self.tools]
-        
+
         autogen = AssistantAgent(
             name=re.sub(r"\W|^(?=\d)", "_", self.agent.name),
             model_client=client,
@@ -94,7 +92,6 @@ class BaseAgent:
             model_client_stream=False,
             tools=tools,
         )
-
 
         return (client, autogen)
 
@@ -122,9 +119,11 @@ class BaseAgent:
         """
         Runs the autogen agent with the provided context.
         """
-        
+
         if reason:
-            context += "\n\n In the next move you will have the following tools available:\n"
+            context += (
+                "\n\n In the next move you will have the following tools available:\n"
+            )
             # Append a list of available tools (function name and docstring) to the context
             context += "\n".join(
                 f"- {tool.__name__}: {tool.__doc__ or ''}" for tool in self.next_tools
@@ -144,24 +143,25 @@ class BaseAgent:
         # as the agent will try to read from the database while the tool call is trying to
         # write to it.
         self._db.commit()
-        
+
         logger.debug(self.autogen_agent._tools)
-                
+
         output = await self.autogen_agent.run(
             task=context,
             cancellation_token=CancellationToken(),
         )
-        
-        last_tool_call, last_tool_summary = await self._update_action_log(output, reason)
-        
+
+        last_tool_call, last_tool_summary = await self._update_action_log(
+            output, reason
+        )
+
         agent_response_message = AgentResponseMessage(
             id=self.agent.id,
             simulation_id=self.agent.simulation.id,
             agent_id=self.agent.id,
             reply=output.messages[-1].content,
         )
-        
-        
+
         await agent_response_message.publish(self._nats)
 
         langfuse_context.update_current_observation(
@@ -174,11 +174,10 @@ class BaseAgent:
             metadata={
                 "last_tool_call": last_tool_call,
                 "system_prompt": self.autogen_agent._system_messages[0].content,
-                "tools": [tool.schema for tool in self.autogen_agent._tools]
-
-            }
+                "tools": [tool.schema for tool in self.autogen_agent._tools],
+            },
         )
-        
+
         return output
 
     def _add_feedback(self, output: TaskResult, tool_calls: list[FunctionCall]) -> bool:
@@ -198,19 +197,23 @@ class BaseAgent:
                             error = result.content
                 if message.type == "ToolCallRequestEvent":
                     tool_calls = message.content
-                            
+
             action_log = ActionLog(
                 agent_id=self.agent.id,
                 simulation_id=self.agent.simulation_id,
                 action=last_tool_summary,
-                feedback="ERROR!!! " + error if error else self._add_feedback(output, tool_calls),
+                feedback=(
+                    "ERROR!!! " + error
+                    if error
+                    else self._add_feedback(output, tool_calls)
+                ),
                 tick=self.agent.simulation.tick,
             )
             self.action_log_service.create(
                 action_log,
                 commit=True,
             )
-            
+
             agent_action_message = AgentActionMessage(
                 id=action_log.id,
                 simulation_id=action_log.simulation_id,
@@ -223,8 +226,7 @@ class BaseAgent:
         else:
             last_tool_call = None
             last_tool_summary = None
-            
-        
+
         return last_tool_call, last_tool_summary
 
     def toggle_tools(self, use_tools: bool):
@@ -249,7 +251,7 @@ class BaseAgent:
         """
         self.parallel_tool_calls = use_parallel
         self._client, self.autogen_agent = self._initialize_llm()
-        
+
     def _update_langfuse_trace_name(self, name: str):
         langfuse_context.update_current_trace(
             name=name,
@@ -257,6 +259,3 @@ class BaseAgent:
             session_id=self.agent.simulation_id,
         )
         langfuse_context.update_current_observation(model=self.model.name, name=name)
-
-        
-        

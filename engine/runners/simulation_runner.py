@@ -195,17 +195,17 @@ class SimulationRunner:
                     action=f"harvested_resource_finished(resource_id={resource.id}, location=({resource.x_coord}, {resource.y_coord}), energy_yield={resource.energy_yield}) together with {all_harvesters}. You successfully harvested the resource and gained {resource.energy_yield} energy. It is now not available anymore.",
                 )
                 db.add(action_log)
-                
+
                 agent_action_message = AgentActionMessage(
                     id=action_log.id,
                     simulation_id=action_log.simulation_id,
                     agent_id=action_log.agent_id,
                     action=action_log.action,
                     tick=action_log.tick,
-                    created_at=action_log.created_at
+                    created_at=action_log.created_at,
                 )
                 await agent_action_message.publish(nats)
-            
+
                 resource_harvested_message = ResourceHarvestedMessage(
                     simulation_id=resource.world.simulation_id,
                     id=resource.id,

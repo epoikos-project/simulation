@@ -13,7 +13,11 @@ from engine.context.hunger import HungerContext
 from engine.context.memory import MemoryContext
 from engine.context.observation import ObservationContext
 from engine.context.plan import PlanContext
-from engine.context.system import SystemDescription, SystemPrompt
+from engine.context.system import (
+    HarvestingSystemPrompt,
+    SystemDescription,
+    SystemPrompt,
+)
 from engine.llm.autogen.base import BaseAgent
 from engine.tools.harvesting_tools import continue_waiting, stop_waiting
 
@@ -47,7 +51,7 @@ class HarvestingAgent(BaseAgent):
             nats=nats,
             agent=agent,
             tools=[continue_waiting, stop_waiting],
-            system_prompt=SystemPrompt(agent),
+            system_prompt=HarvestingSystemPrompt(agent),
             description=SystemDescription(agent),
         )
         self.conversation_service = ConversationService(self._db, self._nats)
@@ -65,7 +69,7 @@ class HarvestingAgent(BaseAgent):
         else:
             self.toggle_tools(use_tools=True)
             self._update_langfuse_trace_name(f"Harvesting Tick {self.agent.name}")
-            
+
         if reasoning_output:
             context += f"\n\n---\nYour reasoning output from the last tick was:\n{reasoning_output}"
 
