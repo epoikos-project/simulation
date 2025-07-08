@@ -7,6 +7,7 @@ from clients.db import DB
 
 from messages.world.agent_moved import AgentMovedMessage
 
+from services.action_log import ActionLogService
 from services.agent import AgentService
 
 from schemas.agent import Agent
@@ -35,7 +36,10 @@ async def create_agent(
 async def get_agent(id: str, simulation_id: str, db: DB, broker: Nats):
     """Get an agent by ID"""
     agents_service = AgentService(db=db, nats=broker)
-    return agents_service.get_by_id(id)
+    agent = agents_service.get_by_id(id)
+    action_logs = agents_service.get_last_k_actions(agent, k=10)
+    messages = agents_service.get_last_k_messages(agent, k=10)
+    return {**agent.model_dump(), "last_10_action_logs": action_logs, "last_10_messages": messages}
 
 
 @router.get("")
@@ -45,6 +49,13 @@ async def list_agents(simulation_id: str, db: DB, broker: Nats):
 
     try:
         agents = agents_service.get_by_simulation_id(simulation_id)
+        action_logs = []
+        messages = []
+        for agent in agents:
+            action_logs.append(agents_service.get_last_k_actions(agent, k=10))
+            messages.append(agents_service.get_last_k_messages(agent, k=10))
+            
+        return [{**agent.model_dump(), "last_10_action_logs": logs, "last_10_messages": msgs} for agent, logs, msgs in zip(agents, action_logs, messages)]
     except ValueError:
         # return empty list if no agents found for this simulation
         agents = []
