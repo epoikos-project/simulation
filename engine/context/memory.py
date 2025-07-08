@@ -42,9 +42,9 @@ class MemoryContext(BaseContext):
         memory_description = (
             "Memory: Previously you have performed the following actions: \n"
             + action_log
-            + "\n---\nPlan: These are your last 3 planning steps, you saved to perform informed future actions:\n"
+            + "\n\n---\nPlan: These are your last 3 planning steps, you saved to perform informed future actions:\n"
             + memory_log
-            + "\n---"
+            + "\n\n---\n"
         )
 
         return memory_description

@@ -8,23 +8,26 @@ class ResourceObservation(BaseObservation):
     resource: Resource
 
     def __str__(self) -> str:
-        availability = "available" if self.resource.available else "unavailable"
-        observation = (
-            f"[ID: {self.id}; "
-            f"type: {self.get_observation_type()}; "
-            f"location: {self.location}; "
-            f"distance: {self.distance}; "
-            f"energy yield: {self.resource.energy_yield}; "
-            f"mining time: {self.resource.mining_time}; "
-            f"{availability}]"
-        )
+        if self.resource.available:
+            availability = "available" if self.resource.available else "unavailable"
+            observation = (
+                f"[resource_id: {self.id}; "
+                f"type: {self.get_observation_type()}; "
+                f"location: {self.location}; "
+                f"distance: {self.distance}; "
+                f"energy yield: {self.resource.energy_yield}; "
+                f"required agents: {self.resource.required_agents}; "
+                f"regrow time: {self.resource.regrow_time}; "
+                f"{availability}]"
+            )
 
-        if self._check_harvest_possible():
-            observation += self._harvest_possible()
-        else:
-            observation += self._harvest_not_possible()
+            if self._check_harvest_possible():
+                observation += self._harvest_possible()
+            else:
+                observation += self._harvest_not_possible()
 
-        return observation
+            return observation
+        return ""
 
     def _check_harvest_possible(self) -> bool:
         """Check if the can be harvested by the agent under current conditions"""

@@ -53,6 +53,20 @@ class ResourceService(BaseService[Resource]):
                 self.db.add(resource)
                 self.db.add(harvester)
                 self.db.commit()
+            else: 
+                logger.error(
+                    f"Resource at {(resource.x_coord, resource.y_coord)} is not available for harvesting."
+                )
+                raise ValueError(
+                    f"Resource at {(resource.x_coord, resource.y_coord)} is not available for harvesting."
+                )
+        else:
+            logger.error(
+                f"Agent {harvester.id} is not in harvesting range for the resource at {(resource.x_coord, resource.y_coord)}."
+            )
+            raise ValueError(
+                f"Agent {harvester.id} is not in harvesting range for the resource at {(resource.x_coord, resource.y_coord)}."
+            )
                 
         return harvested
         

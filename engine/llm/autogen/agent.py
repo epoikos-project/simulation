@@ -86,6 +86,7 @@ class AutogenAgent(BaseAgent):
         parts = [
             SystemDescription(self.agent).build(),
             HungerContext(self.agent).build(),
+            MemoryContext(self.agent).build(actions=actions, memory_logs=memory_logs),
             ObservationContext(self.agent).build(observations),
             # PlanContext(self.agent).build(),
             (
@@ -95,9 +96,8 @@ class AutogenAgent(BaseAgent):
                 if last_conversation
                 else ""
             ),
-            MemoryContext(self.agent).build(actions=actions, memory_logs=memory_logs),
         ]
-        context += "\n---\n".join(parts)
+        context += "\n\n---\n".join(parts)
 
         outstanding_requests = self.agent_service.get_outstanding_conversation_requests(
             self.agent.id
@@ -111,19 +111,6 @@ class AutogenAgent(BaseAgent):
         # else:
         #     context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
         return (observations, context)
-
-    def toggle_tools(self, use_tools: bool):
-        """
-        Toggle the use of tools for the agent.
-        If use_tools is True, the agent will use tools, otherwise it will not.
-        """
-        tools: List[BaseTool] = [
-            self._make_bound_tool(tool) for tool in available_tools
-        ]
-        if use_tools:
-            self.autogen_agent._tools = tools
-        else:
-            self.autogen_agent._tools = []
 
     def _adapt_tools(self, observations: List[ResourceObservation]):
         """Adapt the tools based on the agent's context."""
@@ -210,14 +197,11 @@ class AutogenAgent(BaseAgent):
                 available_tools_summary += tool.__name__ + ", "
             context += f"{available_tools_summary}\nGiven this information reason about your next action. Think step by step. Answer with a comprehensive explanation about what and why you want to do next."
         else:
-            error = self.agent.last_error
+            
+            context = self.system_prompt.build() + "\n\n---\n" + self.description.build() + "\n\n---\n"
 
-            if error:
-                context += (
-                    "\n ERROR!! Last turn you experienced the following error: " + error
-                )
             if reasoning_output:
-                context += f"\nYour reasoning about what to do next: {reasoning_output}"
+                context += f"\nYou previously reasoned about about what to do next: {reasoning_output}"
                 context += "\nGiven this reasoning now decide on your next action by performing two tool calls. You should always first use the tool 'update_plan' to store your reasoning about your long term goal i.e. the overarching thing you want to achive. Then additionaly use another tool to perform an immediate action in the environment."
             self._adapt_tools(observations)
 
