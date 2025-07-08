@@ -130,9 +130,9 @@ def summarize_tool_call(calls: Union[Dict[str, Any], List[Dict[str, Any]]]) -> s
     # Build summary strings
     summaries = [_summarize_one(c) for c in call_list]
 
-    # Filter out 'add_memory' if more than one
+    # Filter out 'update_plan' if more than one
     if len(summaries) > 1:
-        summaries = [s for s in summaries if not s.startswith("add_memory(")]
+        summaries = [s for s in summaries if not s.startswith("update_plan(")]
 
     # Join into one string
     return ", ".join(summaries)

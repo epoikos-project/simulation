@@ -13,17 +13,19 @@ from schemas.memory_log import MemoryLog
 
 
 @observe()
-async def add_memory(
+async def update_plan(
     memory: Annotated[
         str,
-        "A comprehensive textual description of a goal you want to accomplish.",
+        "A comprehensive textual description of a plan you want to accomplish in future ticks.",
     ],
     agent_id: str,
     simulation_id: str,
 ):
-    """A memory log entry about your long term goal. This is NOT an immediate action like moving one stepm but something you want to achieve in the future such as harvesting a certain resource or collaborating with another agent. Use this tool to prioritize what to remember to make informed decisions in the future."""
+    """A tool to store a plan for future reference. Update this plan with you current long term goal, as you gather more information or change your strategy. A goal could be to harvest a specific resource, collaborate with another agent, or explore a new area.
+    A plan does not describe an immediate action like moving one step, but rather a broader objective that you want to achieve in the future. Use this tool to update your current goals.
+    """
 
-    logger.success("Calling tool add_memory")
+    logger.success("Calling tool update_plan")
 
     with get_session() as db:
         try:

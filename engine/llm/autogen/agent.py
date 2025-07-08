@@ -108,8 +108,8 @@ class AutogenAgent(BaseAgent):
                 outstanding_requests
             )
             context += "\n Given this information devide whether you would like to accept and engange in the conversation request or not. You may only use ONE (1) tool at a time."
-        else:
-            context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
+        # else:
+        #     context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
         return (observations, context)
 
     def toggle_tools(self, use_tools: bool):
@@ -203,7 +203,7 @@ class AutogenAgent(BaseAgent):
 
         if reason:
             available_tools_summary = (
-                "These are possible actions you can perform in the world: "
+                "\nThese are possible actions you can perform in the world: "
             )
             # TODO: maybe provide a few more details on the tools
             for tool in self.tools:
@@ -218,7 +218,7 @@ class AutogenAgent(BaseAgent):
                 )
             if reasoning_output:
                 context += f"\nYour reasoning about what to do next: {reasoning_output}"
-            context += "\nGiven this reasoning now decide on your next action by performing a tool call. You should always first use the tool 'add_memory' to store your reasoning about your long term goal i.e. the overarching thing you want to achive not your next action. Then additionaly use another tool to perform an action. If you do not want to perform an action, just use the tool add_memory and then stop."
+                context += "\nGiven this reasoning now decide on your next action by performing two tool calls. You should always first use the tool 'update_plan' to store your reasoning about your long term goal i.e. the overarching thing you want to achive. Then additionaly use another tool to perform an immediate action in the environment."
             self._adapt_tools(observations)
 
         logger.debug(

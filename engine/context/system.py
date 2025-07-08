@@ -17,7 +17,7 @@ class SystemPrompt(BaseContext):
             "Use available information about the environment and talk to nearby people to guide your decisions.\n\n"
             "The world is structured as a 2D grid. The top-left corner is (0,0). The x-coordinate increases to the right, and the y-coordinate increases downward. "
             "For example, moving down from (0,0) results in (0,1), and moving right results in (1,0).\n\n"
-            "IMPORTANT: You may only use one tool (e.g., move, explore, harvest, or communicate) per tick. Choose your next action wisely.\n\n"
+            "IMPORTANT: Each tick you may use two tools: frist the tool 'update_memory' and then one other tool (e.g., move, explore, harvest, or communicate). Choose your next action wisely.\n\n"
             "----\nHarvesting Rules:\n"
             "1. If a resource requires only one agent and you are within harvesting range, you can harvest it immediately.\n"
             "2. If a resource requires multiple agents:\n"
