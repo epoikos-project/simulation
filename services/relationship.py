@@ -146,11 +146,22 @@ class RelationshipService(BaseService[RelationshipModel]):
                 r for r in rels if r.agent_a_id == agent_id or r.agent_b_id == agent_id
             ]
 
-        # build node set
+        # build node set from existing relationship edges
         ids: set[str] = set()
         for r in rels:
             ids.add(r.agent_a_id)
             ids.add(r.agent_b_id)
+
+        if agent_id:
+            # ensure the focal agent appears even if unconnected
+            ids.add(agent_id)
+        else:
+            # include all agents for global view (even if not yet connected)
+            all_agents = self._db.exec(
+                select(AgentModel).where(AgentModel.simulation_id == simulation_id)
+            ).all()
+            for agent in all_agents:
+                ids.add(agent.id)
 
         nodes = [
             {"id": nid, "label": self._db.get(AgentModel, nid).name} for nid in ids

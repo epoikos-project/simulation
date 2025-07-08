@@ -1,4 +1,5 @@
 from typing import override
+from loguru import logger
 
 from messages.message_base import MessageBase
 
@@ -27,3 +28,4 @@ class AgentCommunicationMessage(MessageBase):
             subject=f"simulation.{self.simulation_id}.agent.{self.to_agent_id}.communication",
             message=self.model_dump_json(),
         )
+        logger.warning(f'AgentCommunicationMessage {self.simulation_id}.{self.agent_id} -> {self.to_agent_id}: {self.content}')

@@ -1,5 +1,3 @@
-from typing import override
-
 from loguru import logger
 from sqlmodel import select
 
@@ -18,7 +16,6 @@ from schemas.agent import Agent
 from schemas.conversation import Conversation
 from schemas.memory_log import MemoryLog
 from schemas.message import Message
-from schemas.relationship import Relationship as RelationshipModel
 from schemas.resource import Resource
 
 from utils import compute_distance, compute_distance_raw
@@ -45,33 +42,6 @@ class AgentService(BaseService[Agent]):
         agent = self._db.exec(stmt).first()
         if not agent:
             raise ValueError(f"Agent with id or name '{id_or_name}' not found.")
-        return agent
-
-    @override
-    def create(self, obj: Agent, commit: bool = True) -> Agent:
-        agent = super().create(obj, commit)
-        # self._milvus.create_collection(
-        #     collection_name=agent.collection_name, dimension=128
-        # )
-        # for testing: add an example (dummy) relationship between this agent and one existing agent
-        if agent.simulation_id is not None:
-            stmt = select(Agent).where(
-                Agent.simulation_id == agent.simulation_id,
-                Agent.id != agent.id,
-            )
-            other = self._db.exec(stmt).first()
-            if other:
-                # seed a dummy tick=0 relationship for testing
-                rel = RelationshipModel(
-                    simulation_id=agent.simulation_id,
-                    agent_a_id=agent.id,
-                    agent_b_id=other.id,
-                    total_sentiment=0.0,
-                    update_count=1,
-                    tick=0,
-                )
-                self._db.add(rel)
-                self._db.commit()
         return agent
 
     def get_world_context(self, agent: Agent) -> list[ObservationUnion]:
