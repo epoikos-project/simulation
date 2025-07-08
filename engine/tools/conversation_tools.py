@@ -8,6 +8,7 @@ from loguru import logger
 from clients.db import get_session
 from clients.nats import nats_broker
 
+from messages.agent.agent_communication import AgentCommunicationMessage
 from services.agent import AgentService
 from services.conversation import ConversationService
 from services.relationship import RelationshipService
@@ -76,15 +77,24 @@ async def start_conversation(
                 agent_a_id=agent_id,
                 agent_b_id=other_agent_id,
             )
-            message = Message(
+            message_model = Message(
                 tick=simulation.tick,
                 agent_id=agent_id,
                 content=message,
                 conversation_id=conversation.id,
             )
             db.add(conversation)
-            db.add(message)
+            db.add(message_model)
             db.commit()
+            
+            agent_communication_message = AgentCommunicationMessage(
+                agent_id=agent_id,
+                simulation_id=simulation_id,
+                content=message,
+                id=message_model.id,
+                to_agent_id=message_model.to_agent_id
+            )
+            await agent_communication_message.publish(nats)
 
         except Exception as e:
             logger.exception(e)
@@ -119,7 +129,7 @@ async def accept_conversation_request(
             conversation.active = True
             conversation.declined = False
 
-            message = Message(
+            message_model = Message(
                 tick=conversation.simulation.tick,
                 content=message,
                 agent_id=agent_id,
@@ -127,8 +137,17 @@ async def accept_conversation_request(
             )
 
             db.add(conversation)
-            db.add(message)
+            db.add(message_model)
             db.commit()
+            
+            agent_communication_message = AgentCommunicationMessage(
+                agent_id=agent_id,
+                simulation_id=simulation_id,
+                content=message,
+                id=message_model.id,
+                to_agent_id=message_model.to_agent_id
+            )
+            await agent_communication_message.publish(nats)
 
         except Exception as e:
             logger.error(f"Error accepting conversation request: {e}")
@@ -163,7 +182,7 @@ async def decline_conversation_request(
             conversation.declined = True
             conversation.finished = True
 
-            message = Message(
+            message_model = Message(
                 tick=conversation.simulation.tick,
                 content=message,
                 agent_id=agent_id,
@@ -171,8 +190,17 @@ async def decline_conversation_request(
             )
 
             db.add(conversation)
-            db.add(message)
+            db.add(message_model)
             db.commit()
+            
+            agent_communication_message = AgentCommunicationMessage(
+                agent_id=agent_id,
+                simulation_id=simulation_id,
+                content=message,
+                id=message_model.id,
+                to_agent_id=message_model.to_agent_id
+            )
+            await agent_communication_message.publish(nats)
 
         except Exception as e:
             logger.error(f"Error accepting conversation request: {e}")

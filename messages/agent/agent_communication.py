@@ -7,6 +7,7 @@ class AgentCommunicationMessage(MessageBase):
     """Message sent when one agent communicates with another."""
 
     simulation_id: str
+    agent_id: str
     to_agent_id: str
     content: str
 

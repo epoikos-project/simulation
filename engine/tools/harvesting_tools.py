@@ -38,18 +38,19 @@ async def harvest_resource(
             agent = agent_service.get_by_id(agent_id)
             resource = resource_service.get_by_location(agent.simulation.world.id, x, y)
 
-            resource_service.harvest_resource(resource=resource, harvester=agent)
+            harvested = resource_service.harvest_resource(resource=resource, harvester=agent)
 
-            resource_harvested_message = ResourceHarvestedMessage(
-                simulation_id=simulation_id,
-                id=resource.id,
-                harvester_id=agent_id,
-                location=(resource.x_coord, resource.y_coord),
-                start_tick=agent.simulation.tick,
-                end_tick=agent.simulation.tick,
-                new_energy_level=agent.energy_level,
-            )
-            await resource_harvested_message.publish(nats)
+            if harvested:
+                resource_harvested_message = ResourceHarvestedMessage(
+                    simulation_id=simulation_id,
+                    id=resource.id,
+                    harvester_id=agent_id,
+                    location=(resource.x_coord, resource.y_coord),
+                    start_tick=agent.simulation.tick,
+                    end_tick=agent.simulation.tick,
+                    new_energy_level=agent.energy_level,
+                )
+                await resource_harvested_message.publish(nats)
 
     except Exception as e:
         logger.error(f"Error harvesting resource: {e}")
