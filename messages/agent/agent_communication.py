@@ -11,8 +11,14 @@ class AgentCommunicationMessage(MessageBase):
     to_agent_id: str
     content: str
     created_at: str
-
+    
     @override
-    def get_channel_name(self) -> str:
-        """Get the channel name for the recipient agent."""
-        return f"simulation.{self.simulation_id}.agent.{self.to_agent_id}.communication"
+    async def publish(self, nats):
+        await nats.publish(
+            subject=f"simulation.{self.simulation_id}.agent.{self.agent_id}.communication",
+            message=self.model_dump_json(),
+        )
+        await nats.publish(
+            subject=f"simulation.{self.simulation_id}.agent.{self.to_agent_id}.communication",
+            message=self.model_dump_json(),
+        )
