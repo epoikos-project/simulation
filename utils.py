@@ -124,8 +124,6 @@ def summarize_tool_call(calls: Union[Dict[str, Any], List[Dict[str, Any]]]) -> s
         )
 
     # If no calls present, return early
-    if len(call_list) == 0:
-        return "No tool call made."
 
     # Build summary strings
     summaries = [_summarize_one(c) for c in call_list]
@@ -133,6 +131,9 @@ def summarize_tool_call(calls: Union[Dict[str, Any], List[Dict[str, Any]]]) -> s
     # Filter out 'update_plan' if more than one
     if len(summaries) > 1:
         summaries = [s for s in summaries if not s.startswith("update_plan(")]
+
+    if len(call_list) == 0 or len(summaries) == 0:
+        return "No tool call made."
 
     # Join into one string
     return ", ".join(summaries)

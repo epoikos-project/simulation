@@ -37,7 +37,7 @@ class Agent(BaseModel, table=True):
     x_coord: int = Field(default=0)
     y_coord: int = Field(default=0)
     visibility_range: int = Field(default=5)
-    range_per_move: int = Field(default=1)
+    range_per_move: int = Field(default=5)
 
     simulation: "Simulation" = Relationship(back_populates="agents")
     harvesting_resource: "Resource" = Relationship(back_populates="harvesters")

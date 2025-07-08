@@ -24,7 +24,7 @@ from engine.context.system import SystemDescription, SystemPrompt
 from messages.agent.agent_action import AgentActionMessage
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
-from schemas.action_log import ActionLog
+
 from services.action_log import ActionLogService
 from services.agent import AgentService
 
@@ -192,7 +192,7 @@ class BaseAgent:
             last_tool_summary = summarize_tool_call(last_tool_call)
 
             tool_calls: FunctionCall = []
-            error = None
+            # error = None
             for message in output.messages:
                 if message.type == "ToolCallExecutionEvent":
                     for result in message.content:
