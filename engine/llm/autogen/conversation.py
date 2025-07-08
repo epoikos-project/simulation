@@ -14,6 +14,7 @@ from engine.context.system import SystemDescription, SystemPrompt
 from engine.llm.autogen.base import BaseAgent
 from engine.tools.conversation_tools import continue_conversation, end_conversation
 
+from engine.tools.plan_tools import make_plan
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
 

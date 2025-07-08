@@ -16,7 +16,7 @@ class SystemPrompt(BaseContext):
             "3. Communicate and cooperate with other agents to form better plans and gather resources more effectively.\n\n"
             "Use available information about the environment and talk to nearby people to guide your decisions.\n\n"
             "The world is structured as a 2D grid. The top-left corner is (0,0). The x-coordinate increases to the right, and the y-coordinate increases downward. You may move 5 tiles at a time."
-            "IMPORTANT: Each tick you may use two tools: first you should only once use the tool 'update_memory' and then you should use a different tool (e.g., move, explore, harvest, or communicate) to perform an action. Choose your next action wisely. \n\n"
+            "IMPORTANT: Each tick you may use two tools: first you should only once use the tool 'update_plan' and then you should use a different tool (e.g., move, explore, harvest, or communicate) to perform an action. Choose your next action wisely. \n\n"
             "----\nHarvesting Rules:\n"
             "1. If a resource requires only one agent and you are within harvesting range, you can harvest it immediately.\n"
             "2. If a resource requires multiple agents:\n"
@@ -32,5 +32,5 @@ class SystemDescription(BaseContext):
     """
 
     def build(self) -> str:
-        return f"These are your personal attributes: ID: {self.agent.id}, Name: {self.agent.name}, Your current location: [{self.agent.x_coord}, {self.agent.y_coord}]"
+        return f"These are your personal attributes: ID: {self.agent.id}, Name: {self.agent.name}, Your current location: [{self.agent.x_coord}, {self.agent.y_coord}], World grid: [0,0 to {self.agent.simulation.world.size_x - 1},{self.agent.simulation.world.size_y - 1}]"
         # , personality=personality)

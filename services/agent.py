@@ -42,7 +42,12 @@ class AgentService(BaseService[Agent]):
         stmt = select(Agent).where(
             ((Agent.id == id_or_name) | (Agent.name == id_or_name)) & (Agent.simulation_id == simulation_id)
         )
-        return self._db.exec(stmt).first()
+        agent = self._db.exec(stmt).first()
+        if not agent:
+            raise ValueError(
+                f"Agent with id or name '{id_or_name}' not found."
+            )
+        return agent
 
     @override
     def create(self, obj: Agent, commit: bool = True) -> Agent:
@@ -148,7 +153,7 @@ class AgentService(BaseService[Agent]):
     def get_outstanding_conversation_requests(
         self, agent_id: str
     ) -> list[Conversation]:
-        """Get all agents that have an outstanding conversation request with the given agent."""
+        """Get all conversations that have an outstanding conversation request with the given agent."""
 
         conversations = self._db.exec(
             select(Conversation).where(
@@ -267,10 +272,10 @@ class AgentService(BaseService[Agent]):
 
         if agent_location == destination:
             logger.error(
-                f"Agent {agent.id} is already at the destination {destination}."
+                f"Agent {agent.id} is at already at the destination {destination}."
             )
             raise ValueError(
-                f"Agent {agent.id} is already at the destination {destination}."
+                f"You are already at the destination {destination}. You cannot move to your own position!"
             )
 
         # Set agent field of view and get path
@@ -318,6 +323,41 @@ class AgentService(BaseService[Agent]):
             )
 
         return new_location
+    
+    def move_agent_in_random_direction(self, agent: Agent) -> tuple[int, int]:
+        """
+        Moves the specified agent in a random direction within the world.
+
+        Args:
+            agent (Agent): The agent instance to move.
+
+        Returns:
+            tuple[int, int]: The new (x, y) coordinates of the agent after the move.
+        """
+        import random
+
+        # Get the world boundaries
+        world = agent.simulation.world
+        max_steps = 4
+
+        # Generate all possible destinations within max_steps in any direction
+        possible_destinations = []
+        for dx in range(-max_steps, max_steps + 1):
+            for dy in range(-max_steps, max_steps + 1):
+                if dx == 0 and dy == 0:
+                    continue
+            new_x = agent.x_coord + dx
+            new_y = agent.y_coord + dy
+            if 0 <= new_x < world.size_x and 0 <= new_y < world.size_y:
+                possible_destinations.append((new_x, new_y))
+
+        if not possible_destinations:
+            raise ValueError("No valid random destinations available for agent.")
+
+        destination = random.choice(possible_destinations)
+        # Find the direction string or coordinate to pass to move_agent_in_direction
+        # Here, we directly use the move_agent method since we have a coordinate
+        return self.move_agent(agent, destination)
 
     def get_world_obstacles(self, agent: Agent):
         """Get obstacles for agent"""

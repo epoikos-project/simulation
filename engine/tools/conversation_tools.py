@@ -40,23 +40,27 @@ async def start_conversation(
                 raise ValueError("Cannot start a conversation with oneself.")
             nats = nats_broker()
             agent_service = AgentService(db=db, nats=nats)
+            other_agent = agent_service.get_by_id_or_name(other_agent_id, simulation_id=simulation_id)
 
             open_requests = agent_service.get_outstanding_conversation_requests(
                 agent_id
             )
+            
+            logger.warning(f"Open requests for agent {agent_id}: {open_requests}")
+            logger.warning(f"Other agent ID: {other_agent_id}")
 
             for request in open_requests:
+                logger.warning(open_requests)
                 if (
-                    request.agent_b_id == other_agent_id
-                    or request.agent_a_id == other_agent_id
+                    request.agent_b_id == other_agent.id
+                    or request.agent_a_id == other_agent.id
                 ):
                     logger.error(
                         f"Conversation request with {other_agent_id} already exists."
                     )
                     raise ValueError(
-                        "Conversation request already exists with this agent."
+                        f"Conversation request with {other_agent_id} already exists."
                     )
-            other_agent = agent_service.get_by_id_or_name(other_agent_id, simulation_id=simulation_id)
             if other_agent.harvesting_resource_id is not None:
                 logger.error(
                     f"Agent {other_agent.id} is currently harvesting a resource and cannot start a conversation."

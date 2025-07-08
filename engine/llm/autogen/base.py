@@ -25,6 +25,7 @@ from messages.agent.agent_action import AgentActionMessage
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
 
+from schemas.action_log import ActionLog
 from services.action_log import ActionLogService
 from services.agent import AgentService
 
@@ -55,6 +56,7 @@ class BaseAgent:
 
         self.initial_tools = tools
         self.tools = list(tools)  # Make a shallow copy to avoid sharing memory address
+        self.next_tools = list(tools)
         self.parallel_tool_calls = False
                 
                 
@@ -125,7 +127,7 @@ class BaseAgent:
             context += "\n\n In the next move you will have the following tools available:\n"
             # Append a list of available tools (function name and docstring) to the context
             context += "\n".join(
-                f"- {tool.__name__}: {tool.__doc__ or ''}" for tool in self.initial_tools
+                f"- {tool.__name__}: {tool.__doc__ or ''}" for tool in self.next_tools
             )
 
         agent_prompt_message = AgentPromptMessage(
@@ -151,10 +153,6 @@ class BaseAgent:
         )
         
         last_tool_call, last_tool_summary = await self._update_action_log(output, reason)
-
-        logger.debug(
-            f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generated output: {output.messages[-1].content}"
-        )
         
         agent_response_message = AgentResponseMessage(
             id=self.agent.id,
@@ -192,7 +190,7 @@ class BaseAgent:
             last_tool_summary = summarize_tool_call(last_tool_call)
 
             tool_calls: FunctionCall = []
-            # error = None
+            error = None
             for message in output.messages:
                 if message.type == "ToolCallExecutionEvent":
                     for result in message.content:
@@ -236,9 +234,11 @@ class BaseAgent:
         """
         if use_tools:
             self.tools = list(self.initial_tools)
+            self.next_tools = list(self.initial_tools)
             self._client, self.autogen_agent = self._initialize_llm()
 
         else:
+            self.next_tools = list(self.initial_tools)
             self.tools = []
             self._client, self.autogen_agent = self._initialize_llm()
 

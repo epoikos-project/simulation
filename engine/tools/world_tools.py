@@ -28,7 +28,9 @@ async def move(
     agent_id: str,
     simulation_id: str,
 ):
-    """Move in the world. Specify the exact coordinate you want to move to. You may move up to 5 coordinates away from your current location with each tool call."""  # You can only move to adjacent tiles. This will cost one tick and energy."""
+    """Move in the world. Specify the exact coordinate you want to move to. 
+    You may move up to 5 coordinates away from your current location with each tool call. 
+    YOU CANNOT MOVE TO YOUR OWN POSITION."""
 
     logger.success("Calling tool move")
     try:
@@ -68,3 +70,27 @@ async def move(
         logger.exception(e)
         logger.error(f"Error moving agent: {e}")
         raise
+
+@observe()
+async def random_move(
+    agent_id: str,
+    simulation_id: str,
+):
+    """Use this tool if you don't know what do to next or get stuck on the same position."""  # You can only move to adjacent tiles.
+
+    logger.success("Calling tool random_move")
+
+    try:
+        with get_session() as db:
+            nats = nats_broker()
+
+            agent_service = AgentService(db=db, nats=nats)
+            agent = agent_service.get_by_id(agent_id)
+            agent_service.move_agent_in_random_direction(
+                agent=agent,
+            )
+    except Exception as e:
+        logger.exception(e)
+        logger.error(f"Error getting agent service: {e}")
+        raise
+ 
