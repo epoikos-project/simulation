@@ -32,7 +32,7 @@ async def start_conversation(
 ) -> str:
     """Start a new conversation with another agent. Each exchanged message takes one tick."""
     with get_session() as db:
-        logger.success("Calling tool start_conversation")
+        logger.success(f"Calling tool start_conversation for agent {agent_id}")
 
         try:
             if agent_id == other_agent_id:
@@ -92,7 +92,8 @@ async def start_conversation(
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id
+                to_agent_id=message_model.to_agent_id,
+                created_at=message_model.created_at
             )
             await agent_communication_message.publish(nats)
 
@@ -114,7 +115,7 @@ async def accept_conversation_request(
 ) -> None:
     """Accept a conversation request from another agent."""
 
-    logger.success("Calling tool accept_conversation_request")
+    logger.success(f"Calling tool accept_conversation_request for agent {agent_id}")
 
     with get_session() as db:
         try:
@@ -145,7 +146,8 @@ async def accept_conversation_request(
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id
+                to_agent_id=message_model.to_agent_id,
+                created_at=message_model.created_at
             )
             await agent_communication_message.publish(nats)
 
@@ -166,7 +168,7 @@ async def decline_conversation_request(
 ) -> None:
     """Decline a conversation request from another agent."""
 
-    logger.success("Calling tool decline_conversation_request")
+    logger.success(f"Calling tool decline_conversation_request for agent {agent_id}")
 
     with get_session() as db:
         try:
@@ -192,18 +194,20 @@ async def decline_conversation_request(
             db.add(conversation)
             db.add(message_model)
             db.commit()
-            
+
             agent_communication_message = AgentCommunicationMessage(
                 agent_id=agent_id,
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id
+                to_agent_id=message_model.to_agent_id,
+                created_at=message_model.created_at
+                
             )
             await agent_communication_message.publish(nats)
 
         except Exception as e:
-            logger.error(f"Error accepting conversation request: {e}")
+            logger.error(f"Error declining conversation request: {e}")
             raise e
 
 
@@ -218,7 +222,7 @@ async def continue_conversation(
 ) -> None:
     """Send a message in an active conversation. This will take one tick."""
 
-    logger.success("Calling tool continue_conversation")
+    logger.success(f"Calling tool continue_conversation for agent {agent_id}")
 
     with get_session() as db:
         try:
@@ -244,14 +248,25 @@ async def continue_conversation(
                 commit=False,
             )
 
-            message = Message(
+            message_model = Message(
                 tick=conversation.simulation.tick,
                 content=message,
                 agent_id=agent_id,
                 conversation_id=conversation.id,
             )
-            db.add(message)
+            db.add(message_model)
             db.commit()
+            
+            agent_communication_message = AgentCommunicationMessage(
+                agent_id=agent_id,
+                simulation_id=simulation_id,
+                content=message,
+                id=message_model.id,
+                to_agent_id=message_model.to_agent_id,
+                created_at=message_model.created_at
+                
+            )
+            await agent_communication_message.publish(nats)
 
         except Exception as e:
             logger.error(f"Error continuing conversation: {e}")
@@ -269,7 +284,7 @@ async def end_conversation(
 ) -> None:
     """Only call this tool if you do not want to exchange any more messages in the conversation. This will end the conversation for you and the other agent."""
 
-    logger.success("Calling tool end_conversation")
+    logger.success(f"Calling tool end_conversation for agent {agent_id}")
 
     with get_session() as db:
         try:
@@ -281,15 +296,26 @@ async def end_conversation(
             conversation.active = False
             conversation.finished = True
 
-            message = Message(
+            message_model = Message(
                 tick=conversation.simulation.tick,
                 content=reason,
                 agent_id=agent_id,
                 conversation_id=conversation.id,
             )
             db.add(conversation)
-            db.add(message)
+            db.add(message_model)
             db.commit()
+            
+            agent_communication_message = AgentCommunicationMessage(
+                agent_id=agent_id,
+                simulation_id=simulation_id,
+                content=reason,
+                id=message_model.id,
+                to_agent_id=message_model.to_agent_id,
+                created_at=message_model.created_at
+            )
+            await agent_communication_message.publish(nats)
+
         except Exception as e:
             logger.error(f"Error ending conversation: {e}")
             raise e

@@ -10,6 +10,7 @@ class AgentActionMessage(MessageBase):
     agent_id: str
     action: str
     tick: int
+    created_at: str
 
     @override
     def get_channel_name(self) -> str:

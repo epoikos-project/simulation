@@ -112,19 +112,6 @@ class AutogenAgent(BaseAgent):
         #     context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
         return (observations, context)
 
-    def toggle_tools(self, use_tools: bool):
-        """
-        Toggle the use of tools for the agent.
-        If use_tools is True, the agent will use tools, otherwise it will not.
-        """
-        tools: List[BaseTool] = [
-            self._make_bound_tool(tool) for tool in available_tools
-        ]
-        if use_tools:
-            self.autogen_agent._tools = tools
-        else:
-            self.autogen_agent._tools = []
-
     def _adapt_tools(self, observations: List[ResourceObservation]):
         """Adapt the tools based on the agent's context."""
 

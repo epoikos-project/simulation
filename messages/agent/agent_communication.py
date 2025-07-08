@@ -10,6 +10,7 @@ class AgentCommunicationMessage(MessageBase):
     agent_id: str
     to_agent_id: str
     content: str
+    created_at: str
 
     @override
     def get_channel_name(self) -> str:

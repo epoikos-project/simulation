@@ -301,16 +301,16 @@ class AgentService(BaseService[Agent]):
         agent_fov = agent.visibility_range
         agent_location = (agent.x_coord, agent.y_coord)
 
-        # agents = self._db.exec(
-        #     select(Agent).where(
-        #         Agent.simulation_id == agent.simulation_id,
-        #         Agent.id != agent.id,  # Exclude the current agent
-        #         Agent.x_coord >= agent_location[0] - agent_fov,
-        #         Agent.x_coord <= agent_location[0] + agent_fov,
-        #         Agent.y_coord >= agent_location[1] - agent_fov,
-        #         Agent.y_coord <= agent_location[1] + agent_fov,
-        #     )
-        # ).all()
+        agents = self._db.exec(
+            select(Agent).where(
+                Agent.simulation_id == agent.simulation_id,
+                Agent.id != agent.id,  # Exclude the current agent
+                Agent.x_coord >= agent_location[0] - agent_fov,
+                Agent.x_coord <= agent_location[0] + agent_fov,
+                Agent.y_coord >= agent_location[1] - agent_fov,
+                Agent.y_coord <= agent_location[1] + agent_fov,
+            )
+        ).all()
 
         # Filter resources based on agents location and visibility range
         # resources = self._db.exec(
@@ -342,6 +342,16 @@ class AgentService(BaseService[Agent]):
         ).all()
 
         return actions
+    
+    def get_last_k_memory_logs(self, agent: Agent, k: int = 5) -> list[MemoryLog]:
+        """Get the last k memory logs of an agent."""
+        memory_logs = self._db.exec(
+            select(MemoryLog)
+            .where(MemoryLog.agent_id == agent.id)
+            .order_by(MemoryLog.tick.desc())
+            .limit(k)
+        ).all()
+        return memory_logs
 
     def get_last_conversation(self, agent: Agent) -> list[Message]:
         conversation = ConversationService(self._db, self._nats).get_last_conversation_by_agent_id(

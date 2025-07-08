@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 from faststream.nats import NatsBroker
+from loguru import logger
 from pydantic import BaseModel
 
 

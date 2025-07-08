@@ -14,7 +14,7 @@ available_tools = [
     update_plan,
     # make_plan,
     # add_task,
-    # start_conversation,
-    # accept_conversation_request,
-    # decline_conversation_request,
+    start_conversation,
+    accept_conversation_request,
+    decline_conversation_request,
 ]

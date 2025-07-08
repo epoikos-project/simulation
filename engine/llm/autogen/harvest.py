@@ -56,20 +56,20 @@ class HarvestingAgent(BaseAgent):
     async def generate(self, reason: bool = False, reasoning_output: str | None = None):
         observations, context = self.get_context()
 
-        self._update_langfuse_trace_name(f"Harvesting Tick {self.agent.name}")
-
         if reason:
-            self.tools = []
-            self._initialize_llm()
+            self.toggle_tools(use_tools=False)
             self._update_langfuse_trace_name(
                 f"Harvesting Reason Tick {self.agent.name}"
             )
             context += "\n---\nYou are reasoning about the next action to take. Please think step by step and provide a detailed explanation of your reasoning."
-
+        else:
+            self.toggle_tools(use_tools=True)
+            self._update_langfuse_trace_name(f"Harvesting Tick {self.agent.name}")
+            
         if reasoning_output:
             context += f"\n---\nYour reasoning output from the last tick was:\n{reasoning_output}"
 
-        output = await self.run_autogen_agent(context=context)
+        output = await self.run_autogen_agent(context=context, reason=reason)
 
         return output
 

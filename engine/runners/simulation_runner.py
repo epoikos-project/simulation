@@ -12,6 +12,7 @@ from clients.db import get_session
 from engine.llm.autogen.agent import AutogenAgent
 from engine.runners.agent_runner import AgentRunner
 
+from messages.agent.agent_action import AgentActionMessage
 from messages.simulation.simulation_tick import SimulationTickMessage
 from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
@@ -194,6 +195,17 @@ class SimulationRunner:
                     action=f"harvested_resource(resource_id={resource.id}, energy_yield={resource.energy_yield}) together with {all_harvesters}",
                 )
                 db.add(action_log)
+                
+                agent_action_message = AgentActionMessage(
+                    id=action_log.id,
+                    simulation_id=action_log.simulation_id,
+                    agent_id=action_log.agent_id,
+                    action=action_log.action,
+                    tick=action_log.tick,
+                    created_at=action_log.created_at
+                )
+                await agent_action_message.publish(nats)
+            
                 resource_harvested_message = ResourceHarvestedMessage(
                     simulation_id=resource.world.simulation_id,
                     id=resource.id,
