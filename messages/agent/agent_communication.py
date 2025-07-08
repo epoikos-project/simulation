@@ -1,4 +1,5 @@
 from typing import override
+
 from loguru import logger
 
 from messages.message_base import MessageBase
@@ -17,7 +18,7 @@ class AgentCommunicationMessage(MessageBase):
     def get_channel_name(self) -> str:
         """Get the channel name for the recipient agent."""
         return f"simulation.{self.simulation_id}.agent.{self.agent_id}.communication"
-    
+
     @override
     async def publish(self, nats):
         await nats.publish(
@@ -28,4 +29,6 @@ class AgentCommunicationMessage(MessageBase):
             subject=f"simulation.{self.simulation_id}.agent.{self.to_agent_id}.communication",
             message=self.model_dump_json(),
         )
-        logger.warning(f'AgentCommunicationMessage {self.simulation_id}.{self.agent_id} -> {self.to_agent_id}: {self.content}')
+        logger.warning(
+            f"AgentCommunicationMessage {self.simulation_id}.{self.agent_id} -> {self.to_agent_id}: {self.content}"
+        )

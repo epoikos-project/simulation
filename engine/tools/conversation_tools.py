@@ -136,7 +136,7 @@ async def accept_conversation_request(
 
             conversation.active = True
             conversation.declined = False
-            
+
             other_agent_id = (
                 conversation.agent_b_id
                 if conversation.agent_a_id == agent_id
@@ -196,7 +196,7 @@ async def decline_conversation_request(
             conversation.active = False
             conversation.declined = True
             conversation.finished = True
-            
+
             other_agent_id = (
                 conversation.agent_b_id
                 if conversation.agent_a_id == agent_id
@@ -252,7 +252,7 @@ async def continue_conversation(
             if not conversation:
                 logger.error(f"No active conversation found for agent {agent_id}.")
                 raise ValueError("No active conversation found.")
-            
+
             other_agent_id = (
                 conversation.agent_b_id
                 if conversation.agent_a_id == agent_id
@@ -261,11 +261,7 @@ async def continue_conversation(
 
             relationship_service.update_relationship(
                 agent1_id=agent_id,
-                agent2_id=(
-                    conversation.agent_a_id
-                    if conversation.agent_b_id == agent_id
-                    else conversation.agent_b_id
-                ),
+                agent2_id=other_agent_id,
                 message=message,
                 simulation_id=conversation.simulation.id,
                 tick=conversation.simulation.tick,
@@ -318,7 +314,7 @@ async def end_conversation(
 
             conversation.active = False
             conversation.finished = True
-            
+
             other_agent_id = (
                 conversation.agent_b_id
                 if conversation.agent_a_id == agent_id

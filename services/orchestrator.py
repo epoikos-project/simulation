@@ -28,9 +28,9 @@ from services.world import WorldService
 
 from schemas.agent import Agent
 from schemas.configuration import Configuration as ConfigTable
+from schemas.resource import Resource
 from schemas.simulation import Simulation
 from schemas.world import World
-from schemas.resource import Resource
 
 
 class OrchestratorService:
