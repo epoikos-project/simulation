@@ -22,6 +22,6 @@ class ObservationContext(BaseContext):
             "Observations: You have made the following observations in your surroundings: \n"
             + "\n".join([str(obs) for obs in observations])
             if observations
-            else "Observations: You have not made any observations yet. Move around to discover your surroundings. "
+            else "Observations: You have not made any observations yet. As your next action move around to discover your surroundings. "
         )
         return observation_description

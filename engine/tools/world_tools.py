@@ -9,8 +9,10 @@ from clients.nats import nats_broker
 from messages.world.agent_moved import AgentMovedMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
 
-from services.agent import AgentService
+from services.agent import AgentService, MovementTruncated
 from services.resource import ResourceService
+
+from utils import compute_distance
 
 
 @observe()
@@ -26,7 +28,7 @@ async def move(
     agent_id: str,
     simulation_id: str,
 ):
-    """Move in the world. You can only move to adjacent tiles. This will cost one tick and energy."""
+    """Move in the world. Specify the exact coordinate you want to move to. You may move up to 5 coordinates away from your current location with each tool call."""  # You can only move to adjacent tiles. This will cost one tick and energy."""
 
     logger.success("Calling tool move")
     try:
@@ -37,21 +39,32 @@ async def move(
             agent_service = AgentService(db=db, nats=nats)
             agent = agent_service.get_by_id(agent_id)
             start_location = (agent.x_coord, agent.y_coord)
+            truncated_exc = None
 
-            new_location = agent_service.move_agent(agent=agent, destination=(x, y))
+            try:
+                new_location = agent_service.move_agent(agent=agent, destination=(x, y))
+                destination = f"({x}, {y})"
+            except MovementTruncated as e:
+                truncated_exc = e
+                new_location = e.new_location
+                destination = str((new_location[0], new_location[1]))
 
             agent_moved_message = AgentMovedMessage(
                 simulation_id=simulation_id,
                 id=agent_id,
                 start_location=start_location,
                 new_location=new_location,
-                destination=f"({x}, {y})",
-                num_steps=1,
+                destination=destination,
+                num_steps=compute_distance(start_location, new_location),
                 new_energy_level=agent.energy_level,
             )
             await agent_moved_message.publish(nats)
             logger.debug("Agent moved message published")
+
+            if truncated_exc is not None:
+                raise truncated_exc
+
     except Exception as e:
         logger.exception(e)
         logger.error(f"Error moving agent: {e}")
-        raise e
+        raise

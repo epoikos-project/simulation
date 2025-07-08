@@ -144,7 +144,9 @@ class OrchestratorService:
                 hunger=hunger,
                 energy_level=energy_level,
                 visibility_range=agent_cfg.get("visibility_range", 5),
-                range_per_move=agent_cfg.get("range_per_move", 1),
+                range_per_move=agent_cfg.get(
+                    "range_per_move", 5
+                ),  # TODO: make configurable
                 name=name,
                 x_coord=x,
                 y_coord=y,

@@ -20,10 +20,10 @@ from config.openai import AvailableModels
 from engine.context.base import BaseContext
 from engine.context.system import SystemDescription, SystemPrompt
 
+from messages.agent.agent_action import AgentActionMessage
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
-from messages.agent.agent_action import AgentActionMessage
-from schemas.action_log import ActionLog
+
 from services.action_log import ActionLogService
 from services.agent import AgentService
 
@@ -170,13 +170,15 @@ class BaseAgent:
     def _add_feedback(self, output: TaskResult, tool_calls: list[FunctionCall]) -> bool:
         return None
 
-    def _update_action_log(self, output: TaskResult, reason: bool):
+    def _update_action_log(
+        self, output: TaskResult, reason: bool, error: str | None = None
+    ):
         if not reason:
             last_tool_call = extract_tool_call_info(output)
             last_tool_summary = summarize_tool_call(last_tool_call)
 
             tool_calls: FunctionCall = []
-            error = None
+            # error = None
             for message in output.messages:
                 if message.type == "ToolCallExecutionEvent":
                     for result in message.content:
@@ -190,9 +192,7 @@ class BaseAgent:
                 simulation_id=self.agent.simulation_id,
                 action=last_tool_summary,
                 feedback=(
-                    "Error + " + error
-                    if error
-                    else self._add_feedback(output, tool_calls)
+                    "" + error if error else self._add_feedback(output, tool_calls)
                 ),
                 tick=self.agent.simulation.tick,
             )

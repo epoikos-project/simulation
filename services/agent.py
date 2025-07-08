@@ -24,6 +24,12 @@ from schemas.resource import Resource
 from utils import compute_distance, compute_distance_raw
 
 
+class MovementTruncated(ValueError):
+    def __init__(self, msg, new_location):
+        super().__init__(msg)
+        self.new_location = new_location
+
+
 class AgentService(BaseService[Agent]):
     def __init__(self, db, nats):
         super().__init__(Agent, db, nats)
@@ -272,7 +278,10 @@ class AgentService(BaseService[Agent]):
                 f"Path from {agent_location} to {destination} not found. Agent may be blocked by obstacles. Remember that you do not have to stand on top of a resource to harvest it! "
             )
 
-        new_location = path[min(agent.range_per_move, distance)]
+        steps_to_move = min(distance, agent.range_per_move)
+        new_location = path[steps_to_move]
+
+        # new_location = path[min(agent.range_per_move, distance)]
 
         agent.x_coord = new_location[0]
         agent.y_coord = new_location[1]
@@ -283,15 +292,20 @@ class AgentService(BaseService[Agent]):
             agent.simulation.world.id, agent.x_coord, agent.y_coord
         )
 
-        agent.energy_level -= current_region.region_energy_cost
-
-        logger.debug("Before db commit")
+        agent.energy_level -= current_region.region_energy_cost * steps_to_move
 
         self._db.add(agent)
         self._db.commit()
 
-        logger.debug("After db commit")
-        # await agent_moved_message.publish(self._nats)
+        if steps_to_move < distance:
+            logger.warning(
+                f"Intended to move {distance} steps to {destination}, "
+                f"but can only move {agent.range_per_move}. Truncated movement to {path[steps_to_move]}."
+            )
+            raise MovementTruncated(
+                f"Intended to move {distance} steps to {destination}, but can only move {agent.range_per_move}. Truncated movement to {path[steps_to_move]}.",
+                new_location,
+            )
 
         return new_location
 
@@ -344,7 +358,18 @@ class AgentService(BaseService[Agent]):
         return actions
 
     def get_last_conversation(self, agent: Agent) -> list[Message]:
-        conversation = ConversationService(self._db, self._nats).get_last_conversation_by_agent_id(
-            agent.id
-        )
+        conversation = ConversationService(
+            self._db, self._nats
+        ).get_last_conversation_by_agent_id(agent.id)
         return conversation
+
+    def get_last_k_memory_logs(self, agent: Agent, k: int = 5) -> list[MemoryLog]:
+        """Get the last k memory logs of an agent."""
+        memory_logs = self._db.exec(
+            select(MemoryLog)
+            .where(MemoryLog.agent_id == agent.id)
+            .order_by(MemoryLog.tick.desc())
+            .limit(k)
+        ).all()
+
+        return memory_logs
