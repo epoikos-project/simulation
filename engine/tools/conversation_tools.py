@@ -99,7 +99,7 @@ async def start_conversation(
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id,
+                to_agent_id=other_agent.id,
                 created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
@@ -136,6 +136,12 @@ async def accept_conversation_request(
 
             conversation.active = True
             conversation.declined = False
+            
+            other_agent_id = (
+                conversation.agent_b_id
+                if conversation.agent_a_id == agent_id
+                else conversation.agent_a_id
+            )
 
             message_model = Message(
                 tick=conversation.simulation.tick,
@@ -153,7 +159,7 @@ async def accept_conversation_request(
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id,
+                to_agent_id=other_agent_id,
                 created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
@@ -190,6 +196,12 @@ async def decline_conversation_request(
             conversation.active = False
             conversation.declined = True
             conversation.finished = True
+            
+            other_agent_id = (
+                conversation.agent_b_id
+                if conversation.agent_a_id == agent_id
+                else conversation.agent_a_id
+            )
 
             message_model = Message(
                 tick=conversation.simulation.tick,
@@ -207,7 +219,7 @@ async def decline_conversation_request(
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id,
+                to_agent_id=other_agent_id,
                 created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
@@ -240,6 +252,12 @@ async def continue_conversation(
             if not conversation:
                 logger.error(f"No active conversation found for agent {agent_id}.")
                 raise ValueError("No active conversation found.")
+            
+            other_agent_id = (
+                conversation.agent_b_id
+                if conversation.agent_a_id == agent_id
+                else conversation.agent_a_id
+            )
 
             relationship_service.update_relationship(
                 agent1_id=agent_id,
@@ -268,7 +286,7 @@ async def continue_conversation(
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id,
+                to_agent_id=other_agent_id,
                 created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
@@ -300,6 +318,12 @@ async def end_conversation(
 
             conversation.active = False
             conversation.finished = True
+            
+            other_agent_id = (
+                conversation.agent_b_id
+                if conversation.agent_a_id == agent_id
+                else conversation.agent_a_id
+            )
 
             message_model = Message(
                 tick=conversation.simulation.tick,
@@ -316,7 +340,7 @@ async def end_conversation(
                 simulation_id=simulation_id,
                 content=reason,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id,
+                to_agent_id=other_agent_id,
                 created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
