@@ -171,18 +171,14 @@ class BaseAgent:
                 "input_tokens": self._client.actual_usage().prompt_tokens,
                 "output_tokens": self._client.actual_usage().completion_tokens,
             },
-            input={
-                "system_message": self.autogen_agent._system_messages[0].content,
-                "description": self.autogen_agent._description,
-                "context": context,
-                "tools": (
-                    [tool.schema for tool in self.autogen_agent._tools]
-                    if not reason
-                    else last_tool_summary
-                ),
-            },
-            output=output,
-            metadata=last_tool_call,
+            input=context,
+            output=output.messages[-1].content,
+            metadata={
+                "last_tool_call": last_tool_call,
+                "system_prompt": self.autogen_agent._system_messages[0].content,
+                "tools": [tool.schema for tool in self.autogen_agent._tools]
+
+            }
         )
         
         return output
@@ -209,7 +205,7 @@ class BaseAgent:
                 agent_id=self.agent.id,
                 simulation_id=self.agent.simulation_id,
                 action=last_tool_summary,
-                feedback="Error + " + error if error else self._add_feedback(output, tool_calls),
+                feedback="ERROR!!! " + error if error else self._add_feedback(output, tool_calls),
                 tick=self.agent.simulation.tick,
             )
             self.action_log_service.create(

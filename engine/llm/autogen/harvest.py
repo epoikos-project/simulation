@@ -61,13 +61,13 @@ class HarvestingAgent(BaseAgent):
             self._update_langfuse_trace_name(
                 f"Harvesting Reason Tick {self.agent.name}"
             )
-            context += "\n---\nYou are reasoning about the next action to take. Please think step by step and provide a detailed explanation of your reasoning."
+            context += "\n\n---\nYou are reasoning about the next action to take. Please think step by step and provide a detailed explanation of your reasoning."
         else:
             self.toggle_tools(use_tools=True)
             self._update_langfuse_trace_name(f"Harvesting Tick {self.agent.name}")
             
         if reasoning_output:
-            context += f"\n---\nYour reasoning output from the last tick was:\n{reasoning_output}"
+            context += f"\n\n---\nYour reasoning output from the last tick was:\n{reasoning_output}"
 
         output = await self.run_autogen_agent(context=context, reason=reason)
 
@@ -98,7 +98,7 @@ class HarvestingAgent(BaseAgent):
             ),
             # PlanContext(self.agent).build(),
             MemoryContext(self.agent).build(actions=actions),
-            f"\n-----\nYou are currently waiting for others to join you to harvest resource {self.agent.harvesting_resource.id}. Given the current state, decide whether to continue waiting or to stop. Think step by step.",
+            f"\n\n-----\nYou are currently waiting for others to join you to harvest resource {self.agent.harvesting_resource.id}. Given the current state, decide whether to continue waiting or to stop. Think step by step.",
         ]
         context += "\n".join(parts)
         error = self.agent.last_error

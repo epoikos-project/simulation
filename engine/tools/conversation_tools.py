@@ -56,10 +56,10 @@ async def start_conversation(
                     raise ValueError(
                         "Conversation request already exists with this agent."
                     )
-            other_agent = agent_service.get_by_id(other_agent_id)
+            other_agent = agent_service.get_by_id_or_name(other_agent_id, simulation_id=simulation_id)
             if other_agent.harvesting_resource_id is not None:
                 logger.error(
-                    f"Agent {other_agent_id} is currently harvesting a resource and cannot start a conversation."
+                    f"Agent {other_agent.id} is currently harvesting a resource and cannot start a conversation."
                 )
                 raise ValueError(
                     "Cannot start a conversation with an agent that is currently harvesting a resource."
@@ -75,7 +75,7 @@ async def start_conversation(
                 active=False,
                 simulation_id=simulation_id,
                 agent_a_id=agent_id,
-                agent_b_id=other_agent_id,
+                agent_b_id=other_agent.id,
             )
             message_model = Message(
                 tick=simulation.tick,

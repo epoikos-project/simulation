@@ -192,7 +192,7 @@ class SimulationRunner:
                     agent_id=harv.id,
                     simulation_id=resource.world.simulation_id,
                     tick=resource.simulation.tick,
-                    action=f"harvested_resource(resource_id={resource.id}, energy_yield={resource.energy_yield}) together with {all_harvesters}",
+                    action=f"harvested_resource_finished(resource_id={resource.id}, location=({resource.x_coord}, {resource.y_coord}), energy_yield={resource.energy_yield}) together with {all_harvesters}. You successfully harvested the resource and gained {resource.energy_yield} energy. It is now not available anymore.",
                 )
                 db.add(action_log)
                 

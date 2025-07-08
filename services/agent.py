@@ -27,6 +27,16 @@ from utils import compute_distance, compute_distance_raw
 class AgentService(BaseService[Agent]):
     def __init__(self, db, nats):
         super().__init__(Agent, db, nats)
+        
+        
+    def get_by_id_or_name(
+        self, id_or_name: str, simulation_id: str | None = None
+    ) -> Agent | None:
+        """Get agent by id or name"""
+        stmt = select(Agent).where(
+            ((Agent.id == id_or_name) | (Agent.name == id_or_name)) & (Agent.simulation_id == simulation_id)
+        )
+        return self._db.exec(stmt).first()
 
     @override
     def create(self, obj: Agent, commit: bool = True) -> Agent:
