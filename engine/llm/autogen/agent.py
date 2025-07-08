@@ -80,6 +80,7 @@ class AutogenAgent(BaseAgent):
         last_conversation = self.conversation_service.get_last_conversation_by_agent_id(
             self.agent.id, max_tick_age=self.agent.simulation.tick - 20
         )
+        memory_logs = self.agent_service.get_last_k_memory_logs(self.agent, k=3)
 
         context = "Current Tick: " + str(self.agent.simulation.tick) + "\n"
         parts = [
@@ -94,7 +95,7 @@ class AutogenAgent(BaseAgent):
                 if last_conversation
                 else ""
             ),
-            MemoryContext(self.agent).build(actions=actions),
+            MemoryContext(self.agent).build(actions=actions, memory_logs=memory_logs),
         ]
         context += "\n---\n".join(parts)
 
@@ -107,8 +108,8 @@ class AutogenAgent(BaseAgent):
                 outstanding_requests
             )
             context += "\n Given this information devide whether you would like to accept and engange in the conversation request or not. You may only use ONE (1) tool at a time."
-        else:
-            context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
+        # else:
+        #     context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
         return (observations, context)
 
     def toggle_tools(self, use_tools: bool):
@@ -201,11 +202,13 @@ class AutogenAgent(BaseAgent):
         self._adapt_tools(observations=observations)
 
         if reason:
-            tools_summary = "These are possible actions you can perform in the world: "
+            available_tools_summary = (
+                "\nThese are possible actions you can perform in the world: "
+            )
             # TODO: maybe provide a few more details on the tools
             for tool in self.tools:
-                tools_summary += tool.__name__ + ", "
-            context += f"{tools_summary}\nGiven this information reason about your next action. Think step by step. Answer with a comprehensive explanation about what and why you want to do next."
+                available_tools_summary += tool.__name__ + ", "
+            context += f"{available_tools_summary}\nGiven this information reason about your next action. Think step by step. Answer with a comprehensive explanation about what and why you want to do next."
         else:
             error = self.agent.last_error
 
@@ -215,7 +218,7 @@ class AutogenAgent(BaseAgent):
                 )
             if reasoning_output:
                 context += f"\nYour reasoning about what to do next: {reasoning_output}"
-            context += "\nGiven this reasoning now decide on your next action by performing a tool call."
+                context += "\nGiven this reasoning now decide on your next action by performing two tool calls. You should always first use the tool 'update_plan' to store your reasoning about your long term goal i.e. the overarching thing you want to achive. Then additionaly use another tool to perform an immediate action in the environment."
             self._adapt_tools(observations)
 
         logger.debug(

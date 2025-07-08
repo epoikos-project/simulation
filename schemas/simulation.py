@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from schemas.action_log import ActionLog
     from schemas.agent import Agent
     from schemas.conversation import Conversation
+    from schemas.memory_log import MemoryLog
     from schemas.resource import Resource
     from schemas.world import World
 
@@ -24,6 +25,10 @@ class Simulation(BaseModel, table=True):
         back_populates="simulation", cascade_delete=True
     )
     action_logs: list["ActionLog"] = Relationship(
+        back_populates="simulation",
+    )
+
+    memory_logs: list["MemoryLog"] = Relationship(
         back_populates="simulation",
     )
 

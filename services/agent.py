@@ -16,6 +16,7 @@ from services.world import WorldService
 from schemas.action_log import ActionLog
 from schemas.agent import Agent
 from schemas.conversation import Conversation
+from schemas.memory_log import MemoryLog
 from schemas.message import Message
 from schemas.relationship import Relationship as RelationshipModel
 from schemas.resource import Resource

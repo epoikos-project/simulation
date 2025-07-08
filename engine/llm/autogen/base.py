@@ -149,7 +149,7 @@ class BaseAgent:
                 "tools": (
                     [tool.schema for tool in self.autogen_agent._tools]
                     if not reason
-                    else last_tool_summary
+                    else ", ".join(tool.__name__ for tool in self.autogen_agent._tools)
                 ),
             },
             metadata=last_tool_call,
