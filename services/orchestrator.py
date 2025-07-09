@@ -113,10 +113,15 @@ class OrchestratorService:
             min_agents = res_cfg.get("minAgents", 1)
             mining_time = res_cfg.get("miningTime", 0)
             energy_yield = res_cfg.get("energyYield", 0)
-            regrow_time = res_cfg.get("regrowTime", 0)
+            #regrow_time = res_cfg.get("regrowTime", 0)
             harvesting_area = res_cfg.get("harvestingArea", 1)
             energy_yield_var = res_cfg.get("energyYieldVar", 1.0)
             regrow_var = res_cfg.get("regrowVar", 1.0)
+            
+            if random.randint(1, 10) == 1:
+                regrow_time = -1
+            else:
+                regrow_time = random.randint(10, 100)
             for _ in range(count):
                 region = random.choice(regions)
                 x_coord, y_coord = self.region_service._create_resource_coords(
