@@ -76,5 +76,4 @@ class SystemDescription(BaseContext):
     """
 
     def build(self) -> str:
-        return f"These are your personal attributes: ID: {self.agent.id}, Name: {self.agent.name}, Your current location: [{self.agent.x_coord}, {self.agent.y_coord}], World grid: [0,0 to {self.agent.simulation.world.size_x - 1},{self.agent.simulation.world.size_y - 1}]"
-        # , personality=personality)
+        return f"These are your personal attributes: ID: {self.agent.id}, Name: {self.agent.name}, Your personality: {self.agent.personality}, Your current location: [{self.agent.x_coord}, {self.agent.y_coord}], World grid: [0,0 to {self.agent.simulation.world.size_x - 1},{self.agent.simulation.world.size_y - 1}]"
