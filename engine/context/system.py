@@ -21,7 +21,7 @@ class SystemPrompt(BaseContext):
             "1. If a resource requires only one agent and you are within harvesting range, you can harvest it immediately.\n"
             "2. If a resource requires multiple agents:\n"
             "   - The first agent to begin harvesting starts the process and must wait.\n"
-            "   - Once the final required agent joins, the resource is harvested, and all involved agents receive the energy reward.\n"
+            "   - Once the final required agent joins, decide whether to split the reward equally or attempt to steal it by specifying the 'decision' argument ('split' or 'steal') in your harvest_resource tool call. The reward distribution is as follows: if all split, energy is shared equally; if exactly one steals, that agent receives the entire energy; if more than one steals, no one gains energy.\n"
             "3. To harvest, you don't have to stand on top of the resource, just be in its harvesting range!.\n"
         )
 
@@ -41,7 +41,7 @@ class ConversationSystemPrompt(BaseContext):
             "1. If a resource requires only one agent and you are within harvesting range, you can harvest it immediately.\n"
             "2. If a resource requires multiple agents:\n"
             "   - The first agent to begin harvesting starts the process and must wait.\n"
-            "   - Once the final required agent joins, the resource is harvested, and all involved agents receive the energy reward.\n"
+            "   - Once the final required agent joins, decide whether to split the reward equally or attempt to steal it using the 'decision' parameter in the harvest_resource tool. The reward distribution is as follows: if all split, energy is shared equally; if exactly one steals, that agent receives the entire energy; if more than one steals, no one gains energy.\n"
             "3. To harvest, you don't have to stand on top of the resource, just be in its harvesting range!.\n"
             "---\n Conversation Rules:\n"
             "1. You can communicate with other agents to share information about resources, plans, and strategies.\n"
@@ -65,7 +65,7 @@ class HarvestingSystemPrompt(BaseContext):
             "1. If a resource requires only one agent and you are within harvesting range, you can harvest it immediately.\n"
             "2. If a resource requires multiple agents:\n"
             "   - The first agent to begin harvesting starts the process and must wait.\n"
-            "   - Once the final required agent joins, the resource is harvested, and all involved agents receive the energy reward.\n"
+            "   - Once the final required agent joins, decide whether to split the reward equally or attempt to steal it using the 'decision' parameter in the harvest_resource tool. The reward distribution is as follows: if all split, energy is shared equally; if exactly one steals, that agent receives the entire energy; if more than one steals, no one gains energy.\n"
             "3. To harvest, you don't have to stand on top of the resource, just be in its harvesting range!.\n"
         )
 

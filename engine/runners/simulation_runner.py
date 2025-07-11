@@ -149,6 +149,8 @@ class SimulationRunner:
         """Update the resource"""
         resource_service = ResourceService(db, nats)
         resource = resource_service.get_by_id(resource_id)
+        # ensure we load latest decisions from DB for split/steal payoff
+        db.refresh(resource)
         tick = resource.simulation.tick
 
         # Resource has regrown and is available for harvesting
@@ -160,6 +162,8 @@ class SimulationRunner:
         ):
             resource.available = True
             resource.time_harvest = -1
+            # Clear any old split/steal decisions on regrowth
+            resource.harvest_decisions.clear()
             db.add(resource)
             db.commit()
             grown_message = ResourceGrownMessage(
@@ -181,10 +185,29 @@ class SimulationRunner:
 
             all_harvesters = ",".join([f"{h.name} (ID:{h.id})" for h in harvesters])
 
-            for harv in harvesters:
+            # Determine reward distribution based on decisions recorded on the resource
+            decisions = resource.harvest_decisions
+            stealers = [h for h in harvesters if decisions.get(h.id) == "steal"]
+            rewards: dict[int, float] = {}
+            if len(stealers) == 1:
+                # Single stealer gets all energy, others get none
+                winner = stealers[0]
+                for h in harvesters:
+                    rewards[h.id] = resource.energy_yield if h is winner else 0.0
+            elif len(stealers) > 1:
+                # Multiple stealers: no one gains energy
+                for h in harvesters:
+                    rewards[h.id] = 0.0
+            else:
+                # All split: share equally
+                share = resource.energy_yield / len(harvesters)
+                for h in harvesters:
+                    rewards[h.id] = share
 
-                # Update harvester's energy level
-                harv.energy_level += resource.energy_yield
+            for harv in harvesters:
+                # Update harvester's energy level based on decision outcome
+                reward = rewards.get(harv.id, 0.0)
+                harv.energy_level += reward
                 harv.harvesting_resource_id = None
                 db.add(harv)
 
@@ -192,7 +215,11 @@ class SimulationRunner:
                     agent_id=harv.id,
                     simulation_id=resource.world.simulation_id,
                     tick=resource.simulation.tick,
-                    action=f"harvested_resource_finished(resource_id={resource.id}, location=({resource.x_coord}, {resource.y_coord}), energy_yield={resource.energy_yield}) together with {all_harvesters}. You successfully harvested the resource and gained {resource.energy_yield} energy. It is now not available anymore.",
+                    action=(
+                        f"harvested_resource_finished(resource_id={resource.id}, "
+                        f"location=({resource.x_coord}, {resource.y_coord}), total_energy={resource.energy_yield}) "
+                        f"together with {all_harvesters}. Decisions: {decisions}. You received {reward} energy. It is now not available anymore."
+                    ),
                 )
                 db.add(action_log)
 
@@ -209,7 +236,7 @@ class SimulationRunner:
                 resource_harvested_message = ResourceHarvestedMessage(
                     simulation_id=resource.world.simulation_id,
                     id=resource.id,
-                    harvester_id=str([harv.id for harv in harvesters]),
+                    harvester_id=str([h.id for h in harvesters]),
                     location=(resource.x_coord, resource.y_coord),
                     start_tick=tick,
                     end_tick=tick,
@@ -218,6 +245,9 @@ class SimulationRunner:
 
                 await resource_harvested_message.publish(nats)
 
+            db.add(resource)
+            # Clear decisions for the resource after distributing rewards
+            resource.harvest_decisions.clear()
             db.add(resource)
             db.commit()
 
@@ -254,6 +284,8 @@ class SimulationRunner:
                 )
             except Exception as e:
                 logger.exception(f"Error during tick: {e}")
+                # clear failed transaction so next tick can proceed
+                db.rollback()
 
             await asyncio.sleep(tick_interval)
         logger.info(f"Simulation {simulation_id} shutdown gracefully")

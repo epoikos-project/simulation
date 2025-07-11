@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+from sqlalchemy import Column, JSON, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from schemas.base import BaseModel
@@ -38,3 +39,12 @@ class Resource(BaseModel, table=True):
     region: "Region" = Relationship(back_populates="resources")
     harvesters: list["Agent"] = Relationship(back_populates="harvesting_resource")
     tasks: list["Task"] = Relationship(back_populates="target", cascade_delete=True)
+    # Temporary storage of each agent's split/steal decision during a multi-agent harvest
+    harvest_decisions: dict[str, str] = Field(
+        default_factory=dict,
+        sa_column=Column(
+            JSON,
+            nullable=False,
+            server_default=text("'{}'"),
+        ),
+    )

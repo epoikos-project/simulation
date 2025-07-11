@@ -22,8 +22,15 @@ async def harvest_resource(
     # ], # Participants will join the plan to harvest resource by separate tool call
     agent_id: str,
     simulation_id: str,
+    decision: Annotated[
+        str,
+        "Decision when harvesting with others: 'split' or 'steal'. Ignored for single-agent resources.",
+    ] = "split",
 ):
-    """Call this tool to harvest a resource and increase your energy level. You can harvest at any time if you are next to a resource."""
+    """
+    Call this tool to harvest a resource and increase your energy level.
+    If the resource requires multiple agents, specify your decision ('split' or 'steal').
+    """
 
     try:
         with get_session() as db:
@@ -39,6 +46,20 @@ async def harvest_resource(
             agent = agent_service.get_by_id(agent_id)
             resource = resource_service.get_by_location(agent.simulation.world.id, x, y)
 
+            # Validate split-or-steal choice
+            if decision not in ("split", "steal"):
+                raise ValueError(
+                    f"Invalid decision '{decision}'; must be 'split' or 'steal'."
+                )
+
+            # For multi-agent resources, record the split/steal choice first
+            if resource.required_agents > 1:
+                resource.harvest_decisions[agent_id] = decision
+                db.add(resource)
+                db.commit()
+
+            # Attempt to harvest (single-agent returns True immediately,
+            # multi-agent sets up a waiting state)
             harvested = resource_service.harvest_resource(
                 resource=resource, harvester=agent
             )
