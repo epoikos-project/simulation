@@ -64,6 +64,8 @@ class BaseService(Generic[T]):
         model = self._db.get(self._model_class, id)
         if not model:
             raise ValueError(f"{self._model_class.__name__} with ID {id} not found.")
+        else:
+            self._db.refresh(model)
         return model
 
     def all(self):

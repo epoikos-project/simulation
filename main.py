@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from faststream.nats.fastapi import NatsRouter
 from sqlmodel import SQLModel
 
-from clients import milvus
 from clients.db import create_db_and_tables
 
 from config.base import settings

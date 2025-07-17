@@ -145,7 +145,7 @@ class AgentService(BaseService[Agent]):
             )
         ).all()
 
-        logger.warning(
+        logger.debug(
             f"Agent {agent_id} has {len(conversations)} initialized conversations."
         )
 

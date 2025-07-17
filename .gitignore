@@ -11,6 +11,9 @@ wheels/
 .idea
 .env
 
+tests/results/*
+!tests/results/.gitkeep
+
 data
 
 nats-server 

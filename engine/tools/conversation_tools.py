@@ -126,10 +126,8 @@ async def accept_conversation_request(
 
     with get_session() as db:
         try:
-            nats = nats_broker()
             conversation_service = ConversationService(db=db, nats=nats)
             relationship_service = RelationshipService(db=db, nats=nats)
-            
 
             conversation = conversation_service.get_by_id(conversation_id)
             if not conversation:
@@ -151,7 +149,7 @@ async def accept_conversation_request(
                 agent_id=agent_id,
                 conversation_id=conversation.id,
             )
-            
+
             relationship_service.update_relationship(
                 agent1_id=agent_id,
                 agent2_id=other_agent_id,
@@ -199,7 +197,6 @@ async def decline_conversation_request(
             nats = nats_broker()
             conversation_service = ConversationService(db=db, nats=nats)
             relationship_service = RelationshipService(db=db, nats=nats)
-            
 
             conversation = conversation_service.get_by_id(conversation_id)
             if not conversation:
@@ -231,7 +228,7 @@ async def decline_conversation_request(
                 tick=conversation.simulation.tick,
                 commit=False,
             )
-            
+
             db.add(conversation)
             db.add(message_model)
             db.commit()
@@ -334,7 +331,6 @@ async def end_conversation(
 
             conversation = conversation_service.get_active_by_agent_id(agent_id)
             relationship_service = RelationshipService(db=db, nats=nats)
-            
 
             conversation.active = False
             conversation.finished = True
@@ -344,7 +340,7 @@ async def end_conversation(
                 if conversation.agent_a_id == agent_id
                 else conversation.agent_a_id
             )
-            
+
             relationship_service.update_relationship(
                 agent1_id=agent_id,
                 agent2_id=other_agent_id,

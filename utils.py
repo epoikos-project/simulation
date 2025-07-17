@@ -1,5 +1,7 @@
 import json
 from typing import Any, Dict, List, Union
+import csv
+import os
 
 
 def compute_distance(a: tuple[int, int], b: tuple[int, int]):
@@ -137,3 +139,27 @@ def summarize_tool_call(calls: Union[Dict[str, Any], List[Dict[str, Any]]]) -> s
 
     # Join into one string
     return ", ".join(summaries)
+
+
+def log_simulation_result(
+    simulation_id: str,
+    test_name: str,
+    ticks: int,
+    success: bool,
+    file_path="tests/results/simulation_results.csv",
+):
+    file_exists = os.path.isfile(file_path)
+    with open(file_path, mode="a", newline="") as csvfile:
+        writer = csv.DictWriter(
+            csvfile, fieldnames=["test_name", "simulation_id", "ticks", "success"]
+        )
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(
+            {
+                "test_name": test_name,
+                "simulation_id": simulation_id,
+                "ticks": ticks,
+                "success": success,
+            }
+        )
