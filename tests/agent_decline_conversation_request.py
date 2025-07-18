@@ -75,7 +75,7 @@ async def test_agent_moves_within_20_ticks(run):
                 f"View live at http://localhost:3000/simulation/{simulation.id}"
             )
 
-            moved = False
+            declined_conversation = False
             for _ in range(20):
                 await SimulationRunner.tick_simulation(
                     db=db,
@@ -85,14 +85,14 @@ async def test_agent_moves_within_20_ticks(run):
                 actions1 = agent_service.get_last_k_actions(agent1, k=1)
                 actions2 = agent_service.get_last_k_actions(agent2, k=1)
                 if (actions1 and actions1[0].action.startswith("decline_conversation_request")):
-                    moved = True
+                    declined_conversation = True
                     break
                 await asyncio.sleep(1)
 
             log_simulation_result(
                 simulation_id=simulation.id,
-                test_name="test_agent_accept_conversation_request",
+                test_name="test_agent_decline_conversation_request",
                 ticks=simulation.tick,
-                success=moved,
+                success=declined_conversation,
             )
-            assert moved, "Agent did not accept_conversation_request within 20 ticks"
+            assert declined_conversation, "Agent did not decline conversation within 20 ticks"
