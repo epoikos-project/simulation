@@ -115,7 +115,10 @@ class SimulationRunner:
         )
 
         agent_ids = db.exec(
-            select(Agent.id).where(Agent.simulation_id == simulation.id)
+            select(Agent.id).where(
+                Agent.simulation_id == simulation.id,
+                Agent.energy_level > 0,
+            )
         ).all()
 
         tasks = [AgentRunner.tick_agent(nats, agent_id) for agent_id in agent_ids]

@@ -2,14 +2,18 @@ from loguru import logger
 from sqlmodel import select
 
 from engine.context.observation import ObservationUnion
-from engine.context.observations import AgentObservation, ResourceObservation
+from engine.context.observations import AgentObservation, ResourceObservation, DeadAgentObservation, CarcassObservation
 from engine.grid import Grid
+
+import asyncio
 
 from services.base import BaseService
 from services.conversation import ConversationService
 from services.region import RegionService
 from services.resource import ResourceService
 from services.world import WorldService
+from services.carcass import CarcassService
+from messages.agent.agent_dead import AgentDeadMessage
 
 from schemas.action_log import ActionLog
 from schemas.agent import Agent
@@ -54,6 +58,7 @@ class AgentService(BaseService[Agent]):
         )
 
         context.extend(self.get_agent_observations(agent))
+        context.extend(self.get_carcass_observations(agent))
         return context
 
     def get_resource_observations(self, agent: Agent) -> list[ResourceObservation]:
@@ -88,12 +93,12 @@ class AgentService(BaseService[Agent]):
 
     def get_agent_observations(self, agent: Agent) -> list[AgentObservation]:
         """Load agent observation from database given coordinates and visibility range of an agent"""
-        # Filter agents based on agents location and visibility range
-
+        # Filter agents based on location, visibility, and alive
         agents = self._db.exec(
             select(Agent).where(
                 Agent.simulation_id == agent.simulation_id,
                 Agent.id != agent.id,
+                Agent.energy_level > 0,
                 Agent.x_coord >= agent.x_coord - agent.visibility_range,
                 Agent.x_coord <= agent.x_coord + agent.visibility_range,
                 Agent.y_coord >= agent.y_coord - agent.visibility_range,
@@ -101,22 +106,50 @@ class AgentService(BaseService[Agent]):
             )
         ).all()
 
-        # Create AgentObservation for each nearby agent
-        agent_observations = []
+        agent_observations: list[AgentObservation] = []
         for other_agent in agents:
             agent_distance = compute_distance_raw(
                 agent.x_coord, agent.y_coord, other_agent.x_coord, other_agent.y_coord
             )
-
-            agent_obs = AgentObservation(
-                location=(other_agent.x_coord, other_agent.y_coord),
-                distance=agent_distance,
-                id=other_agent.id,
-                agent=other_agent,
+            agent_observations.append(
+                AgentObservation(
+                    location=(other_agent.x_coord, other_agent.y_coord),
+                    distance=agent_distance,
+                    id=other_agent.id,
+                    agent=other_agent,
+                )
             )
-            agent_observations.append(agent_obs)
-
         return agent_observations
+
+    def get_carcass_observations(self, agent: Agent) -> list[CarcassObservation]:
+        """Load carcass observation from database given coordinates and visibility range of an agent"""
+        from schemas.carcass import Carcass
+
+        carcasses = self._db.exec(
+            select(Carcass).where(
+                Carcass.simulation_id == agent.simulation_id,
+                Carcass.world_id == agent.simulation.world.id,
+                Carcass.x_coord >= agent.x_coord - agent.visibility_range,
+                Carcass.x_coord <= agent.x_coord + agent.visibility_range,
+                Carcass.y_coord >= agent.y_coord - agent.visibility_range,
+                Carcass.y_coord <= agent.y_coord + agent.visibility_range,
+            )
+        ).all()
+
+        observations: list[CarcassObservation] = []
+        for cad in carcasses:
+            dist = compute_distance_raw(
+                agent.x_coord, agent.y_coord, cad.x_coord, cad.y_coord
+            )
+            observations.append(
+                CarcassObservation(
+                    location=(cad.x_coord, cad.y_coord),
+                    distance=dist,
+                    id=cad.id,
+                    carcass=cad,
+                )
+            )
+        return observations
 
     def get_outstanding_conversation_requests(
         self, agent_id: str
@@ -159,6 +192,21 @@ class AgentService(BaseService[Agent]):
     def has_initialized_conversation(self, agent_id: str) -> bool:
         """Check if the agent has an initialized conversation."""
         return len(self.get_initialized_conversation_requests(agent_id)) > 0
+
+    def _check_and_handle_death(self, agent: Agent) -> None:
+        """If the agent's energy is depleted, create a carcass, remove the agent, and emit death event."""
+        if agent.energy_level <= 0:
+            # leave a carcass where the agent died
+            CarcassService(self._db, self._nats).create_from_agent(agent)
+            # remove the agent from simulation
+            self.delete(agent.id)
+            # notify frontend via NATS
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                return
+            msg = AgentDeadMessage(id=agent.id, simulation_id=agent.simulation_id, agent_id=agent.id)
+            loop.create_task(msg.publish(self._nats))
 
     def move_agent_in_direction(self, agent: Agent, direction: str) -> tuple[int, int]:
         """
@@ -264,7 +312,6 @@ class AgentService(BaseService[Agent]):
         steps_to_move = min(distance, agent.range_per_move)
         new_location = path[steps_to_move]
 
-        # new_location = path[min(agent.range_per_move, distance)]
 
         agent.x_coord = new_location[0]
         agent.y_coord = new_location[1]
@@ -279,6 +326,7 @@ class AgentService(BaseService[Agent]):
 
         self._db.add(agent)
         self._db.commit()
+        self._check_and_handle_death(agent)
 
         if steps_to_move < distance:
             logger.warning(

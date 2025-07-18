@@ -4,6 +4,7 @@ import uuid
 from loguru import logger
 import pytest
 
+from sqlalchemy import select
 from clients.db import get_session
 from clients.nats import get_nats_broker
 from engine.runners.simulation_runner import SimulationRunner
@@ -12,10 +13,10 @@ from services.agent import AgentService
 from services.resource import ResourceService
 from services.world import WorldService
 from schemas.agent import Agent
-from schemas.resource import Resource
 from schemas.world import World
 from schemas.simulation import Simulation
-from utils import log_simulation_result
+from schemas.carcass import Carcass
+from utils import compute_distance_raw, log_simulation_result
 
 
 @pytest.mark.asyncio
@@ -45,54 +46,51 @@ async def test_agent_moves_within_20_ticks(run):
             world = world_service.create(world)
             regions = world_service.create_regions_for_world(world=world, num_regions=1)
 
-            # 3. Create one agent near the resource
-            agent1 = Agent(
+            # 3. Create agent with insufficient energy to survive a move
+            agent = Agent(
                 simulation_id=simulation.id,
-                name="TestAgent1",
+                name="DoomedAgent",
                 model="gpt-4.1-nano-2025-04-14",
-                personality="You do not want to talk at all. Decline all conversation requests.",
-                x_coord=10,
-                y_coord=10,  # adjacent
-                energy_level=50,
+                x_coord=11,
+                y_coord=11,
+                energy_level=5,  # Less than region_energy_cost
             )
-
-            agent2 = Agent(
-                simulation_id=simulation.id,
-                name="TestAgent2",
-                model="gpt-4.1-nano-2025-04-14",
-                x_coord=12,
-                y_coord=12,  # adjacent
-                energy_level=50,
-            )
-
-            db.add(agent1)
-            db.add(agent2)
+            db.add(agent)
             db.commit()
-            db.refresh(agent1)
-            db.refresh(agent2)
+            db.refresh(agent)
 
             logger.success(
                 f"View live at http://localhost:3000/simulation/{simulation.id}"
             )
 
-            declined_conversation = False
-            for _ in range(20):
-                await SimulationRunner.tick_simulation(
-                    db=db,
-                    nats=nats,
-                    simulation_id=simulation.id,
-                )
-                actions1 = agent_service.get_last_k_actions(agent1, k=1)
-                actions2 = agent_service.get_last_k_actions(agent2, k=1)
-                if (actions1 and actions1[0].action.startswith("decline_conversation_request")):
-                    declined_conversation = True
-                    break
-                await asyncio.sleep(1)
+            dest = (agent.x_coord + 1, agent.y_coord)
+            agent_service.move_agent(agent, dest)
+            # After move_agent() runs _check_and_handle_death()
+            # Agent should be deleted
+            with pytest.raises(ValueError):
+                agent_service.get_by_id(agent.id)
+
+            # --- Verification ---
+            # Check that carcass was created
+            carcass = db.exec(
+                select(Carcass).where(Carcass.simulation_id == simulation.id)
+            ).one()
+            
+            # Verify carcass location matches destination
+            assert carcass.x_coord == agent.x_coord
+            assert carcass.y_coord == agent.y_coord
+
+            # Sanity check - distance calculation
+            dist = compute_distance_raw(agent.x_coord, agent.y_coord, agent.x_coord, agent.y_coord)
+            assert dist == 0
+
+            # Verify carcass has proper decay_time and energy_yield (default values)
+            assert carcass.decay_time > 0
+            assert isinstance(carcass.energy_yield, float)
 
             log_simulation_result(
                 simulation_id=simulation.id,
-                test_name="test_agent_decline_conversation_request",
+                test_name="test_agent_death",
                 ticks=simulation.tick,
-                success=declined_conversation,
+                success=True,
             )
-            assert declined_conversation, "Agent did not decline conversation within 20 ticks"

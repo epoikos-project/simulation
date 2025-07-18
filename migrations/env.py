@@ -36,6 +36,7 @@ from schemas import (
     simulation,
     task,
     world,
+    carcass,
 )
 
 target_metadata = SQLModel.metadata
