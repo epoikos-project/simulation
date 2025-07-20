@@ -9,9 +9,9 @@ from messages.world.agent_moved import AgentMovedMessage
 
 from services.action_log import ActionLogService
 from services.agent import AgentService
+from services.conversation import ConversationService
 
 from schemas.agent import Agent
-from services.conversation import ConversationService
 
 router = APIRouter(prefix="/simulation/{simulation_id}/agent", tags=["Agent"])
 
@@ -41,9 +41,19 @@ async def get_agent(id: str, simulation_id: str, db: DB, broker: Nats):
 
     agent = agents_service.get_by_id(id)
     action_logs = agents_service.get_last_k_actions(agent, k=10)
-    last_conversation = conversation_service.get_last_conversation_by_agent_id(agent.id, max_tick_age=-1)
-    messages = (conversation_service.get_last_k_messages(last_conversation.id, k=10) if last_conversation else [])
-    return {**agent.model_dump(), "last_10_action_logs": action_logs, "last_10_messages": messages}
+    last_conversation = conversation_service.get_last_conversation_by_agent_id(
+        agent.id, max_tick_age=-1
+    )
+    messages = (
+        conversation_service.get_last_k_messages(last_conversation.id, k=10)
+        if last_conversation
+        else []
+    )
+    return {
+        **agent.model_dump(),
+        "last_10_action_logs": action_logs,
+        "last_10_messages": messages,
+    }
 
 
 @router.get("")
@@ -58,10 +68,23 @@ async def list_agents(simulation_id: str, db: DB, broker: Nats):
         messages = []
         for agent in agents:
             action_logs.append(agents_service.get_last_k_actions(agent, k=10))
-            last_conversation = conversation_service.get_last_conversation_by_agent_id(agent.id, max_tick_age=-1)
-            messages.append(conversation_service.get_last_k_messages(last_conversation.id, k=10) if last_conversation else [])
+            last_conversation = conversation_service.get_last_conversation_by_agent_id(
+                agent.id, max_tick_age=-1
+            )
+            messages.append(
+                conversation_service.get_last_k_messages(last_conversation.id, k=10)
+                if last_conversation
+                else []
+            )
 
-        return [{**agent.model_dump(), "last_10_action_logs": logs, "last_10_messages": msgs} for agent, logs, msgs in zip(agents, action_logs, messages)]
+        return [
+            {
+                **agent.model_dump(),
+                "last_10_action_logs": logs,
+                "last_10_messages": msgs,
+            }
+            for agent, logs, msgs in zip(agents, action_logs, messages)
+        ]
     except ValueError:
         # return empty list if no agents found for this simulation
         agents = []

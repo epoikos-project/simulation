@@ -23,7 +23,7 @@ class Message(BaseModel, table=True):
     serial_number: int = Field(default=0, index=True)
     content: str = Field(default="", nullable=False)
     tick: int = Field(default=0, index=True)
-    
+
     @computed_field
     @property
     def to_agent_id(self) -> str:
@@ -34,10 +34,10 @@ class Message(BaseModel, table=True):
             if self.sender.id == self.conversation.agent_a_id
             else self.conversation.agent_a_id
         )
-    
-    conversation: "Conversation" = Relationship(back_populates="messages", sa_relationship_kwargs={
-        "lazy": "joined"
-    })
+
+    conversation: "Conversation" = Relationship(
+        back_populates="messages", sa_relationship_kwargs={"lazy": "joined"}
+    )
     sender: "Agent" = Relationship(
         back_populates="sent_messages",
         sa_relationship_kwargs={"foreign_keys": "[Message.agent_id]"},

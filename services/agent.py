@@ -1,5 +1,3 @@
-from typing import override
-
 from loguru import logger
 from sqlmodel import select
 
@@ -18,41 +16,32 @@ from schemas.agent import Agent
 from schemas.conversation import Conversation
 from schemas.memory_log import MemoryLog
 from schemas.message import Message
-from schemas.relationship import Relationship as RelationshipModel
 from schemas.resource import Resource
 
 from utils import compute_distance, compute_distance_raw
+
+
+class MovementTruncated(ValueError):
+    def __init__(self, msg, new_location):
+        super().__init__(msg)
+        self.new_location = new_location
 
 
 class AgentService(BaseService[Agent]):
     def __init__(self, db, nats):
         super().__init__(Agent, db, nats)
 
-    @override
-    def create(self, obj: Agent, commit: bool = True) -> Agent:
-        agent = super().create(obj, commit)
-        # self._milvus.create_collection(
-        #     collection_name=agent.collection_name, dimension=128
-        # )
-        # for testing: add an example (dummy) relationship between this agent and one existing agent
-        if agent.simulation_id is not None:
-            stmt = select(Agent).where(
-                Agent.simulation_id == agent.simulation_id,
-                Agent.id != agent.id,
-            )
-            other = self._db.exec(stmt).first()
-            if other:
-                # seed a dummy tick=0 relationship for testing
-                rel = RelationshipModel(
-                    simulation_id=agent.simulation_id,
-                    agent_a_id=agent.id,
-                    agent_b_id=other.id,
-                    total_sentiment=0.0,
-                    update_count=1,
-                    tick=0,
-                )
-                self._db.add(rel)
-                self._db.commit()
+    def get_by_id_or_name(
+        self, id_or_name: str, simulation_id: str | None = None
+    ) -> Agent | None:
+        """Get agent by id or name"""
+        stmt = select(Agent).where(
+            ((Agent.id == id_or_name) | (Agent.name == id_or_name))
+            & (Agent.simulation_id == simulation_id)
+        )
+        agent = self._db.exec(stmt).first()
+        if not agent:
+            raise ValueError(f"Agent with id or name '{id_or_name}' not found.")
         return agent
 
     def get_world_context(self, agent: Agent) -> list[ObservationUnion]:
@@ -132,7 +121,7 @@ class AgentService(BaseService[Agent]):
     def get_outstanding_conversation_requests(
         self, agent_id: str
     ) -> list[Conversation]:
-        """Get all agents that have an outstanding conversation request with the given agent."""
+        """Get all conversations that have an outstanding conversation request with the given agent."""
 
         conversations = self._db.exec(
             select(Conversation).where(
@@ -251,10 +240,10 @@ class AgentService(BaseService[Agent]):
 
         if agent_location == destination:
             logger.error(
-                f"Agent {agent.id} is already at the destination {destination}."
+                f"Agent {agent.id} is at already at the destination {destination}."
             )
             raise ValueError(
-                f"Agent {agent.id} is already at the destination {destination}."
+                f"You are already at the destination {destination}. You cannot move to your own position!"
             )
 
         # Set agent field of view and get path
@@ -272,7 +261,10 @@ class AgentService(BaseService[Agent]):
                 f"Path from {agent_location} to {destination} not found. Agent may be blocked by obstacles. Remember that you do not have to stand on top of a resource to harvest it! "
             )
 
-        new_location = path[min(agent.range_per_move, distance)]
+        steps_to_move = min(distance, agent.range_per_move)
+        new_location = path[steps_to_move]
+
+        # new_location = path[min(agent.range_per_move, distance)]
 
         agent.x_coord = new_location[0]
         agent.y_coord = new_location[1]
@@ -283,17 +275,57 @@ class AgentService(BaseService[Agent]):
             agent.simulation.world.id, agent.x_coord, agent.y_coord
         )
 
-        agent.energy_level -= current_region.region_energy_cost
-
-        logger.debug("Before db commit")
+        agent.energy_level -= current_region.region_energy_cost * steps_to_move
 
         self._db.add(agent)
         self._db.commit()
 
-        logger.debug("After db commit")
-        # await agent_moved_message.publish(self._nats)
+        if steps_to_move < distance:
+            logger.warning(
+                f"Intended to move {distance} steps to {destination}, "
+                f"but can only move {agent.range_per_move}. Truncated movement to {path[steps_to_move]}."
+            )
+            raise MovementTruncated(
+                f"Intended to move {distance} steps to {destination}, but can only move {agent.range_per_move}. Truncated movement to {path[steps_to_move]}.",
+                new_location,
+            )
 
         return new_location
+
+    def move_agent_in_random_direction(self, agent: Agent) -> tuple[int, int]:
+        """
+        Moves the specified agent in a random direction within the world.
+
+        Args:
+            agent (Agent): The agent instance to move.
+
+        Returns:
+            tuple[int, int]: The new (x, y) coordinates of the agent after the move.
+        """
+        import random
+
+        # Get the world boundaries
+        world = agent.simulation.world
+        max_steps = 4
+
+        # Generate all possible destinations within max_steps in any direction
+        possible_destinations = []
+        for dx in range(-max_steps, max_steps + 1):
+            for dy in range(-max_steps, max_steps + 1):
+                if dx == 0 and dy == 0:
+                    continue
+            new_x = agent.x_coord + dx
+            new_y = agent.y_coord + dy
+            if 0 <= new_x < world.size_x and 0 <= new_y < world.size_y:
+                possible_destinations.append((new_x, new_y))
+
+        if not possible_destinations:
+            raise ValueError("No valid random destinations available for agent.")
+
+        destination = random.choice(possible_destinations)
+        # Find the direction string or coordinate to pass to move_agent_in_direction
+        # Here, we directly use the move_agent method since we have a coordinate
+        return self.move_agent(agent, destination)
 
     def get_world_obstacles(self, agent: Agent):
         """Get obstacles for agent"""
@@ -301,16 +333,16 @@ class AgentService(BaseService[Agent]):
         agent_fov = agent.visibility_range
         agent_location = (agent.x_coord, agent.y_coord)
 
-        # agents = self._db.exec(
-        #     select(Agent).where(
-        #         Agent.simulation_id == agent.simulation_id,
-        #         Agent.id != agent.id,  # Exclude the current agent
-        #         Agent.x_coord >= agent_location[0] - agent_fov,
-        #         Agent.x_coord <= agent_location[0] + agent_fov,
-        #         Agent.y_coord >= agent_location[1] - agent_fov,
-        #         Agent.y_coord <= agent_location[1] + agent_fov,
-        #     )
-        # ).all()
+        agents = self._db.exec(
+            select(Agent).where(
+                Agent.simulation_id == agent.simulation_id,
+                Agent.id != agent.id,  # Exclude the current agent
+                Agent.x_coord >= agent_location[0] - agent_fov,
+                Agent.x_coord <= agent_location[0] + agent_fov,
+                Agent.y_coord >= agent_location[1] - agent_fov,
+                Agent.y_coord <= agent_location[1] + agent_fov,
+            )
+        ).all()
 
         # Filter resources based on agents location and visibility range
         # resources = self._db.exec(
@@ -343,8 +375,29 @@ class AgentService(BaseService[Agent]):
 
         return actions
 
+    def get_last_k_memory_logs(self, agent: Agent, k: int = 5) -> list[MemoryLog]:
+        """Get the last k memory logs of an agent."""
+        memory_logs = self._db.exec(
+            select(MemoryLog)
+            .where(MemoryLog.agent_id == agent.id)
+            .order_by(MemoryLog.tick.desc())
+            .limit(k)
+        ).all()
+        return memory_logs
+
     def get_last_conversation(self, agent: Agent) -> list[Message]:
-        conversation = ConversationService(self._db, self._nats).get_last_conversation_by_agent_id(
-            agent.id
-        )
+        conversation = ConversationService(
+            self._db, self._nats
+        ).get_last_conversation_by_agent_id(agent.id)
         return conversation
+
+    def get_last_k_memory_logs(self, agent: Agent, k: int = 5) -> list[MemoryLog]:
+        """Get the last k memory logs of an agent."""
+        memory_logs = self._db.exec(
+            select(MemoryLog)
+            .where(MemoryLog.agent_id == agent.id)
+            .order_by(MemoryLog.tick.desc())
+            .limit(k)
+        ).all()
+
+        return memory_logs

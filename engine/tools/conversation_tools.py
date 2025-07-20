@@ -9,6 +9,7 @@ from clients.db import get_session
 from clients.nats import nats_broker
 
 from messages.agent.agent_communication import AgentCommunicationMessage
+
 from services.agent import AgentService
 from services.conversation import ConversationService
 from services.relationship import RelationshipService
@@ -32,7 +33,7 @@ async def start_conversation(
 ) -> str:
     """Start a new conversation with another agent. Each exchanged message takes one tick."""
     with get_session() as db:
-        logger.success("Calling tool start_conversation")
+        logger.success(f"Calling tool start_conversation for agent {agent_id}")
 
         try:
             if agent_id == other_agent_id:
@@ -40,26 +41,32 @@ async def start_conversation(
                 raise ValueError("Cannot start a conversation with oneself.")
             nats = nats_broker()
             agent_service = AgentService(db=db, nats=nats)
+            other_agent = agent_service.get_by_id_or_name(
+                other_agent_id, simulation_id=simulation_id
+            )
 
             open_requests = agent_service.get_outstanding_conversation_requests(
                 agent_id
             )
 
+            logger.warning(f"Open requests for agent {agent_id}: {open_requests}")
+            logger.warning(f"Other agent ID: {other_agent_id}")
+
             for request in open_requests:
+                logger.warning(open_requests)
                 if (
-                    request.agent_b_id == other_agent_id
-                    or request.agent_a_id == other_agent_id
+                    request.agent_b_id == other_agent.id
+                    or request.agent_a_id == other_agent.id
                 ):
                     logger.error(
                         f"Conversation request with {other_agent_id} already exists."
                     )
                     raise ValueError(
-                        "Conversation request already exists with this agent."
+                        f"Conversation request with {other_agent_id} already exists."
                     )
-            other_agent = agent_service.get_by_id(other_agent_id)
             if other_agent.harvesting_resource_id is not None:
                 logger.error(
-                    f"Agent {other_agent_id} is currently harvesting a resource and cannot start a conversation."
+                    f"Agent {other_agent.id} is currently harvesting a resource and cannot start a conversation."
                 )
                 raise ValueError(
                     "Cannot start a conversation with an agent that is currently harvesting a resource."
@@ -75,7 +82,7 @@ async def start_conversation(
                 active=False,
                 simulation_id=simulation_id,
                 agent_a_id=agent_id,
-                agent_b_id=other_agent_id,
+                agent_b_id=other_agent.id,
             )
             message_model = Message(
                 tick=simulation.tick,
@@ -86,13 +93,14 @@ async def start_conversation(
             db.add(conversation)
             db.add(message_model)
             db.commit()
-            
+
             agent_communication_message = AgentCommunicationMessage(
                 agent_id=agent_id,
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id
+                to_agent_id=other_agent.id,
+                created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
 
@@ -114,12 +122,14 @@ async def accept_conversation_request(
 ) -> None:
     """Accept a conversation request from another agent."""
 
-    logger.success("Calling tool accept_conversation_request")
+    logger.success(f"Calling tool accept_conversation_request for agent {agent_id}")
 
     with get_session() as db:
         try:
             nats = nats_broker()
             conversation_service = ConversationService(db=db, nats=nats)
+            relationship_service = RelationshipService(db=db, nats=nats)
+            
 
             conversation = conversation_service.get_by_id(conversation_id)
             if not conversation:
@@ -129,23 +139,39 @@ async def accept_conversation_request(
             conversation.active = True
             conversation.declined = False
 
+            other_agent_id = (
+                conversation.agent_b_id
+                if conversation.agent_a_id == agent_id
+                else conversation.agent_a_id
+            )
+
             message_model = Message(
                 tick=conversation.simulation.tick,
                 content=message,
                 agent_id=agent_id,
                 conversation_id=conversation.id,
             )
+            
+            relationship_service.update_relationship(
+                agent1_id=agent_id,
+                agent2_id=other_agent_id,
+                message=message,
+                simulation_id=conversation.simulation.id,
+                tick=conversation.simulation.tick,
+                commit=False,
+            )
 
             db.add(conversation)
             db.add(message_model)
             db.commit()
-            
+
             agent_communication_message = AgentCommunicationMessage(
                 agent_id=agent_id,
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id
+                to_agent_id=other_agent_id,
+                created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
 
@@ -166,12 +192,14 @@ async def decline_conversation_request(
 ) -> None:
     """Decline a conversation request from another agent."""
 
-    logger.success("Calling tool decline_conversation_request")
+    logger.success(f"Calling tool decline_conversation_request for agent {agent_id}")
 
     with get_session() as db:
         try:
             nats = nats_broker()
             conversation_service = ConversationService(db=db, nats=nats)
+            relationship_service = RelationshipService(db=db, nats=nats)
+            
 
             conversation = conversation_service.get_by_id(conversation_id)
             if not conversation:
@@ -182,6 +210,12 @@ async def decline_conversation_request(
             conversation.declined = True
             conversation.finished = True
 
+            other_agent_id = (
+                conversation.agent_b_id
+                if conversation.agent_a_id == agent_id
+                else conversation.agent_a_id
+            )
+
             message_model = Message(
                 tick=conversation.simulation.tick,
                 content=message,
@@ -189,21 +223,31 @@ async def decline_conversation_request(
                 conversation_id=conversation.id,
             )
 
+            relationship_service.update_relationship(
+                agent1_id=agent_id,
+                agent2_id=other_agent_id,
+                message=message,
+                simulation_id=conversation.simulation.id,
+                tick=conversation.simulation.tick,
+                commit=False,
+            )
+            
             db.add(conversation)
             db.add(message_model)
             db.commit()
-            
+
             agent_communication_message = AgentCommunicationMessage(
                 agent_id=agent_id,
                 simulation_id=simulation_id,
                 content=message,
                 id=message_model.id,
-                to_agent_id=message_model.to_agent_id
+                to_agent_id=other_agent_id,
+                created_at=message_model.created_at,
             )
             await agent_communication_message.publish(nats)
 
         except Exception as e:
-            logger.error(f"Error accepting conversation request: {e}")
+            logger.error(f"Error declining conversation request: {e}")
             raise e
 
 
@@ -218,7 +262,7 @@ async def continue_conversation(
 ) -> None:
     """Send a message in an active conversation. This will take one tick."""
 
-    logger.success("Calling tool continue_conversation")
+    logger.success(f"Calling tool continue_conversation for agent {agent_id}")
 
     with get_session() as db:
         try:
@@ -231,27 +275,39 @@ async def continue_conversation(
                 logger.error(f"No active conversation found for agent {agent_id}.")
                 raise ValueError("No active conversation found.")
 
+            other_agent_id = (
+                conversation.agent_b_id
+                if conversation.agent_a_id == agent_id
+                else conversation.agent_a_id
+            )
+
             relationship_service.update_relationship(
                 agent1_id=agent_id,
-                agent2_id=(
-                    conversation.agent_a_id
-                    if conversation.agent_b_id == agent_id
-                    else conversation.agent_b_id
-                ),
+                agent2_id=other_agent_id,
                 message=message,
                 simulation_id=conversation.simulation.id,
                 tick=conversation.simulation.tick,
                 commit=False,
             )
 
-            message = Message(
+            message_model = Message(
                 tick=conversation.simulation.tick,
                 content=message,
                 agent_id=agent_id,
                 conversation_id=conversation.id,
             )
-            db.add(message)
+            db.add(message_model)
             db.commit()
+
+            agent_communication_message = AgentCommunicationMessage(
+                agent_id=agent_id,
+                simulation_id=simulation_id,
+                content=message,
+                id=message_model.id,
+                to_agent_id=other_agent_id,
+                created_at=message_model.created_at,
+            )
+            await agent_communication_message.publish(nats)
 
         except Exception as e:
             logger.error(f"Error continuing conversation: {e}")
@@ -269,7 +325,7 @@ async def end_conversation(
 ) -> None:
     """Only call this tool if you do not want to exchange any more messages in the conversation. This will end the conversation for you and the other agent."""
 
-    logger.success("Calling tool end_conversation")
+    logger.success(f"Calling tool end_conversation for agent {agent_id}")
 
     with get_session() as db:
         try:
@@ -277,19 +333,47 @@ async def end_conversation(
             conversation_service = ConversationService(db=db, nats=nats)
 
             conversation = conversation_service.get_active_by_agent_id(agent_id)
+            relationship_service = RelationshipService(db=db, nats=nats)
+            
 
             conversation.active = False
             conversation.finished = True
 
-            message = Message(
+            other_agent_id = (
+                conversation.agent_b_id
+                if conversation.agent_a_id == agent_id
+                else conversation.agent_a_id
+            )
+            
+            relationship_service.update_relationship(
+                agent1_id=agent_id,
+                agent2_id=other_agent_id,
+                message=reason,
+                simulation_id=conversation.simulation.id,
+                tick=conversation.simulation.tick,
+                commit=False,
+            )
+
+            message_model = Message(
                 tick=conversation.simulation.tick,
                 content=reason,
                 agent_id=agent_id,
                 conversation_id=conversation.id,
             )
             db.add(conversation)
-            db.add(message)
+            db.add(message_model)
             db.commit()
+
+            agent_communication_message = AgentCommunicationMessage(
+                agent_id=agent_id,
+                simulation_id=simulation_id,
+                content=reason,
+                id=message_model.id,
+                to_agent_id=other_agent_id,
+                created_at=message_model.created_at,
+            )
+            await agent_communication_message.publish(nats)
+
         except Exception as e:
             logger.error(f"Error ending conversation: {e}")
             raise e

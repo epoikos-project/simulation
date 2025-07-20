@@ -1,6 +1,5 @@
 import json
 import re
-from functools import partial
 from typing import Callable, List, override
 
 from autogen_agentchat.agents import AssistantAgent
@@ -86,6 +85,7 @@ class AutogenAgent(BaseAgent):
         parts = [
             SystemDescription(self.agent).build(),
             HungerContext(self.agent).build(),
+            MemoryContext(self.agent).build(actions=actions, memory_logs=[]),
             ObservationContext(self.agent).build(observations),
             # PlanContext(self.agent).build(),
             (
@@ -95,9 +95,8 @@ class AutogenAgent(BaseAgent):
                 if last_conversation
                 else ""
             ),
-            MemoryContext(self.agent).build(actions=actions, memory_logs=memory_logs),
         ]
-        context += "\n---\n".join(parts)
+        context += "\n\n---\n".join(parts)
 
         outstanding_requests = self.agent_service.get_outstanding_conversation_requests(
             self.agent.id
@@ -112,50 +111,40 @@ class AutogenAgent(BaseAgent):
         #     context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
         return (observations, context)
 
-    def toggle_tools(self, use_tools: bool):
-        """
-        Toggle the use of tools for the agent.
-        If use_tools is True, the agent will use tools, otherwise it will not.
-        """
-        tools: List[BaseTool] = [
-            self._make_bound_tool(tool) for tool in available_tools
-        ]
-        if use_tools:
-            self.autogen_agent._tools = tools
-        else:
-            self.autogen_agent._tools = []
-
-    def _adapt_tools(self, observations: List[ResourceObservation]):
+    def _adapt_tools(
+        self, tools: list[Callable], observations: List[ResourceObservation]
+    ):
         """Adapt the tools based on the agent's context."""
 
+        adapted_tools = tools
+
         if self.agent_service.has_outstanding_conversation_request(self.agent.id):
-            self.autogen_agent._tools = [
+            adapted_tools = [
                 tool
-                for tool in self.autogen_agent._tools
-                if tool.name == "accept_conversation_request"
-                or tool.name == "decline_conversation_request"
+                for tool in adapted_tools
+                if tool.__name__ == "accept_conversation_request"
+                or tool.__name__ == "decline_conversation_request"
+                or tool.__name__ == "update_plan"
             ]
-            return
+            return adapted_tools
 
         else:
-            self.autogen_agent._tools = [
+            adapted_tools = [
                 tool
-                for tool in self.autogen_agent._tools
-                if tool.name != "accept_conversation_request"
-                and tool.name != "decline_conversation_request"
+                for tool in adapted_tools
+                if tool.__name__ != "accept_conversation_request"
+                and tool.__name__ != "decline_conversation_request"
             ]
 
         # remove make_plan if agent already owns a plan
         if self.agent.owned_plan:
-            self.autogen_agent._tools = [
-                tool for tool in self.autogen_agent._tools if tool.name != "make_plan"
+            adapted_tools = [
+                tool for tool in adapted_tools if tool.__name__ != "make_plan"
             ]
             # remove add_task if the current plan already has more than 2 tasks or if the agent does not own a plan
             if len(self.agent.owned_plan.tasks) > 2 or not self.agent.owned_plan:
-                self.autogen_agent._tools = [
-                    tool
-                    for tool in self.autogen_agent._tools
-                    if tool.name != "add_task"
+                adapted_tools = [
+                    tool for tool in adapted_tools if tool.__name__ != "add_task"
                 ]
         # remove take_on_task if the agent is not part of any plan -> does not make sense as agent can only become part of a plan if it takes on a task
         # could consider simplification/ restriction to only allow taking on one task at a time
@@ -169,17 +158,19 @@ class AutogenAgent(BaseAgent):
         # remove start_conversation if the agent does not observe any other agents or if already in active conversation
         # TODO: check if this works correctly after communication rework
         if not any(type(obs) == AgentObservation for obs in observations):
-            self.autogen_agent._tools = [
+            adapted_tools = [
                 tool
-                for tool in self.autogen_agent._tools
-                if tool.name != "start_conversation"
+                for tool in adapted_tools
+                if tool.__name__ != "start_conversation"
+                and tool.__name__ != "end_conversation"
+                and tool.__name__ != "accept_conversation_request"
+                and tool.__name__ != "decline_conversation_request"
             ]
         if not any(type(obs) == ResourceObservation for obs in observations):
-            self.autogen_agent._tools = [
-                tool
-                for tool in self.autogen_agent._tools
-                if tool.name != "harvest_resource"
+            adapted_tools = [
+                tool for tool in adapted_tools if tool.__name__ != "harvest_resource"
             ]
+        return adapted_tools
 
     @observe(as_type="generation", name="Agent Tick")
     async def generate(self, reason: bool, reasoning_output: str | None = None):
@@ -199,27 +190,29 @@ class AutogenAgent(BaseAgent):
 
         observations, context = self.get_context()
 
-        self._adapt_tools(observations=observations)
+        adapted_tools = self._adapt_tools(self.initial_tools, observations=observations)
 
         if reason:
-            available_tools_summary = (
-                "\nThese are possible actions you can perform in the world: "
-            )
-            # TODO: maybe provide a few more details on the tools
-            for tool in self.tools:
-                available_tools_summary += tool.__name__ + ", "
-            context += f"{available_tools_summary}\nGiven this information reason about your next action. Think step by step. Answer with a comprehensive explanation about what and why you want to do next."
+            self.next_tools = list(adapted_tools)
+            context += f"\nGiven this information reason about your next action. Think step by step."
+            # "Answer with a comprehensive explanation about which 2 tools you want to call next. Remember, you cannot only call update_plan, you MUST call another tool."
         else:
-            error = self.agent.last_error
+            self.tools = adapted_tools
 
-            if error:
-                context += (
-                    "\n ERROR!! Last turn you experienced the following error: " + error
-                )
+            self._client, self.autogen_agent = self._initialize_llm()
+            logger.warning(self.autogen_agent._tools)
+
+            # context = self.system_prompt.build() + "\n\n---\n" + self.description.build() + "\n\n---\n"
+
             if reasoning_output:
-                context += f"\nYour reasoning about what to do next: {reasoning_output}"
-                context += "\nGiven this reasoning now decide on your next action by performing two tool calls. You should always first use the tool 'update_plan' to store your reasoning about your long term goal i.e. the overarching thing you want to achive. Then additionaly use another tool to perform an immediate action in the environment."
-            self._adapt_tools(observations)
+                context += f"\nYou previously reasoned about about what to do next: {reasoning_output}"
+                context += f"\nGiven this reasoning now decide on your next action by performing two tool calls."
+                # """You should always first use the tool 'update_plan' to store your reasoning about your long term goal i.e. the overarching thing you want to achive.
+                # Then you MUST additionaly use ONE other tool to perform an immediate action in the environment e.g:
+
+                # 1. update_plan(memory="I want to move closer to the resource at (15,5) to harvest it.")
+                # 2. move(x=5, y=5)
+                # """
 
         logger.debug(
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Context for generation: {context}"

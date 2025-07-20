@@ -10,7 +10,7 @@ class AgentObservation(BaseObservation):
 
     def __str__(self) -> str:
         return (
-            f"[ID: {self.id}; "
+            f"[agent_id: {self.id}; "
             f"type: {self.get_observation_type()}; "
             f"location: {self.location}; "
             f"distance: {self.distance}; "

@@ -30,14 +30,19 @@ class RegionService(BaseService[Region]):
 
         resources = []
         for coordinate in resource_coords:
+            # 1 in 10 chance the resource should die forever
+            if random.randint(1, 10) == 1:
+                regrow_time = -1
+            else:
+                regrow_time = random.randint(5, 100)
             resource = Resource(
                 x_coord=coordinate[0],
                 y_coord=coordinate[1],
                 simulation_id=region.simulation_id,
                 world_id=region.world_id,
                 region_id=region.id,
-                energy_yield=random.randint(1, 10),
-                regrow_time=random.randint(-1, 30),
+                energy_yield=random.randint(30, 100),
+                regrow_time=regrow_time,
             )
             resource = resource_service.create(model=resource, commit=commit)
             resources.append(resource)

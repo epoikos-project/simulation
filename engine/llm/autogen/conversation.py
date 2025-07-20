@@ -10,9 +10,14 @@ from engine.context.hunger import HungerContext
 from engine.context.memory import MemoryContext
 from engine.context.observation import ObservationContext
 from engine.context.plan import PlanContext
-from engine.context.system import SystemDescription, SystemPrompt
+from engine.context.system import (
+    ConversationSystemPrompt,
+    SystemDescription,
+    SystemPrompt,
+)
 from engine.llm.autogen.base import BaseAgent
 from engine.tools.conversation_tools import continue_conversation, end_conversation
+from engine.tools.plan_tools import make_plan
 
 from messages.agent.agent_prompt import AgentPromptMessage
 from messages.agent.agent_response import AgentResponseMessage
@@ -45,7 +50,7 @@ class ConversationAgent(BaseAgent):
             nats=nats,
             agent=agent,
             tools=[end_conversation, continue_conversation],
-            system_prompt=SystemPrompt(agent),
+            system_prompt=ConversationSystemPrompt(agent),
             description=SystemDescription(agent),
         )
         self.conversation = conversation
@@ -65,19 +70,19 @@ class ConversationAgent(BaseAgent):
     async def generate(self, reason: bool = False, reasoning_output: str | None = None):
         observations, context = self.get_context()
 
-        self._update_langfuse_trace_name(f"Conversation Tick {self.agent.name}")
-
         if reason:
-            self.tools = []
-            self._initialize_llm()
+            self.toggle_tools(use_tools=False)
             self._update_langfuse_trace_name(
                 f"Conversation Reason Tick {self.agent.name}"
             )
-            context += "\n---\nYou are reasoning about the next action to take. Please think step by step and provide a detailed explanation of your reasoning."
+            context += "\n\n---\nYou are reasoning about the next action to take. Please think step by step and provide a detailed explanation of your reasoning."
+        else:
+            self.toggle_tools(use_tools=True)
+            self._update_langfuse_trace_name(f"Conversation Tick {self.agent.name}")
 
         if reasoning_output:
-            context += f"\n---\nYour reasoning output from the last tick was:\n{reasoning_output}"
-        output = await self.run_autogen_agent(context=context)
+            context += f"\n\n---\nYour reasoning output from the last tick was:\n{reasoning_output}"
+        output = await self.run_autogen_agent(context=context, reason=reason)
 
         return output
 
@@ -101,7 +106,7 @@ class ConversationAgent(BaseAgent):
         ]
         context += "\n".join(parts)
 
-        context += "\nGiven this information, write a message to the other agent or decide to end the conversation. If you want to perform world actions, you must end the conversation first."
+        context += "\nGiven this information, write a message to the other agent or decide to end the conversation. If you want to perform world actions, you MUST end the conversation first."
         return (observations, context)
 
     async def generate_with_reasoning(self, reasoning_output: str | None = None):

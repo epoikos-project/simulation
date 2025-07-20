@@ -1,12 +1,13 @@
 from typing import Annotated
+
+from langfuse.decorators import observe
 from loguru import logger
 
 from clients.db import get_session
 from clients.nats import nats_broker
 
-from langfuse.decorators import observe
-
 from messages.world.resource_harvested import ResourceHarvestedMessage
+
 from services.agent import AgentService
 from services.resource import ResourceService
 
@@ -38,7 +39,9 @@ async def harvest_resource(
             agent = agent_service.get_by_id(agent_id)
             resource = resource_service.get_by_location(agent.simulation.world.id, x, y)
 
-            harvested = resource_service.harvest_resource(resource=resource, harvester=agent)
+            harvested = resource_service.harvest_resource(
+                resource=resource, harvester=agent
+            )
 
             if harvested:
                 resource_harvested_message = ResourceHarvestedMessage(
@@ -56,6 +59,7 @@ async def harvest_resource(
         logger.error(f"Error harvesting resource: {e}")
         raise e
 
+
 @observe()
 async def continue_waiting(
     agent_id: str,
@@ -64,7 +68,6 @@ async def continue_waiting(
     """Continue waiting for others to join the harvesting process."""
 
     logger.success("Calling tool continue_waiting")
-
 
 
 @observe()
