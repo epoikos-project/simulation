@@ -115,8 +115,17 @@ class SimulationRunner:
         )
 
         agent_ids = db.exec(
-            select(Agent.id).where(Agent.simulation_id == simulation.id)
+            select(Agent.id).where(
+                Agent.simulation_id == simulation.id,
+                Agent.dead == False
+            )
         ).all()
+
+        # If no alive agents, stop simulation
+        if not agent_ids:
+            logger.info(f"[SIM {simulation.id}] No alive agents remaining, stopping simulation")
+            SimulationRunner.stop_simulation(simulation.id, db, nats)
+            return
 
         tasks = [AgentRunner.tick_agent(nats, agent_id) for agent_id in agent_ids]
         await asyncio.gather(*tasks)

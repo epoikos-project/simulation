@@ -30,6 +30,7 @@ class Agent(BaseModel, table=True):
     name: str = Field()
     model: str = Field(default=None, nullable=True)
     energy_level: float = Field(default=20.0)
+    dead: bool = Field(default=False)
 
     last_error: str = Field(nullable=True, default=None)
 

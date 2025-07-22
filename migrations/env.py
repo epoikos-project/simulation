@@ -25,6 +25,7 @@ if config.config_file_name is not None:
 from schemas import (
     action_log,
     agent,
+    carcass,
     configuration,
     conversation,
     memory_log,

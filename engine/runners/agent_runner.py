@@ -22,6 +22,14 @@ class AgentRunner:
             agent_service = AgentService(db=db, nats=nats)
             conversation_service = ConversationService(db=db, nats=nats)
             agent = agent_service.get_by_id(agent_id)
+            
+            # Skip dead agents
+            if agent.dead:
+                logger.debug(
+                    f"[SIM {agent.simulation.id}][AGENT {agent.id}] Agent is dead, skipping tick"
+                )
+                return
+                
             conversation = conversation_service.get_active_by_agent_id(agent_id)
             if agent_service.has_initialized_conversation(agent_id):
                 logger.debug(

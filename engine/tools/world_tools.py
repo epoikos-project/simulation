@@ -44,7 +44,7 @@ async def move(
             truncated_exc = None
 
             try:
-                new_location = agent_service.move_agent(agent=agent, destination=(x, y))
+                new_location = await agent_service.move_agent(agent=agent, destination=(x, y))
                 destination = f"({x}, {y})"
             except MovementTruncated as e:
                 truncated_exc = e
@@ -86,7 +86,7 @@ async def random_move(
 
             agent_service = AgentService(db=db, nats=nats)
             agent = agent_service.get_by_id(agent_id)
-            new_location = agent_service.move_agent_in_random_direction(
+            new_location = await agent_service.move_agent_in_random_direction(
                 agent=agent,
             )
 

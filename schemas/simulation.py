@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
     from schemas.action_log import ActionLog
     from schemas.agent import Agent
+    from schemas.carcass import Carcass
     from schemas.conversation import Conversation
     from schemas.memory_log import MemoryLog
     from schemas.resource import Resource
@@ -38,5 +39,9 @@ class Simulation(BaseModel, table=True):
     )
 
     conversations: list["Conversation"] = Relationship(
+        back_populates="simulation", cascade_delete=True
+    )
+
+    carcasses: list["Carcass"] = Relationship(
         back_populates="simulation", cascade_delete=True
     )

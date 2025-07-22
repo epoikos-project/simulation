@@ -2,8 +2,10 @@ from loguru import logger
 from sqlmodel import select
 
 from engine.context.observation import ObservationUnion
-from engine.context.observations import AgentObservation, ResourceObservation
+from engine.context.observations import AgentObservation, CarcassObservation, ResourceObservation
 from engine.grid import Grid
+
+from messages.agent.agent_dead import AgentDeadMessage
 
 from services.base import BaseService
 from services.conversation import ConversationService
@@ -13,6 +15,7 @@ from services.world import WorldService
 
 from schemas.action_log import ActionLog
 from schemas.agent import Agent
+from schemas.carcass import Carcass
 from schemas.conversation import Conversation
 from schemas.memory_log import MemoryLog
 from schemas.message import Message
@@ -54,6 +57,7 @@ class AgentService(BaseService[Agent]):
         )
 
         context.extend(self.get_agent_observations(agent))
+        context.extend(self.get_carcass_observations(agent))
         return context
 
     def get_resource_observations(self, agent: Agent) -> list[ResourceObservation]:
@@ -94,6 +98,7 @@ class AgentService(BaseService[Agent]):
             select(Agent).where(
                 Agent.simulation_id == agent.simulation_id,
                 Agent.id != agent.id,
+                Agent.dead == False,  # Exclude dead agents
                 Agent.x_coord >= agent.x_coord - agent.visibility_range,
                 Agent.x_coord <= agent.x_coord + agent.visibility_range,
                 Agent.y_coord >= agent.y_coord - agent.visibility_range,
@@ -117,6 +122,36 @@ class AgentService(BaseService[Agent]):
             agent_observations.append(agent_obs)
 
         return agent_observations
+
+    def get_carcass_observations(self, agent: Agent) -> list[CarcassObservation]:
+        """Load carcass observations from database given coordinates and visibility range of an agent"""
+        
+        carcasses = self._db.exec(
+            select(Carcass).where(
+                Carcass.simulation_id == agent.simulation_id,
+                Carcass.x_coord >= agent.x_coord - agent.visibility_range,
+                Carcass.x_coord <= agent.x_coord + agent.visibility_range,
+                Carcass.y_coord >= agent.y_coord - agent.visibility_range,
+                Carcass.y_coord <= agent.y_coord + agent.visibility_range,
+            )
+        ).all()
+
+        # Create CarcassObservation for each nearby carcass
+        carcass_observations = []
+        for carcass in carcasses:
+            carcass_distance = compute_distance_raw(
+                agent.x_coord, agent.y_coord, carcass.x_coord, carcass.y_coord
+            )
+
+            carcass_obs = CarcassObservation(
+                location=(carcass.x_coord, carcass.y_coord),
+                distance=carcass_distance,
+                id=carcass.id,
+                carcass=carcass,
+            )
+            carcass_observations.append(carcass_obs)
+
+        return carcass_observations
 
     def get_outstanding_conversation_requests(
         self, agent_id: str
@@ -160,7 +195,7 @@ class AgentService(BaseService[Agent]):
         """Check if the agent has an initialized conversation."""
         return len(self.get_initialized_conversation_requests(agent_id)) > 0
 
-    def move_agent_in_direction(self, agent: Agent, direction: str) -> tuple[int, int]:
+    async def move_agent_in_direction(self, agent: Agent, direction: str) -> tuple[int, int]:
         """
         Moves the specified agent in the given direction within the world.
 
@@ -218,9 +253,9 @@ class AgentService(BaseService[Agent]):
             f"Agent {agent.id} moving {direction} to destination {destination}"
         )
 
-        return self.move_agent(agent, destination)
+        return await self.move_agent(agent, destination)
 
-    def move_agent(self, agent: Agent, destination: tuple[int, int]):
+    async def move_agent(self, agent: Agent, destination: tuple[int, int]):
         """Move agent to new location in world"""
         logger.debug(f"Moving agent {agent.id} to {destination}")
 
@@ -277,6 +312,11 @@ class AgentService(BaseService[Agent]):
 
         agent.energy_level -= current_region.region_energy_cost * steps_to_move
 
+        # Check if agent dies from energy depletion
+        if agent.energy_level <= 0:
+            await self._handle_agent_death(agent)
+            return new_location
+
         self._db.add(agent)
         self._db.commit()
 
@@ -292,7 +332,7 @@ class AgentService(BaseService[Agent]):
 
         return new_location
 
-    def move_agent_in_random_direction(self, agent: Agent) -> tuple[int, int]:
+    async def move_agent_in_random_direction(self, agent: Agent) -> tuple[int, int]:
         """
         Moves the specified agent in a random direction within the world.
 
@@ -325,7 +365,7 @@ class AgentService(BaseService[Agent]):
         destination = random.choice(possible_destinations)
         # Find the direction string or coordinate to pass to move_agent_in_direction
         # Here, we directly use the move_agent method since we have a coordinate
-        return self.move_agent(agent, destination)
+        return await self.move_agent(agent, destination)
 
     def get_world_obstacles(self, agent: Agent):
         """Get obstacles for agent"""
@@ -337,6 +377,7 @@ class AgentService(BaseService[Agent]):
             select(Agent).where(
                 Agent.simulation_id == agent.simulation_id,
                 Agent.id != agent.id,  # Exclude the current agent
+                Agent.dead == False,  # Exclude dead agents
                 Agent.x_coord >= agent_location[0] - agent_fov,
                 Agent.x_coord <= agent_location[0] + agent_fov,
                 Agent.y_coord >= agent_location[1] - agent_fov,
@@ -401,3 +442,34 @@ class AgentService(BaseService[Agent]):
         ).all()
 
         return memory_logs
+
+    async def _handle_agent_death(self, agent: Agent):
+        """Handle agent death by marking as dead, creating carcass, and sending NATS message"""
+        logger.info(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Agent {agent.name} has died!")
+        
+        # Mark agent as dead
+        agent.dead = True
+        agent.energy_level = 0
+        agent.harvesting_resource_id = None  # Clear any resource harvesting
+        
+        # Create carcass at agent's location
+        carcass = Carcass(
+            simulation_id=agent.simulation_id,
+            agent_name=agent.name,
+            x_coord=agent.x_coord,
+            y_coord=agent.y_coord,
+            death_tick=agent.simulation.tick
+        )
+        
+        self._db.add(agent)
+        self._db.add(carcass)
+        self._db.commit()
+        
+        # Send death message
+        death_message = AgentDeadMessage(
+            simulation_id=agent.simulation_id,
+            agent_id=agent.id
+        )
+        await death_message.publish(self._nats)
+        
+        logger.success(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Agent death handled successfully")
