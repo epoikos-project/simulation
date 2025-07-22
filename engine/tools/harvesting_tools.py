@@ -4,7 +4,7 @@ from langfuse.decorators import observe
 from loguru import logger
 
 from clients.db import get_session
-from clients.nats import nats_broker
+from clients.nats import get_nats_broker, nats_broker
 
 from messages.world.resource_harvested import ResourceHarvestedMessage
 
@@ -27,33 +27,34 @@ async def harvest_resource(
 
     try:
         with get_session() as db:
-            logger.success("Calling tool harvest_resource")
+            async with get_nats_broker() as nats:
+                logger.success("Calling tool harvest_resource")
 
-            logger.debug(f"Agent {agent_id} starts harvesting resource at {(x, y)}")
+                logger.debug(f"Agent {agent_id} starts harvesting resource at {(x, y)}")
 
-            nats = nats_broker()
+                agent_service = AgentService(db=db, nats=nats)
+                resource_service = ResourceService(db=db, nats=nats)
 
-            agent_service = AgentService(db=db, nats=nats)
-            resource_service = ResourceService(db=db, nats=nats)
-
-            agent = agent_service.get_by_id(agent_id)
-            resource = resource_service.get_by_location(agent.simulation.world.id, x, y)
-
-            harvested = resource_service.harvest_resource(
-                resource=resource, harvester=agent
-            )
-
-            if harvested:
-                resource_harvested_message = ResourceHarvestedMessage(
-                    simulation_id=simulation_id,
-                    id=resource.id,
-                    harvester_id=agent_id,
-                    location=(resource.x_coord, resource.y_coord),
-                    start_tick=agent.simulation.tick,
-                    end_tick=agent.simulation.tick,
-                    new_energy_level=agent.energy_level,
+                agent = agent_service.get_by_id(agent_id)
+                resource = resource_service.get_by_location(
+                    agent.simulation.world.id, x, y
                 )
-                await resource_harvested_message.publish(nats)
+
+                harvested = resource_service.harvest_resource(
+                    resource=resource, harvester=agent
+                )
+
+                if harvested:
+                    resource_harvested_message = ResourceHarvestedMessage(
+                        simulation_id=simulation_id,
+                        id=resource.id,
+                        harvester_id=agent_id,
+                        location=(resource.x_coord, resource.y_coord),
+                        start_tick=agent.simulation.tick,
+                        end_tick=agent.simulation.tick,
+                        new_energy_level=agent.energy_level,
+                    )
+                    await resource_harvested_message.publish(nats)
 
     except Exception as e:
         logger.error(f"Error harvesting resource: {e}")

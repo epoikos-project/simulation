@@ -178,6 +178,8 @@ class OrchestratorService:
         # 3) spawn count times
         for _ in range(agent_cfg.get("count", 1)):
             name = self.name_generator(agent_cfg)
+            personality_list = agent_cfg.get("personality", ["Default"])
+            personality = ", ".join(personality_list)
             # Ensure unique (x, y) coordinates for each agent
             attempts = 0
             max_attempts = 100
@@ -201,6 +203,7 @@ class OrchestratorService:
                     "range_per_move", 5
                 ),  # TODO: make configurable
                 name=name,
+                personality = personality,
                 x_coord=x,
                 y_coord=y,
                 collection_name=f"simulation_{sim_id}_agent_{name}",

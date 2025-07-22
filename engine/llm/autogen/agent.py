@@ -200,7 +200,6 @@ class AutogenAgent(BaseAgent):
             self.tools = adapted_tools
 
             self._client, self.autogen_agent = self._initialize_llm()
-            logger.warning(self.autogen_agent._tools)
 
             # context = self.system_prompt.build() + "\n\n---\n" + self.description.build() + "\n\n---\n"
 

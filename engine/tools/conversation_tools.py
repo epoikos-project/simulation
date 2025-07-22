@@ -6,7 +6,7 @@ from langfuse.decorators import observe
 from loguru import logger
 
 from clients.db import get_session
-from clients.nats import nats_broker
+from clients.nats import get_nats_broker, nats_broker
 
 from messages.agent.agent_communication import AgentCommunicationMessage
 
@@ -125,59 +125,58 @@ async def accept_conversation_request(
     logger.success(f"Calling tool accept_conversation_request for agent {agent_id}")
 
     with get_session() as db:
-        try:
-            nats = nats_broker()
-            conversation_service = ConversationService(db=db, nats=nats)
-            relationship_service = RelationshipService(db=db, nats=nats)
-            
+        async with get_nats_broker() as nats:
+            try:
+                conversation_service = ConversationService(db=db, nats=nats)
+                relationship_service = RelationshipService(db=db, nats=nats)
 
-            conversation = conversation_service.get_by_id(conversation_id)
-            if not conversation:
-                logger.error(f"Conversation {conversation_id} not found.")
-                raise ValueError("Conversation not found.")
+                conversation = conversation_service.get_by_id(conversation_id)
+                if not conversation:
+                    logger.error(f"Conversation {conversation_id} not found.")
+                    raise ValueError("Conversation not found.")
 
-            conversation.active = True
-            conversation.declined = False
+                conversation.active = True
+                conversation.declined = False
 
-            other_agent_id = (
-                conversation.agent_b_id
-                if conversation.agent_a_id == agent_id
-                else conversation.agent_a_id
-            )
+                other_agent_id = (
+                    conversation.agent_b_id
+                    if conversation.agent_a_id == agent_id
+                    else conversation.agent_a_id
+                )
 
-            message_model = Message(
-                tick=conversation.simulation.tick,
-                content=message,
-                agent_id=agent_id,
-                conversation_id=conversation.id,
-            )
-            
-            relationship_service.update_relationship(
-                agent1_id=agent_id,
-                agent2_id=other_agent_id,
-                message=message,
-                simulation_id=conversation.simulation.id,
-                tick=conversation.simulation.tick,
-                commit=False,
-            )
+                message_model = Message(
+                    tick=conversation.simulation.tick,
+                    content=message,
+                    agent_id=agent_id,
+                    conversation_id=conversation.id,
+                )
 
-            db.add(conversation)
-            db.add(message_model)
-            db.commit()
+                relationship_service.update_relationship(
+                    agent1_id=agent_id,
+                    agent2_id=other_agent_id,
+                    message=message,
+                    simulation_id=conversation.simulation.id,
+                    tick=conversation.simulation.tick,
+                    commit=False,
+                )
 
-            agent_communication_message = AgentCommunicationMessage(
-                agent_id=agent_id,
-                simulation_id=simulation_id,
-                content=message,
-                id=message_model.id,
-                to_agent_id=other_agent_id,
-                created_at=message_model.created_at,
-            )
-            await agent_communication_message.publish(nats)
+                db.add(conversation)
+                db.add(message_model)
+                db.commit()
 
-        except Exception as e:
-            logger.error(f"Error accepting conversation request: {e}")
-            raise e
+                agent_communication_message = AgentCommunicationMessage(
+                    agent_id=agent_id,
+                    simulation_id=simulation_id,
+                    content=message,
+                    id=message_model.id,
+                    to_agent_id=other_agent_id,
+                    created_at=message_model.created_at,
+                )
+                await agent_communication_message.publish(nats)
+
+            except Exception as e:
+                logger.error(f"Error accepting conversation request: {e}")
+                raise e
 
 
 @observe
@@ -199,7 +198,6 @@ async def decline_conversation_request(
             nats = nats_broker()
             conversation_service = ConversationService(db=db, nats=nats)
             relationship_service = RelationshipService(db=db, nats=nats)
-            
 
             conversation = conversation_service.get_by_id(conversation_id)
             if not conversation:
@@ -231,7 +229,7 @@ async def decline_conversation_request(
                 tick=conversation.simulation.tick,
                 commit=False,
             )
-            
+
             db.add(conversation)
             db.add(message_model)
             db.commit()
@@ -334,7 +332,6 @@ async def end_conversation(
 
             conversation = conversation_service.get_active_by_agent_id(agent_id)
             relationship_service = RelationshipService(db=db, nats=nats)
-            
 
             conversation.active = False
             conversation.finished = True
@@ -344,7 +341,7 @@ async def end_conversation(
                 if conversation.agent_a_id == agent_id
                 else conversation.agent_a_id
             )
-            
+
             relationship_service.update_relationship(
                 agent1_id=agent_id,
                 agent2_id=other_agent_id,

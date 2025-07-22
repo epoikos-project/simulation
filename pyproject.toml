@@ -25,6 +25,8 @@ dependencies = [
     "scipy>=1.10.0",
     "psycopg2-binary>=2.9.10",
     "sqlalchemy>=2.0.41",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
 ]
 
 [dependency-groups]

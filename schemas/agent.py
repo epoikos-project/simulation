@@ -28,6 +28,7 @@ class Agent(BaseModel, table=True):
     )
 
     name: str = Field()
+    personality: str = Field(default=None, nullable=True)
     model: str = Field(default=None, nullable=True)
     energy_level: float = Field(default=20.0)
     dead: bool = Field(default=False)
