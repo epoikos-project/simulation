@@ -84,11 +84,11 @@ async def random_move(
         with get_session() as db:
             async with get_nats_broker() as nats:
 
-            agent_service = AgentService(db=db, nats=nats)
-            agent = agent_service.get_by_id(agent_id)
-            new_location = await agent_service.move_agent_in_random_direction(
-                agent=agent,
-            )
+                agent_service = AgentService(db=db, nats=nats)
+                agent = agent_service.get_by_id(agent_id)
+                new_location = await agent_service.move_agent_in_random_direction(
+                    agent=agent,
+                )
 
                 start_location = (agent.x_coord, agent.y_coord)
                 destination = str((new_location[0], new_location[1]))

@@ -1,5 +1,6 @@
 from loguru import logger
 from sqlmodel import select
+from clients.nats import get_nats_broker
 
 from engine.context.observation import ObservationUnion
 from engine.context.observations import AgentObservation, CarcassObservation, ResourceObservation
@@ -465,11 +466,16 @@ class AgentService(BaseService[Agent]):
         self._db.add(carcass)
         self._db.commit()
         
-        # Send death message
-        death_message = AgentDeadMessage(
-            simulation_id=agent.simulation_id,
-            agent_id=agent.id
-        )
-        await death_message.publish(self._nats)
+        # Send death message using properly connected broker
+        try:
+            async with get_nats_broker() as nats:
+                death_message = AgentDeadMessage(
+                    id=agent.id,
+                    simulation_id=agent.simulation_id,
+                    agent_id=agent.id
+                )
+                await death_message.publish(nats)
+        except Exception as e:
+            logger.warning(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Failed to publish death message: {e}")
         
         logger.success(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Agent death handled successfully")

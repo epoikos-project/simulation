@@ -81,9 +81,15 @@ class SimulationRunner:
 
         thread = SimulationRunner._threads.get(id)
         if thread is not None:
-            thread.join()
-            del SimulationRunner._threads[id]
-            del SimulationRunner._stop_events[id]
+            # Check if we're trying to join from within the same thread
+            import threading
+            current_thread = threading.current_thread()
+            if thread != current_thread:
+                thread.join()
+                del SimulationRunner._threads[id]
+                del SimulationRunner._stop_events[id]
+            else:
+                logger.debug(f"Simulation {id} stopping from within simulation thread - cleanup will happen automatically")
         return simulation.tick
 
     @staticmethod
@@ -256,13 +262,20 @@ class SimulationRunner:
         db: Session,
         nats: NatsBroker,
     ):
-        while not stop_event.is_set():
-            try:
-                await SimulationRunner.tick_simulation(
-                    db=db, nats=nats, simulation_id=simulation_id
-                )
-            except Exception as e:
-                logger.exception(f"Error during tick: {e}")
+        try:
+            while not stop_event.is_set():
+                try:
+                    await SimulationRunner.tick_simulation(
+                        db=db, nats=nats, simulation_id=simulation_id
+                    )
+                except Exception as e:
+                    logger.exception(f"Error during tick: {e}")
 
-            await asyncio.sleep(tick_interval)
-        logger.info(f"Simulation {simulation_id} shutdown gracefully")
+                await asyncio.sleep(tick_interval)
+        finally:
+            # Clean up thread references when the loop exits
+            if simulation_id in SimulationRunner._threads:
+                del SimulationRunner._threads[simulation_id]
+            if simulation_id in SimulationRunner._stop_events:
+                del SimulationRunner._stop_events[simulation_id]
+            logger.info(f"Simulation {simulation_id} shutdown gracefully")
