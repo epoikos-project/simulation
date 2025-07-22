@@ -196,7 +196,7 @@ class AgentService(BaseService[Agent]):
         """Check if the agent has an initialized conversation."""
         return len(self.get_initialized_conversation_requests(agent_id)) > 0
 
-    async def move_agent_in_direction(self, agent: Agent, direction: str) -> tuple[int, int]:
+    def move_agent_in_direction(self, agent: Agent, direction: str) -> tuple[int, int]:
         """
         Moves the specified agent in the given direction within the world.
 
@@ -254,9 +254,9 @@ class AgentService(BaseService[Agent]):
             f"Agent {agent.id} moving {direction} to destination {destination}"
         )
 
-        return await self.move_agent(agent, destination)
+        return self.move_agent(agent, destination)
 
-    async def move_agent(self, agent: Agent, destination: tuple[int, int]):
+    def move_agent(self, agent: Agent, destination: tuple[int, int]):
         """Move agent to new location in world"""
         logger.debug(f"Moving agent {agent.id} to {destination}")
 
@@ -315,7 +315,7 @@ class AgentService(BaseService[Agent]):
 
         # Check if agent dies from energy depletion
         if agent.energy_level <= 0:
-            await self._handle_agent_death(agent)
+            self._handle_agent_death(agent)
             return new_location
 
         self._db.add(agent)
@@ -333,7 +333,7 @@ class AgentService(BaseService[Agent]):
 
         return new_location
 
-    async def move_agent_in_random_direction(self, agent: Agent) -> tuple[int, int]:
+    def move_agent_in_random_direction(self, agent: Agent) -> tuple[int, int]:
         """
         Moves the specified agent in a random direction within the world.
 
@@ -366,7 +366,7 @@ class AgentService(BaseService[Agent]):
         destination = random.choice(possible_destinations)
         # Find the direction string or coordinate to pass to move_agent_in_direction
         # Here, we directly use the move_agent method since we have a coordinate
-        return await self.move_agent(agent, destination)
+        return self.move_agent(agent, destination)
 
     def get_world_obstacles(self, agent: Agent):
         """Get obstacles for agent"""
@@ -444,7 +444,7 @@ class AgentService(BaseService[Agent]):
 
         return memory_logs
 
-    async def _handle_agent_death(self, agent: Agent):
+    def _handle_agent_death(self, agent: Agent):
         """Handle agent death by marking as dead, creating carcass, and sending NATS message"""
         logger.info(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Agent {agent.name} has died!")
         
@@ -466,16 +466,26 @@ class AgentService(BaseService[Agent]):
         self._db.add(carcass)
         self._db.commit()
         
-        # Send death message using properly connected broker
-        try:
-            async with get_nats_broker() as nats:
+        # Send death message using fire-and-forget approach to avoid blocking
+        import asyncio
+        import threading
+        
+        def _publish_death_message():
+            try:
                 death_message = AgentDeadMessage(
                     id=agent.id,
                     simulation_id=agent.simulation_id,
                     agent_id=agent.id
                 )
-                await death_message.publish(nats)
-        except Exception as e:
-            logger.warning(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Failed to publish death message: {e}")
+                # Use the service's NATS broker if available
+                if hasattr(self, '_nats') and self._nats:
+                    asyncio.create_task(death_message.publish(self._nats))
+                else:
+                    logger.debug(f"[SIM {agent.simulation_id}][AGENT {agent.id}] No NATS broker available for death message")
+            except Exception as e:
+                logger.warning(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Failed to publish death message: {e}")
+        
+        # Run NATS publishing in background to avoid blocking movement
+        threading.Thread(target=_publish_death_message, daemon=True).start()
         
         logger.success(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Agent death handled successfully")

@@ -4,7 +4,7 @@ from langfuse.decorators import observe
 from loguru import logger
 
 from clients.db import get_session
-from clients.nats import get_nats_broker, nats_broker
+from clients.nats import nats_broker
 
 from messages.world.agent_moved import AgentMovedMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
@@ -35,35 +35,35 @@ async def move(
     logger.success("Calling tool move")
     try:
         with get_session() as db:
-            async with get_nats_broker() as nats:
-                logger.debug(f"Agent {agent_id} starts moving to ({x}, {y})")
+            logger.debug(f"Agent {agent_id} starts moving to ({x}, {y})")
+            nats = nats_broker()
 
-                agent_service = AgentService(db=db, nats=nats)
-                agent = agent_service.get_by_id(agent_id)
-                start_location = (agent.x_coord, agent.y_coord)
-                truncated_exc = None
+            agent_service = AgentService(db=db, nats=nats)
+            agent = agent_service.get_by_id(agent_id)
+            start_location = (agent.x_coord, agent.y_coord)
+            truncated_exc = None
 
             try:
-                new_location = await agent_service.move_agent(agent=agent, destination=(x, y))
+                new_location = agent_service.move_agent(agent=agent, destination=(x, y))
                 destination = f"({x}, {y})"
             except MovementTruncated as e:
                 truncated_exc = e
                 new_location = e.new_location
                 destination = str((new_location[0], new_location[1]))
 
-                agent_moved_message = AgentMovedMessage(
-                    simulation_id=simulation_id,
-                    id=agent_id,
-                    start_location=start_location,
-                    new_location=new_location,
-                    destination=destination,
-                    num_steps=compute_distance(start_location, new_location),
-                    new_energy_level=agent.energy_level,
-                )
-                await agent_moved_message.publish(nats)
+            agent_moved_message = AgentMovedMessage(
+                simulation_id=simulation_id,
+                id=agent_id,
+                start_location=start_location,
+                new_location=new_location,
+                destination=destination,
+                num_steps=compute_distance(start_location, new_location),
+                new_energy_level=agent.energy_level,
+            )
+            await agent_moved_message.publish(nats)
 
-                if truncated_exc is not None:
-                    raise truncated_exc
+            if truncated_exc is not None:
+                raise truncated_exc
 
     except Exception as e:
         logger.exception(e)
@@ -82,28 +82,29 @@ async def random_move(
 
     try:
         with get_session() as db:
-            async with get_nats_broker() as nats:
+            nats = nats_broker()
 
-                agent_service = AgentService(db=db, nats=nats)
-                agent = agent_service.get_by_id(agent_id)
-                new_location = await agent_service.move_agent_in_random_direction(
-                    agent=agent,
-                )
+            agent_service = AgentService(db=db, nats=nats)
+            agent = agent_service.get_by_id(agent_id)
+            new_location = agent_service.move_agent_in_random_direction(
+                agent=agent,
+            )
 
-                start_location = (agent.x_coord, agent.y_coord)
-                destination = str((new_location[0], new_location[1]))
+            start_location = (agent.x_coord, agent.y_coord)
+            destination = str((new_location[0], new_location[1]))
 
-                agent_moved_message = AgentMovedMessage(
-                    simulation_id=simulation_id,
-                    id=agent_id,
-                    start_location=start_location,
-                    new_location=new_location,
-                    destination=destination,
-                    num_steps=compute_distance(start_location, new_location),
-                    new_energy_level=agent.energy_level,
-                )
-                await agent_moved_message.publish(nats)
+            agent_moved_message = AgentMovedMessage(
+                simulation_id=simulation_id,
+                id=agent_id,
+                start_location=start_location,
+                new_location=new_location,
+                destination=destination,
+                num_steps=compute_distance(start_location, new_location),
+                new_energy_level=agent.energy_level,
+            )
+            await agent_moved_message.publish(nats)
     except Exception as e:
         logger.exception(e)
         logger.error(f"Error getting agent service: {e}")
         raise
+    
