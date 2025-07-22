@@ -59,7 +59,7 @@ class OrchestratorService:
             0,
         )
     
-    def name_generator(agent_cfg: dict) -> str:
+    def name_generator(self, agent_cfg: dict) -> str:
         """
         Name list adapted from SSA baby names data and Wolfe & Caliskan (2021, EMNLP).
         See also Wikipedia: Unisex names in English.
@@ -75,7 +75,7 @@ class OrchestratorService:
         
         # Otherwise, choose a random neutral first name
         name = random.choice(neutral_first_names)
-        return f"{name}{str(uuid.uuid4().hex)[:2]}"
+        return f"{name}"
 
     async def run_from_config(self, config_name: str) -> str:
         stmt = select(ConfigTable).where(ConfigTable.name == config_name)
