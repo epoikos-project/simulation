@@ -58,6 +58,24 @@ class OrchestratorService:
             (int(a["value"]) for a in arr if a.get("name") == name),
             0,
         )
+    
+    def name_generator(agent_cfg: dict) -> str:
+        """
+        Name list adapted from SSA baby names data and Wolfe & Caliskan (2021, EMNLP).
+        See also Wikipedia: Unisex names in English.
+        """
+        neutral_first_names = [
+            "Alex", "Taylor", "Morgan", "Casey", "Riley", "Jordan", "Avery", "Quinn", "Robin", "Cameron",
+            "Jamie", "Dakota", "Skyler", "Reese", "Sydney", "Jesse", "Charlie", "Corey", "Drew", "Sam"
+        ]
+
+        # If a name is provided, use it (with short random postfix for uniqueness)
+        if agent_cfg and agent_cfg.get("name"):
+            return f"{agent_cfg['name']}{str(uuid.uuid4().hex)[:2]}"
+        
+        # Otherwise, choose a random neutral first name
+        name = random.choice(neutral_first_names)
+        return f"{name}{str(uuid.uuid4().hex)[:2]}"
 
     async def run_from_config(self, config_name: str) -> str:
         stmt = select(ConfigTable).where(ConfigTable.name == config_name)
@@ -159,7 +177,7 @@ class OrchestratorService:
         agents = []
         # 3) spawn count times
         for _ in range(agent_cfg.get("count", 1)):
-            name = agent_cfg.get("name", "") + str(uuid.uuid4().hex)[:2]
+            name = self.name_generator(agent_cfg)
             # Ensure unique (x, y) coordinates for each agent
             attempts = 0
             max_attempts = 100
