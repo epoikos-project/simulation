@@ -52,7 +52,7 @@ async def test_agent_moves_within_20_ticks(run):
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=10,
                 y_coord=10,  # adjacent
-                energy_level=0,
+                energy_level=15,
             )
 
             agent2 = Agent(
@@ -61,7 +61,7 @@ async def test_agent_moves_within_20_ticks(run):
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=12,
                 y_coord=12,  # adjacent
-                energy_level=0,
+                energy_level=15,
             )
 
             db.add(agent1)
@@ -69,6 +69,9 @@ async def test_agent_moves_within_20_ticks(run):
             db.commit()
             db.refresh(agent1)
             db.refresh(agent2)
+
+            logger.info(f"Created agent1 with ID: {agent1.id}")
+            logger.info(f"Created agent2 with ID: {agent2.id}")
 
             logger.success(
                 f"View live at http://localhost:3000/simulation/{simulation.id}"

@@ -67,7 +67,7 @@ async def test_agent_moves_within_20_ticks(run):
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=10,
                 y_coord=10,  # adjacent
-                energy_level=0,
+                energy_level=15,
             )
             db.add(agent)
             db.commit()

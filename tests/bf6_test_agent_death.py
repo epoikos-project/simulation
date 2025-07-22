@@ -91,17 +91,25 @@ async def test_agent_dies_when_energy_depleted(run):
                     logger.success(f"Agent died at tick {tick + 1} with energy {agent.energy_level}")
                     
                     # Check if carcass was created
-                    carcass = db.exec(
+                    carcass_result = db.exec(
                         select(Carcass).where(
                             Carcass.simulation_id == simulation.id,
                             Carcass.agent_name == agent.name
                         )
                     ).first()
-                    
-                    if carcass:
+
+                    if carcass_result:
+                        # Extract the actual Carcass object if it's wrapped in a Row/tuple
+                        if hasattr(carcass_result, '__iter__') and not isinstance(carcass_result, str):
+                            carcass = carcass_result[0] if len(carcass_result) > 0 else carcass_result
+                        else:
+                            carcass = carcass_result
+                        
                         carcass_found = True
                         logger.success(f"Carcass found at location ({carcass.x_coord}, {carcass.y_coord})")
-                    
+                    else:
+                        logger.error("No carcass found")
+
                     break
                 
                 await asyncio.sleep(0.1)  # Small delay to allow processing
