@@ -14,5 +14,5 @@ class CarcassObservation(BaseObservation):
             f"distance: {self.distance}; "
             f"agent_name: {self.carcass.agent_name}; "
             f"death_tick: {self.carcass.death_tick}; "
-            "This is the remains of a dead agent.]"
+            "This is the remains of a dead agent. Carcasses cannot be harvested or interacted with.]"
         )
