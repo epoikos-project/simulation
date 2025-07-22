@@ -6,8 +6,6 @@ from engine.context.observation import ObservationUnion
 from engine.context.observations import AgentObservation, CarcassObservation, ResourceObservation
 from engine.grid import Grid
 
-from messages.agent.agent_dead import AgentDeadMessage
-
 from services.base import BaseService
 from services.conversation import ConversationService
 from services.region import RegionService
@@ -313,11 +311,6 @@ class AgentService(BaseService[Agent]):
 
         agent.energy_level -= current_region.region_energy_cost * steps_to_move
 
-        # Check if agent dies from energy depletion
-        if agent.energy_level <= 0:
-            self._handle_agent_death(agent)
-            return new_location
-
         self._db.add(agent)
         self._db.commit()
 
@@ -443,49 +436,3 @@ class AgentService(BaseService[Agent]):
         ).all()
 
         return memory_logs
-
-    def _handle_agent_death(self, agent: Agent):
-        """Handle agent death by marking as dead, creating carcass, and sending NATS message"""
-        logger.info(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Agent {agent.name} has died!")
-        
-        # Mark agent as dead
-        agent.dead = True
-        agent.energy_level = 0
-        agent.harvesting_resource_id = None  # Clear any resource harvesting
-        
-        # Create carcass at agent's location
-        carcass = Carcass(
-            simulation_id=agent.simulation_id,
-            agent_name=agent.name,
-            x_coord=agent.x_coord,
-            y_coord=agent.y_coord,
-            death_tick=agent.simulation.tick
-        )
-        
-        self._db.add(agent)
-        self._db.add(carcass)
-        self._db.commit()
-        
-        # Send death message using fire-and-forget approach to avoid blocking
-        import asyncio
-        import threading
-        
-        def _publish_death_message():
-            try:
-                death_message = AgentDeadMessage(
-                    id=agent.id,
-                    simulation_id=agent.simulation_id,
-                    agent_id=agent.id
-                )
-                # Use the service's NATS broker if available
-                if hasattr(self, '_nats') and self._nats:
-                    asyncio.create_task(death_message.publish(self._nats))
-                else:
-                    logger.debug(f"[SIM {agent.simulation_id}][AGENT {agent.id}] No NATS broker available for death message")
-            except Exception as e:
-                logger.warning(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Failed to publish death message: {e}")
-        
-        # Run NATS publishing in background to avoid blocking movement
-        threading.Thread(target=_publish_death_message, daemon=True).start()
-        
-        logger.success(f"[SIM {agent.simulation_id}][AGENT {agent.id}] Agent death handled successfully")

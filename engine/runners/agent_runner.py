@@ -23,6 +23,44 @@ class AgentRunner:
             conversation_service = ConversationService(db=db, nats=nats)
             agent = agent_service.get_by_id(agent_id)
             
+            # Check if agent should die from energy depletion
+            if not agent.dead and agent.energy_level <= 0:
+                logger.info(f"[SIM {agent.simulation.id}][AGENT {agent.id}] Agent {agent.name} has died from energy depletion!")
+                
+                # Mark agent as dead and create carcass
+                agent.dead = True
+                agent.energy_level = 0
+                agent.harvesting_resource_id = None
+                
+                from schemas.carcass import Carcass
+                carcass = Carcass(
+                    simulation_id=agent.simulation_id,
+                    agent_name=agent.name,
+                    x_coord=agent.x_coord,
+                    y_coord=agent.y_coord,
+                    death_tick=agent.simulation.tick
+                )
+                
+                db.add(agent)
+                db.add(carcass)
+                db.commit()
+                
+                # Publish death message
+                from messages.agent.agent_dead import AgentDeadMessage
+                death_message = AgentDeadMessage(
+                    id=agent.id,
+                    simulation_id=agent.simulation_id,
+                    agent_id=agent.id
+                )
+                try:
+                    await death_message.publish(nats)
+                    logger.info(f"[SIM {agent.simulation.id}][AGENT {agent.id}] Published death message")
+                except Exception as e:
+                    logger.warning(f"[SIM {agent.simulation.id}][AGENT {agent.id}] Failed to publish death message: {e}")
+                
+                logger.success(f"[SIM {agent.simulation.id}][AGENT {agent.id}] Agent death handled successfully")
+                return
+            
             # Skip dead agents
             if agent.dead:
                 logger.debug(
