@@ -174,7 +174,7 @@ class RelationshipService(BaseService[RelationshipModel]):
                     r.total_sentiment / r.update_count if r.update_count > 0 else 0.0
                 ),
                 "count": r.update_count,
-                "total_sentiment": r.total_sentiment,   # <--- NEW: Add this line
+                "total_sentiment": r.total_sentiment,
             }
             for r in rels
         ]
