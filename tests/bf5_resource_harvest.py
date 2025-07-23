@@ -67,7 +67,7 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=10,
                 y_coord=10,  # adjacent
-                energy_level=15,
+                energy_level=100,
             )
             db.add(agent)
             db.commit()

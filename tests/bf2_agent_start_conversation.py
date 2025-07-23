@@ -52,7 +52,7 @@ async def test_agent_moves_within_20_ticks(run):
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=10,
                 y_coord=10,  # adjacent
-                energy_level=15,
+                energy_level=100,
             )
 
             agent2 = Agent(
@@ -61,7 +61,7 @@ async def test_agent_moves_within_20_ticks(run):
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=12,
                 y_coord=12,  # adjacent
-                energy_level=15,
+                energy_level=100,
             )
 
             db.add(agent1)
@@ -86,7 +86,9 @@ async def test_agent_moves_within_20_ticks(run):
                 )
                 actions1 = agent_service.get_last_k_actions(agent1, k=1)
                 actions2 = agent_service.get_last_k_actions(agent2, k=1)
-                if (actions1 and actions1[0].action.startswith("start_conversation")) or (actions2 and actions2[0].action.startswith("start_conversation")):
+                if (
+                    actions1 and actions1[0].action.startswith("start_conversation")
+                ) or (actions2 and actions2[0].action.startswith("start_conversation")):
                     start_conversation = True
                     break
                 await asyncio.sleep(1)
@@ -97,4 +99,6 @@ async def test_agent_moves_within_20_ticks(run):
                 ticks=simulation.tick,
                 success=start_conversation,
             )
-            assert start_conversation, "Agent did not start conversation within 20 ticks"
+            assert (
+                start_conversation
+            ), "Agent did not start conversation within 20 ticks"

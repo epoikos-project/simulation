@@ -83,7 +83,13 @@ async def test_agent_moves_within_20_ticks(run):
                 )
                 actions1 = agent_service.get_last_k_actions(agent1, k=1)
                 actions2 = agent_service.get_last_k_actions(agent2, k=1)
-                if (actions1 and actions1[0].action.startswith("accept_conversation_request")) or (actions2 and actions2[0].action.startswith("accept_conversation_request")):
+                if (
+                    actions1
+                    and actions1[0].action.startswith("accept_conversation_request")
+                ) or (
+                    actions2
+                    and actions2[0].action.startswith("accept_conversation_request")
+                ):
                     accepted_conversation = True
                     break
                 await asyncio.sleep(1)
@@ -94,4 +100,6 @@ async def test_agent_moves_within_20_ticks(run):
                 ticks=simulation.tick,
                 success=accepted_conversation,
             )
-            assert accepted_conversation, "Agent did not accept conversation request within 20 ticks"
+            assert (
+                accepted_conversation
+            ), "Agent did not accept conversation request within 20 ticks"
