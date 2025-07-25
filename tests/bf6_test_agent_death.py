@@ -13,6 +13,7 @@ from services.simulation import SimulationService
 from services.agent import AgentService
 from services.resource import ResourceService
 from services.world import WorldService
+from services.orchestrator import OrchestratorService
 from schemas.agent import Agent
 from schemas.resource import Resource
 from schemas.world import World
@@ -37,6 +38,7 @@ async def test_agent_dies_when_energy_depleted(run):
             agent_service = AgentService(db=db, nats=nats)
             world_service = WorldService(db=db, nats=nats)
             resource_service = ResourceService(db=db, nats=nats)
+            orch = OrchestratorService(db=db, nats=nats)
 
             # 1. Create simulation
             simulation_id = "test-death-" + uuid.uuid4().hex[:6]
@@ -54,7 +56,7 @@ async def test_agent_dies_when_energy_depleted(run):
             # 3. Create one agent with low energy
             agent = Agent(
                 simulation_id=simulation.id,
-                name="TestAgent",
+                name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=10,
                 y_coord=10,
@@ -72,54 +74,70 @@ async def test_agent_dies_when_energy_depleted(run):
             agent_died = False
             carcass_found = False
             original_agent_id = agent.id
-            
+
             for tick in range(20):
                 await SimulationRunner.tick_simulation(
                     db=db,
                     nats=nats,
                     simulation_id=simulation.id,
                 )
-                
+
                 # Refresh agent to get updated state
                 db.refresh(agent)
-                
-                logger.info(f"Tick {tick + 1}: Agent energy: {agent.energy_level}, dead: {agent.dead}")
-                
+
+                logger.info(
+                    f"Tick {tick + 1}: Agent energy: {agent.energy_level}, dead: {agent.dead}"
+                )
+
                 # Check if agent died
                 if agent.dead:
                     agent_died = True
-                    logger.success(f"Agent died at tick {tick + 1} with energy {agent.energy_level}")
-                    
+                    logger.success(
+                        f"Agent died at tick {tick + 1} with energy {agent.energy_level}"
+                    )
+
                     # Check if carcass was created
                     carcass_result = db.exec(
                         select(Carcass).where(
                             Carcass.simulation_id == simulation.id,
-                            Carcass.agent_name == agent.name
+                            Carcass.agent_name == agent.name,
                         )
                     ).first()
 
                     if carcass_result:
                         # Extract the actual Carcass object if it's wrapped in a Row/tuple
-                        if hasattr(carcass_result, '__iter__') and not isinstance(carcass_result, str):
-                            carcass = carcass_result[0] if len(carcass_result) > 0 else carcass_result
+                        if hasattr(carcass_result, "__iter__") and not isinstance(
+                            carcass_result, str
+                        ):
+                            carcass = (
+                                carcass_result[0]
+                                if len(carcass_result) > 0
+                                else carcass_result
+                            )
                         else:
                             carcass = carcass_result
-                        
+
                         carcass_found = True
-                        logger.success(f"Carcass found at location ({carcass.x_coord}, {carcass.y_coord})")
+                        logger.success(
+                            f"Carcass found at location ({carcass.x_coord}, {carcass.y_coord})"
+                        )
                     else:
                         logger.error("No carcass found")
 
                     break
-                
+
                 await asyncio.sleep(0.1)  # Small delay to allow processing
 
             # 5. Assertions
-            assert agent_died, f"Agent did not die within 20 ticks. Final energy: {agent.energy_level}"
-            assert agent.energy_level <= 0, f"Agent died but energy is still {agent.energy_level}"
+            assert agent_died, (
+                f"Agent did not die within 20 ticks. Final energy: {agent.energy_level}"
+            )
+            assert agent.energy_level <= 0, (
+                f"Agent died but energy is still {agent.energy_level}"
+            )
             assert agent.dead == True, "Agent died but dead flag is not True"
             assert carcass_found, "Agent died but no carcass was created"
-            
+
             # 6. Check that agent is no longer being ticked (should be excluded from future ticks)
             # Run one more tick to ensure dead agent is not processed
             initial_tick = simulation.tick
@@ -128,19 +146,19 @@ async def test_agent_dies_when_energy_depleted(run):
                 nats=nats,
                 simulation_id=simulation.id,
             )
-            
+
             # Agent should not have any new actions after death
             actions_after_death = agent_service.get_last_k_actions(agent, k=5)
             death_tick = None
             for action in actions_after_death:
                 if action.tick > initial_tick:
-                    pytest.fail(f"Dead agent performed action after death: {action.action}")
+                    pytest.fail(
+                        f"Dead agent performed action after death: {action.action}"
+                    )
 
             log_simulation_result(
                 simulation_id=simulation.id,
-                test_name="test_agent_dies_when_energy_depleted",
+                test_name="bf6-test-agent-death.py",
                 ticks=simulation.tick,
                 success=agent_died and carcass_found,
             )
-
-

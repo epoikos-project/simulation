@@ -11,6 +11,7 @@ from services.simulation import SimulationService
 from services.agent import AgentService
 from services.resource import ResourceService
 from services.world import WorldService
+from services.orchestrator import OrchestratorService
 from schemas.agent import Agent
 from schemas.resource import Resource
 from schemas.world import World
@@ -30,6 +31,7 @@ async def test_agent_moves_within_20_ticks(run):
             agent_service = AgentService(db=db, nats=nats)
             world_service = WorldService(db=db, nats=nats)
             resource_service = ResourceService(db=db, nats=nats)
+            orch = OrchestratorService(db=db, nats=nats)
 
             # 1. Create simulation
 
@@ -48,7 +50,7 @@ async def test_agent_moves_within_20_ticks(run):
             # 3. Create one agent near the resource
             agent1 = Agent(
                 simulation_id=simulation.id,
-                name="TestAgent1",
+                name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=10,
                 y_coord=10,  # adjacent
@@ -57,7 +59,7 @@ async def test_agent_moves_within_20_ticks(run):
 
             agent2 = Agent(
                 simulation_id=simulation.id,
-                name="TestAgent2",
+                name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=12,
                 y_coord=12,  # adjacent
@@ -96,10 +98,10 @@ async def test_agent_moves_within_20_ticks(run):
 
             log_simulation_result(
                 simulation_id=simulation.id,
-                test_name="test_agent_accept_conversation_request",
+                test_name="bf3-agent-accept-conversation-request",
                 ticks=simulation.tick,
                 success=accepted_conversation,
             )
-            assert (
-                accepted_conversation
-            ), "Agent did not accept conversation request within 20 ticks"
+            assert accepted_conversation, (
+                "Agent did not accept conversation request within 20 ticks"
+            )

@@ -20,8 +20,8 @@ from utils import log_simulation_result
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("run", range(1))
-async def test_agent_moves_within_20_ticks(run):
+@pytest.mark.parametrize("run", range(10))
+async def test_simulation_harvests_resource_with_one_agent(run):
     async with get_nats_broker() as nats:
         with get_session() as db:
             logger.remove()
@@ -51,10 +51,10 @@ async def test_agent_moves_within_20_ticks(run):
                 simulation_id=simulation.id,
                 region_id=regions[0].id,
                 world_id=world.id,
-                x_coord=12,
-                y_coord=12,
+                x_coord=14,
+                y_coord=14,
                 energy_yield=10,
-                required_agents=1,
+                required_agents=3,
                 regrow_time=999,  # never regrow in test
                 available=True,
             )
@@ -69,7 +69,23 @@ async def test_agent_moves_within_20_ticks(run):
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=10,
                 y_coord=10,  # adjacent
-                energy_level=15,
+                energy_level=100,
+            )
+            agent = Agent(
+                simulation_id=simulation.id,
+                name=orch.name_generator({}),
+                model="gpt-4.1-nano-2025-04-14",
+                x_coord=11,
+                y_coord=11,  # adjacent
+                energy_level=100,
+            )
+            agent = Agent(
+                simulation_id=simulation.id,
+                name=orch.name_generator({}),
+                model="gpt-4.1-nano-2025-04-14",
+                x_coord=15,
+                y_coord=15,  # adjacent
+                energy_level=100,
             )
             db.add(agent)
             db.commit()
@@ -79,23 +95,37 @@ async def test_agent_moves_within_20_ticks(run):
                 f"View live at http://localhost:3000/simulation/{simulation.id}"
             )
 
-            moved = False
-            for _ in range(20):
+            while should_continue(
+                sim_service, resource_service, simulation.id, resource.id
+            ):
                 await SimulationRunner.tick_simulation(
                     db=db,
                     nats=nats,
                     simulation_id=simulation.id,
                 )
-                actions = agent_service.get_last_k_actions(agent, k=1)
-                if actions and actions[0].action.startswith("move"):
-                    moved = True
-                    break
                 await asyncio.sleep(1)
 
             log_simulation_result(
                 simulation_id=simulation.id,
-                test_name="bf1-agent-move",
+                test_name="ps1-two-agent-resource",
                 ticks=simulation.tick,
-                success=moved,
+                success=resource.available == False,
             )
-            assert moved, "Agent did not move within 20 ticks"
+            assert resource.last_harvest > 0, (
+                "Resource was not harvested within 100 ticks"
+            )
+
+
+def should_continue(
+    sim_service: SimulationService,
+    resource_service: ResourceService,
+    simulation_id: str,
+    resource_id: str,
+):
+    simulation = sim_service.get_by_id(simulation_id)
+    if simulation.tick >= 100:
+        return False
+    resource = resource_service.get_by_id(resource_id)
+    if not resource.available:
+        return False
+    return True

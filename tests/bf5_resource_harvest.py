@@ -11,6 +11,7 @@ from services.simulation import SimulationService
 from services.agent import AgentService
 from services.resource import ResourceService
 from services.world import WorldService
+from services.orchestrator import OrchestratorService
 from schemas.agent import Agent
 from schemas.resource import Resource
 from schemas.world import World
@@ -30,6 +31,7 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             agent_service = AgentService(db=db, nats=nats)
             world_service = WorldService(db=db, nats=nats)
             resource_service = ResourceService(db=db, nats=nats)
+            orch = OrchestratorService(db=db, nats=nats)
 
             # 1. Create simulation
 
@@ -63,7 +65,7 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             # 3. Create one agent near the resource
             agent = Agent(
                 simulation_id=simulation.id,
-                name="TestAgent",
+                name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=10,
                 y_coord=10,  # adjacent
@@ -80,7 +82,6 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             while should_continue(
                 sim_service, resource_service, simulation.id, resource.id
             ):
-
                 await SimulationRunner.tick_simulation(
                     db=db,
                     nats=nats,
@@ -90,13 +91,13 @@ async def test_simulation_harvests_resource_with_one_agent(run):
 
             log_simulation_result(
                 simulation_id=simulation.id,
-                test_name="test_simulation_harvests_resource_with_one_agent",
+                test_name="bf5-resource-harvest",
                 ticks=simulation.tick,
                 success=resource.available == False,
             )
-            assert (
-                resource.last_harvest > 0
-            ), "Resource was not harvested within 30 ticks"
+            assert resource.last_harvest > 0, (
+                "Resource was not harvested within 30 ticks"
+            )
 
 
 def should_continue(

@@ -10,6 +10,7 @@ from engine.runners.simulation_runner import SimulationRunner
 from services.simulation import SimulationService
 from services.agent import AgentService
 from services.resource import ResourceService
+from services.orchestrator import OrchestratorService
 from services.world import WorldService
 from schemas.agent import Agent
 from schemas.resource import Resource
@@ -30,6 +31,7 @@ async def test_agent_moves_within_20_ticks(run):
             agent_service = AgentService(db=db, nats=nats)
             world_service = WorldService(db=db, nats=nats)
             resource_service = ResourceService(db=db, nats=nats)
+            orch = OrchestratorService(db=db, nats=nats)
 
             # 1. Create simulation
 
@@ -48,19 +50,18 @@ async def test_agent_moves_within_20_ticks(run):
             # 3. Create one agent near the resource
             agent1 = Agent(
                 simulation_id=simulation.id,
-                name="TestAgent1",
+                name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=10,
-                y_coord=10,  # adjacent
+                y_coord=10,
                 energy_level=100,
             )
-
             agent2 = Agent(
                 simulation_id=simulation.id,
-                name="TestAgent2",
+                name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=12,
-                y_coord=12,  # adjacent
+                y_coord=12,
                 energy_level=100,
             )
 
@@ -95,10 +96,10 @@ async def test_agent_moves_within_20_ticks(run):
 
             log_simulation_result(
                 simulation_id=simulation.id,
-                test_name="test_agent_start_conversation",
+                test_name="bf2-agent-start-conversation",
                 ticks=simulation.tick,
                 success=start_conversation,
             )
-            assert (
-                start_conversation
-            ), "Agent did not start conversation within 20 ticks"
+            assert start_conversation, (
+                "Agent did not start conversation within 20 ticks"
+            )

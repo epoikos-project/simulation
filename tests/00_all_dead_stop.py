@@ -13,6 +13,7 @@ from services.simulation import SimulationService
 from services.agent import AgentService
 from services.resource import ResourceService
 from services.world import WorldService
+from services.orchestrator import OrchestratorService
 from schemas.agent import Agent
 from schemas.resource import Resource
 from schemas.world import World
@@ -20,7 +21,8 @@ from schemas.carcass import Carcass
 from schemas.simulation import Simulation
 from utils import log_simulation_result
 
-@pytest.mark.asyncio 
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("run", range(1))
 async def test_simulation_stops_when_all_agents_dead(run):
     """
@@ -34,6 +36,7 @@ async def test_simulation_stops_when_all_agents_dead(run):
             sim_service = SimulationService(db=db, nats=nats)
             agent_service = AgentService(db=db, nats=nats)
             world_service = WorldService(db=db, nats=nats)
+            orch = OrchestratorService(db=db, nats=nats)
 
             # 1. Create simulation
             simulation_id = "test-stop-" + uuid.uuid4().hex[:6]
@@ -50,7 +53,7 @@ async def test_simulation_stops_when_all_agents_dead(run):
             # 3. Create two agents with very low energy
             agent1 = Agent(
                 simulation_id=simulation.id,
-                name="TestAgent1",
+                name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=5,
                 y_coord=5,
@@ -58,7 +61,7 @@ async def test_simulation_stops_when_all_agents_dead(run):
             )
             agent2 = Agent(
                 simulation_id=simulation.id,
-                name="TestAgent2", 
+                name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=15,
                 y_coord=15,
@@ -76,24 +79,26 @@ async def test_simulation_stops_when_all_agents_dead(run):
 
             # 4. Start simulation
             SimulationRunner.start_simulation(simulation.id, db, nats, tick_interval=1)
-            
+
             # 5. Wait for all agents to die and simulation to stop
             all_agents_dead = False
             simulation_stopped = False
-            
+
             for tick in range(30):  # Give more time for both agents to die
                 await asyncio.sleep(1)
-                
+
                 db.refresh(agent1)
                 db.refresh(agent2)
                 db.refresh(simulation)
-                
-                logger.info(f"Tick {tick + 1}: Agent1 dead: {agent1.dead}, Agent2 dead: {agent2.dead}, Simulation running: {simulation.running}")
-                
+
+                logger.info(
+                    f"Tick {tick + 1}: Agent1 dead: {agent1.dead}, Agent2 dead: {agent2.dead}, Simulation running: {simulation.running}"
+                )
+
                 if agent1.dead and agent2.dead:
                     all_agents_dead = True
                     logger.success("All agents are dead")
-                    
+
                     # Check if simulation stopped
                     if not simulation.running:
                         simulation_stopped = True
@@ -106,11 +111,13 @@ async def test_simulation_stops_when_all_agents_dead(run):
 
             # 7. Assertions
             assert all_agents_dead, "Not all agents died within the test period"
-            assert simulation_stopped, "Simulation did not stop automatically when all agents died"
+            assert simulation_stopped, (
+                "Simulation did not stop automatically when all agents died"
+            )
 
             log_simulation_result(
                 simulation_id=simulation.id,
-                test_name="test_simulation_stops_when_all_agents_dead",
+                test_name="00_all_dead_stop",
                 ticks=simulation.tick,
                 success=all_agents_dead and simulation_stopped,
             )
