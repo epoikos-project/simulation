@@ -85,7 +85,7 @@ class AutogenAgent(BaseAgent):
         parts = [
             SystemDescription(self.agent).build(),
             HungerContext(self.agent).build(),
-            MemoryContext(self.agent).build(actions=actions, memory_logs=[]),
+            MemoryContext(self.agent).build(actions=actions, memory_logs=memory_logs),
             ObservationContext(self.agent).build(observations),
             # PlanContext(self.agent).build(),
             (

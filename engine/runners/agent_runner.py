@@ -8,7 +8,7 @@ from config.openai import AvailableModels
 from engine.llm.autogen.agent import AutogenAgent
 from engine.llm.autogen.conversation import ConversationAgent
 from engine.llm.autogen.harvest import HarvestingAgent
-from engine.llm.autogen.memory import MemoryAgent
+from engine.llm.autogen.plan import PlanAgent
 
 from services.agent import AgentService
 from services.conversation import ConversationService
@@ -88,8 +88,8 @@ class AgentRunner:
                         reasoning_output=reasoning_output.messages[1].content,
                     )
 
-                    # next tick agent for memory update
-                    memory_agent = MemoryAgent(
+                    # next tick agent for plan update
+                    memory_agent = PlanAgent(
                         db=db,
                         nats=nats,
                         agent=agent.agent,

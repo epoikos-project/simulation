@@ -1,5 +1,4 @@
-# from agent import AutogenAgent
-from langfuse.decorators import langfuse_context, observe
+from langfuse.decorators import observe
 from loguru import logger
 from sqlmodel import Session
 
@@ -26,8 +25,8 @@ from services.conversation import ConversationService
 from schemas.agent import Agent
 
 
-class MemoryAgent(BaseAgent):
-    """ """
+class PlanAgent(BaseAgent):
+    """Plan agent that updates the agent's long-term plan based on the current context and observations."""
 
     def __init__(
         self,
@@ -45,26 +44,22 @@ class MemoryAgent(BaseAgent):
         )
         self.conversation_service = ConversationService(self._db, self._nats)
 
-    @observe(as_type="generation", name="Agent Memory Tick")
+    @observe(as_type="generation", name="Agent Plan Tick")
     async def generate(self, reason=False, reasoning_output=None):
         logger.debug(
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Generating next action using model {self.model.name} | Reasoning: {reason}"
         )
 
-        self._update_langfuse_trace_name(name=(f"Memory Tick {self.agent.name}"))
-
-        context = ""
+        self._update_langfuse_trace_name(name=(f"Plan Tick {self.agent.name}"))
 
         observations, context = self.get_context()
         last_action = self.agent_service.get_last_k_actions(self.agent, k=1)
 
-        # adapted_tools = self._adapt_tools(
-        #     self.initial_tools, observations=observations)
-
         if reasoning_output:
-            context += f"\nYou previously reasoned about about what to do next: {reasoning_output}"
-            context += f"\n And based on this reasoning, as seen in your memory, you just performed the following action: {last_action[0].action}"
-            context += f"\n To follow a long term plan you need to update your plan with the new information you have gathered. As your next action now update your plan using the tool 'update_plan'."
+            context += f"\n---\nYou previously reasoned the following about what to do next: \n{reasoning_output}"
+            context += f"\n\nAnd based on this reasoning, as seen in your memory, you just performed the following action: {last_action[0].action}"
+
+        context += f"\n---\nTo follow a long term plan you need to update your plan with the new information you have gathered. As your next action now update your plan using the tool 'update_plan'."
 
         logger.debug(
             f"[SIM {self.agent.simulation.id}][AGENT {self.agent.id}] Context for generation: {context}"
@@ -88,9 +83,8 @@ class MemoryAgent(BaseAgent):
         parts = [
             SystemDescription(self.agent).build(),
             HungerContext(self.agent).build(),
-            MemoryContext(self.agent).build(actions=actions, memory_logs=[]),
+            MemoryContext(self.agent).build(actions=actions, memory_logs=memory_logs),
             ObservationContext(self.agent).build(observations),
-            # PlanContext(self.agent).build(),
             (
                 PreviousConversationContext(self.agent).build(
                     conversation=last_conversation
@@ -101,15 +95,4 @@ class MemoryAgent(BaseAgent):
         ]
         context += "\n\n---\n".join(parts)
 
-        outstanding_requests = self.agent_service.get_outstanding_conversation_requests(
-            self.agent.id
-        )
-
-        if outstanding_requests:
-            context += OutstandingConversationContext(self.agent).build(
-                outstanding_requests
-            )
-            context += "\n Given this information devide whether you would like to accept and engange in the conversation request or not. You may only use ONE (1) tool at a time."
-        # else:
-        #     context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
         return (observations, context)
