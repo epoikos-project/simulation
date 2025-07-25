@@ -12,7 +12,7 @@ available_tools = [
     move,
     random_move,
     harvest_resource,
-    # update_plan,
+    update_plan,
     # make_plan,
     # add_task,
     start_conversation,

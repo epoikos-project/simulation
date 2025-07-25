@@ -170,6 +170,12 @@ class AutogenAgent(BaseAgent):
             adapted_tools = [
                 tool for tool in adapted_tools if tool.__name__ != "harvest_resource"
             ]
+
+        # remove update_plan
+        adapted_tools = [
+            tool for tool in adapted_tools if tool.__name__ != "update_plan"
+        ]
+
         return adapted_tools
 
     @observe(as_type="generation", name="Agent Tick")
@@ -206,7 +212,7 @@ class AutogenAgent(BaseAgent):
 
             if reasoning_output:
                 context += f"\nYou previously reasoned about about what to do next: {reasoning_output}"
-                context += f"\nGiven this reasoning now decide on your next action by performing two tool calls."
+                context += f"\nGiven this reasoning now decide on your next action by performing one tool calls."
                 # """You should always first use the tool 'update_plan' to store your reasoning about your long term goal i.e. the overarching thing you want to achive.
                 # Then you MUST additionaly use ONE other tool to perform an immediate action in the environment e.g:
 

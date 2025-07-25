@@ -23,7 +23,6 @@ async def update_plan(
 ):
     """A tool to store a plan for future reference. Update this plan with you current long term goal, as you gather more information or change your strategy. A goal could be to harvest a specific resource, collaborate with another agent, or explore a new area.
     A plan does not describe an immediate action like moving one step, but rather a broader objective that you want to achieve in the future. Use this tool to update your current goals.
-    YOU CANNOT UNDER NO CIRCUMSTANCE USE THIS TOOL TWICE IN THE SAME TICK!!!!!!!
     """
 
     logger.success("Calling tool update_plan")
