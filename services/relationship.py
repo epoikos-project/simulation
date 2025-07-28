@@ -268,7 +268,7 @@ class RelationshipService(BaseService[RelationshipModel]):
             )
         ).one()
 
-    def _calculate_network_metrics(self, G: nx.Graph) -> dict:
+    def _calculate_network_metrics(self, G: nx.Graph, tick: int) -> dict:
         """
         Calculate network metrics for a given NetworkX graph.
         Returns a dictionary with all computed metrics.
@@ -305,18 +305,22 @@ class RelationshipService(BaseService[RelationshipModel]):
         )
 
         # Community detection
-        try:
-            partition = community_louvain.best_partition(
-                G, weight="normalized_sentiment"
-            )
-            num_communities = len(set(partition.values()))
-            modularity = community_louvain.modularity(
-                partition, G, weight="normalized_sentiment"
-            )
-        except Exception as e:
-            logger.exception(e)
-            num_communities = 0
+        if tick == 1:
+            num_communities = G.number_of_nodes()
             modularity = 0.0
+        else:
+            try:
+                partition = community_louvain.best_partition(
+                    G, weight="normalized_sentiment"
+                )
+                num_communities = len(set(partition.values()))
+                modularity = community_louvain.modularity(
+                    partition, G, weight="normalized_sentiment"
+                )
+            except Exception as e:
+                logger.exception(e)
+                num_communities = 0
+                modularity = 0.0
 
         return {
             "average_sentiment": avg_sentiment,
@@ -345,7 +349,7 @@ class RelationshipService(BaseService[RelationshipModel]):
             logger.info(f"Processing tick {tick} for simulation {simulation_id}")
             G = self.get_networkx_graph(simulation_id=simulation_id, tick=tick)
 
-            metrics = self._calculate_network_metrics(G)
+            metrics = self._calculate_network_metrics(G, tick)
 
             # Add tick to metrics
             row_data = {"tick": tick}

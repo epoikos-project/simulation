@@ -18,6 +18,7 @@ from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
 
 from services.agent import AgentService
+from services.conversation import ConversationService
 from services.relationship import RelationshipService
 from services.resource import ResourceService
 from services.simulation import SimulationService
@@ -155,6 +156,18 @@ class SimulationRunner:
 
         world = world_service.get_by_id(world_id)
         tick_counter = world.simulation.tick
+
+        # Cleanup outstanding conversations for dead agents
+        relationship_service = ConversationService(db, nats)
+        agent_service = AgentService(db, nats)
+        conversations = relationship_service.get_by_simulation_id(world.simulation_id)
+        for convo in conversations:
+            agent_a = agent_service.get_by_id(convo.agent_a_id)
+            agent_b = agent_service.get_by_id(convo.agent_b_id)
+            if (agent_a.dead or agent_b.dead) and not convo.finished:
+                convo.finished = True
+                db.add(convo)
+        db.commit()
 
         for resource in world.resources:
             await SimulationRunner.tick_resource(db, nats, resource.id)
