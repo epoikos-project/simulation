@@ -28,6 +28,8 @@ dependencies = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "pytest-xdist>=3.8.0",
+    "networkx>=3.5",
+    "python-louvain>=0.16",
 ]
 
 [dependency-groups]

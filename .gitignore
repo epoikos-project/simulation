@@ -16,3 +16,5 @@ data
 nats-server 
 .DS_Store
 db.json
+
+tests/results/*

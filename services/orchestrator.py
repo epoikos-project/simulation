@@ -31,6 +31,7 @@ from schemas.configuration import Configuration as ConfigTable
 from schemas.resource import Resource
 from schemas.simulation import Simulation
 from schemas.world import World
+from utils import get_neutral_first_names
 
 
 class OrchestratorService:
@@ -58,23 +59,14 @@ class OrchestratorService:
             (int(a["value"]) for a in arr if a.get("name") == name),
             0,
         )
-    
-    def name_generator(self, agent_cfg: dict) -> str:
-        """
-        Name list adapted from SSA baby names data and Wolfe & Caliskan (2021, EMNLP).
-        See also Wikipedia: Unisex names in English.
-        """
-        neutral_first_names = [
-            "Alex", "Taylor", "Morgan", "Casey", "Riley", "Jordan", "Avery", "Quinn", "Robin", "Cameron",
-            "Jamie", "Dakota", "Skyler", "Reese", "Sydney", "Jesse", "Charlie", "Corey", "Drew", "Sam"
-        ]
 
+    def name_generator(self, agent_cfg: dict) -> str:
         # If a name is provided, use it (with short random postfix for uniqueness)
         if agent_cfg and agent_cfg.get("name"):
             return f"{agent_cfg['name']}{str(uuid.uuid4().hex)[:2]}"
-        
+
         # Otherwise, choose a random neutral first name
-        name = random.choice(neutral_first_names)
+        name = random.choice(get_neutral_first_names())
         return f"{name}"
 
     async def run_from_config(self, config_name: str) -> str:
@@ -203,7 +195,7 @@ class OrchestratorService:
                     "range_per_move", 5
                 ),  # TODO: make configurable
                 name=name,
-                personality = personality,
+                personality=personality,
                 x_coord=x,
                 y_coord=y,
                 collection_name=f"simulation_{sim_id}_agent_{name}",
@@ -225,12 +217,17 @@ class OrchestratorService:
         self._db.add_all(agents)
 
     async def tick(self, sim_id: str):
+        start_time = datetime.now(timezone.utc)
         await SimulationRunner.tick_simulation(
             db=self._db,
             nats=self.nats,
             simulation_id=sim_id,
         )
-        logger.info(f"Orchestrator: ticked simulation {sim_id}")
+        end_time = datetime.now(timezone.utc)
+        duration = (end_time - start_time).total_seconds()
+        logger.info(
+            f"Orchestrator: ticked simulation {sim_id} in {duration:.2f} seconds"
+        )
         # snapshot relationship graph for this simulation at new tick
         sim = self.simulation_service.get_by_id(sim_id)
 

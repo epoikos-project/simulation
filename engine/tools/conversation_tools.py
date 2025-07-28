@@ -279,6 +279,13 @@ async def continue_conversation(
                     else conversation.agent_a_id
                 )
 
+                message_model = Message(
+                    tick=conversation.simulation.tick,
+                    content=message,
+                    agent_id=agent_id,
+                    conversation_id=conversation.id,
+                )
+
                 relationship_service.update_relationship(
                     agent1_id=agent_id,
                     agent2_id=other_agent_id,
@@ -286,13 +293,6 @@ async def continue_conversation(
                     simulation_id=conversation.simulation.id,
                     tick=conversation.simulation.tick,
                     commit=False,
-                )
-
-                message_model = Message(
-                    tick=conversation.simulation.tick,
-                    content=message,
-                    agent_id=agent_id,
-                    conversation_id=conversation.id,
                 )
                 db.add(message_model)
                 db.commit()

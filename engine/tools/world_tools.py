@@ -68,8 +68,9 @@ async def move(
                     raise truncated_exc
 
     except Exception as e:
-        logger.exception(e)
-        logger.error(f"Error moving agent: {e}")
+        if not isinstance(e, MovementTruncated):
+            logger.exception(e)
+            logger.error(f"Error moving agent: {e}")
         raise
 
 
@@ -109,4 +110,3 @@ async def random_move(
         logger.exception(e)
         logger.error(f"Error getting agent service: {e}")
         raise
-    

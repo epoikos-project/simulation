@@ -18,6 +18,7 @@ from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
 
 from services.agent import AgentService
+from services.relationship import RelationshipService
 from services.resource import ResourceService
 from services.simulation import SimulationService
 from services.world import WorldService
@@ -83,13 +84,16 @@ class SimulationRunner:
         if thread is not None:
             # Check if we're trying to join from within the same thread
             import threading
+
             current_thread = threading.current_thread()
             if thread != current_thread:
                 thread.join()
                 del SimulationRunner._threads[id]
                 del SimulationRunner._stop_events[id]
             else:
-                logger.debug(f"Simulation {id} stopping from within simulation thread - cleanup will happen automatically")
+                logger.debug(
+                    f"Simulation {id} stopping from within simulation thread - cleanup will happen automatically"
+                )
         return simulation.tick
 
     @staticmethod
@@ -122,19 +126,25 @@ class SimulationRunner:
 
         agent_ids = db.exec(
             select(Agent.id).where(
-                Agent.simulation_id == simulation.id,
-                Agent.dead == False
+                Agent.simulation_id == simulation.id, Agent.dead == False
             )
         ).all()
 
         # If no alive agents, stop simulation
         if not agent_ids:
-            logger.info(f"[SIM {simulation.id}] No alive agents remaining, stopping simulation")
+            logger.info(
+                f"[SIM {simulation.id}] No alive agents remaining, stopping simulation"
+            )
             SimulationRunner.stop_simulation(simulation.id, db, nats)
             return
 
         tasks = [AgentRunner.tick_agent(nats, agent_id) for agent_id in agent_ids]
         await asyncio.gather(*tasks)
+
+        relationship_service = RelationshipService(db, nats)
+        relationship_service.snapshot_relationship_graph(
+            simulation_id=simulation.id, tick=simulation.tick
+        )
 
     @staticmethod
     async def tick_world(db: Session, nats: NatsBroker, world_id: str):

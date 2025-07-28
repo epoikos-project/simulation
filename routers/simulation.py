@@ -115,6 +115,16 @@ async def relationship_graph(
     return graph
 
 
+@router.get("/simulations/{simulation_id}/relationship-metrics.csv")
+def download_relationship_metrics(
+    simulation_id: str,
+    db: DB,
+    nats: Nats,
+):
+    service = RelationshipService(db=db, nats=nats)
+    return service.generate_relationship_metrics_csv_stream(simulation_id)
+
+
 @router.post("/{simulation_id}/replay")
 async def replay(simulation_id: str, broker: Nats):
     js = broker.stream

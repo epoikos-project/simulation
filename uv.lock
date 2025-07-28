@@ -354,6 +354,7 @@ dependencies = [
     { name = "langfuse" },
     { name = "loguru" },
     { name = "neomodel" },
+    { name = "networkx" },
     { name = "numpy" },
     { name = "pathfind" },
     { name = "psycopg2-binary" },
@@ -363,6 +364,7 @@ dependencies = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-xdist" },
+    { name = "python-louvain" },
     { name = "scipy" },
     { name = "sqlalchemy" },
     { name = "sqlmodel" },
@@ -388,6 +390,7 @@ requires-dist = [
     { name = "langfuse", specifier = ">=2.60.3" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "neomodel", specifier = ">=5.5.0" },
+    { name = "networkx", specifier = ">=3.5" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "pathfind", specifier = ">=0.1.2" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
@@ -397,6 +400,7 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-asyncio", specifier = ">=1.1.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "python-louvain", specifier = ">=0.16" },
     { name = "scipy", specifier = ">=1.10.0" },
     { name = "sqlalchemy", specifier = ">=2.0.41" },
     { name = "sqlmodel", specifier = ">=0.0.24" },
@@ -1728,6 +1732,16 @@ sdist = { url = "https://files.pythonhosted.org/packages/88/2c/7bb1416c5620485aa
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/18/98a99ad95133c6a6e2005fe89faedf294a748bd5dc803008059409ac9b1e/python_dotenv-1.1.0-py3-none-any.whl", hash = "sha256:d7c01d9e2293916c18baf562d95698754b0dbbb5e74d457c45d4f6561fb9d55d", size = 20256 },
 ]
+
+[[package]]
+name = "python-louvain"
+version = "0.16"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "networkx" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7c/0d/8787b021d52eb8764c0bb18ab95f720cf554902044c6a5cb1865daf45763/python-louvain-0.16.tar.gz", hash = "sha256:b7ba2df5002fd28d3ee789a49532baad11fe648e4f2117cf0798e7520a1da56b", size = 204641 }
 
 [[package]]
 name = "python-multipart"
