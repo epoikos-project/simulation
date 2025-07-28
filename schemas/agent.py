@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from schemas.resource import Resource
     from schemas.simulation import Simulation
     from schemas.task import Task
+    from schemas.carcass import Carcass
 
 
 class Agent(BaseModel, table=True):
@@ -95,4 +96,8 @@ class Agent(BaseModel, table=True):
         back_populates="agent",
         cascade_delete=True,
         sa_relationship_kwargs={"foreign_keys": "[MemoryLog.agent_id]"},
+    )
+    carcass: "Carcass" = Relationship(
+        back_populates="agent",
+        sa_relationship_kwargs={"uselist": False, "foreign_keys": "[Carcass.agent_id]"},
     )

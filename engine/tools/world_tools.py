@@ -107,6 +107,7 @@ async def random_move(
                 )
                 await agent_moved_message.publish(nats)
     except Exception as e:
-        logger.exception(e)
-        logger.error(f"Error getting agent service: {e}")
+        if not isinstance(e, MovementTruncated):
+            logger.exception(e)
+            logger.error(f"Error moving agent: {e}")
         raise

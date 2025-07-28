@@ -119,12 +119,14 @@ class AutogenAgent(BaseAgent):
         adapted_tools = tools
 
         if self.agent_service.has_outstanding_conversation_request(self.agent.id):
+            logger.info(
+                f"[COMMUNICATION] | Agent {self.agent.id} has an outstanding conversation request. Adapting tools."
+            )
             adapted_tools = [
                 tool
                 for tool in adapted_tools
                 if tool.__name__ == "accept_conversation_request"
                 or tool.__name__ == "decline_conversation_request"
-                or tool.__name__ == "update_plan"
             ]
             return adapted_tools
 

@@ -45,6 +45,22 @@ async def start_conversation(
                     other_agent_id, simulation_id=simulation_id
                 )
 
+                conversation_service = ConversationService(db=db, nats=nats)
+                if conversation_service.get_active_by_agent_id(other_agent_id):
+                    logger.info(
+                        f"Agent {other_agent_id} already has an active conversation."
+                    )
+                    raise ValueError(
+                        f"Agent {other_agent_id} is already in an active conversation with another agent."
+                    )
+                if agent_service.has_initialized_conversation(other_agent_id):
+                    logger.info(
+                        f"Agent {other_agent_id} has already initialized a conversation."
+                    )
+                    raise ValueError(
+                        f"Agent {other_agent_id} has already initialized a conversation and must finish that first."
+                    )
+
                 open_requests = agent_service.get_outstanding_conversation_requests(
                     agent_id
                 )
@@ -62,7 +78,7 @@ async def start_conversation(
                             f"Conversation request with {other_agent_id} already exists."
                         )
                         raise ValueError(
-                            f"Conversation request with {other_agent_id} already exists."
+                            f"Conversation request with {other_agent_id} already exists. Next tick, you can accept or decline it."
                         )
                 if other_agent.harvesting_resource_id is not None:
                     logger.error(
@@ -83,6 +99,7 @@ async def start_conversation(
                     simulation_id=simulation_id,
                     agent_a_id=agent_id,
                     agent_b_id=other_agent.id,
+                    tick=simulation.tick,
                 )
                 message_model = Message(
                     tick=simulation.tick,
@@ -136,6 +153,7 @@ async def accept_conversation_request(
                     raise ValueError("Conversation not found.")
 
                 conversation.active = True
+                conversation.finished = False
                 conversation.declined = False
 
                 other_agent_id = (

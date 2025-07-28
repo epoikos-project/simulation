@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 
 from engine.sentiment import analyze_message_sentiment
 
+from services.agent import AgentService
 from services.base import BaseService
 
 from schemas.agent import Agent as AgentModel
@@ -165,6 +166,18 @@ class RelationshipService(BaseService[RelationshipModel]):
             RelationshipModel.tick == tick,
         )
         rels = self._db.exec(stmt).all()
+
+        agent_service = AgentService(db=self._db, nats=None)
+
+        rels = [
+            r
+            for r in rels
+            if not (
+                agent_service.was_dead_at_tick(r.agent_a_id, tick)
+                or agent_service.was_dead_at_tick(r.agent_b_id, tick)
+            )
+        ]
+
         if agent_id:
             rels = [
                 r for r in rels if r.agent_a_id == agent_id or r.agent_b_id == agent_id
@@ -184,6 +197,12 @@ class RelationshipService(BaseService[RelationshipModel]):
             all_agents = self._db.exec(
                 select(AgentModel).where(AgentModel.simulation_id == simulation_id)
             ).all()
+            all_agents = [
+                agent
+                for agent in all_agents
+                if not agent_service.was_dead_at_tick(agent.id, tick)
+            ]
+            # add all agents to the node set
             for agent in all_agents:
                 ids.add(agent.id)
 

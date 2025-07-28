@@ -100,7 +100,7 @@ async def test_agent_dies_when_energy_depleted(run):
                     carcass_result = db.exec(
                         select(Carcass).where(
                             Carcass.simulation_id == simulation.id,
-                            Carcass.agent_name == agent.name,
+                            Carcass.agent_id == agent.id,
                         )
                     ).first()
 
@@ -129,12 +129,12 @@ async def test_agent_dies_when_energy_depleted(run):
                 await asyncio.sleep(0.1)  # Small delay to allow processing
 
             # 5. Assertions
-            assert agent_died, (
-                f"Agent did not die within 20 ticks. Final energy: {agent.energy_level}"
-            )
-            assert agent.energy_level <= 0, (
-                f"Agent died but energy is still {agent.energy_level}"
-            )
+            assert (
+                agent_died
+            ), f"Agent did not die within 20 ticks. Final energy: {agent.energy_level}"
+            assert (
+                agent.energy_level <= 0
+            ), f"Agent died but energy is still {agent.energy_level}"
             assert agent.dead == True, "Agent died but dead flag is not True"
             assert carcass_found, "Agent died but no carcass was created"
 

@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING
+import uuid
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -12,6 +13,8 @@ if TYPE_CHECKING:
 
 class Relationship(BaseModel, table=True):
     """Represents a symmetric sentiment-based relationship between two agents."""
+
+    id: str = Field(primary_key=True, default_factory=lambda: uuid.uuid4().hex)
 
     agent_a_id: str = Field(foreign_key="agent.id")
     agent_b_id: str = Field(foreign_key="agent.id")

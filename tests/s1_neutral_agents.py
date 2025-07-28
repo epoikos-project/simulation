@@ -51,14 +51,31 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             regions = world_service.create_regions_for_world(world=world, num_regions=1)
 
             for i in range(25):
+                # Determine required_agents with specified probabilities
+                rand = random.random()
+                if rand < 0.1:
+                    required_agents = 1
+                elif rand < 0.8:
+                    required_agents = 2
+                else:
+                    required_agents = 3
+
+                # Assign energy_yield based on required_agents
+                if required_agents == 1:
+                    energy_yield = random.randint(5, 10)
+                elif required_agents == 2:
+                    energy_yield = random.randint(11, 30)
+                else:
+                    energy_yield = random.randint(31, 50)
+
                 resource = Resource(
                     simulation_id=simulation.id,
                     region_id=regions[0].id,
                     world_id=world.id,
                     x_coord=random.randint(0, 99),
                     y_coord=random.randint(0, 99),
-                    energy_yield=random.randint(10, 80),
-                    required_agents=random.randint(1, 3),
+                    energy_yield=energy_yield,
+                    required_agents=required_agents,
                     regrow_time=random.randint(30, 100),
                     available=True,
                 )
@@ -72,7 +89,7 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                     x_coord=random.randint(0, 99),
                     y_coord=random.randint(0, 99),
                     energy_level=50,
-                    hunger=50,
+                    hunger=20,
                     visibility_range=20,
                 )
                 agent = agent_service.create(agent, commit=False)
@@ -104,6 +121,6 @@ def should_continue(
     simulation_id: str,
 ):
     simulation = sim_service.get_by_id(simulation_id)
-    if simulation.tick >= 10:
+    if simulation.tick >= 100:
         return False
     return True

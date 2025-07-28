@@ -3,7 +3,11 @@ from sqlmodel import select
 from clients.nats import get_nats_broker
 
 from engine.context.observation import ObservationUnion
-from engine.context.observations import AgentObservation, CarcassObservation, ResourceObservation
+from engine.context.observations import (
+    AgentObservation,
+    CarcassObservation,
+    ResourceObservation,
+)
 from engine.grid import Grid
 
 from services.base import BaseService
@@ -124,7 +128,7 @@ class AgentService(BaseService[Agent]):
 
     def get_carcass_observations(self, agent: Agent) -> list[CarcassObservation]:
         """Load carcass observations from database given coordinates and visibility range of an agent"""
-        
+
         carcasses = self._db.exec(
             select(Carcass).where(
                 Carcass.simulation_id == agent.simulation_id,
@@ -436,3 +440,13 @@ class AgentService(BaseService[Agent]):
         ).all()
 
         return memory_logs
+
+    def was_dead_at_tick(self, agent_id: str, tick: int) -> bool:
+        """Check if the agent was dead at a specific tick."""
+        return (
+            self._db.exec(
+                select(Carcass).where(
+                    Carcass.agent_id == agent_id, Carcass.death_tick <= tick
+                )
+            ).first()
+        ) is not None
