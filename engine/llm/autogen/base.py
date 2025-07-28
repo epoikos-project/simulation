@@ -122,12 +122,12 @@ class BaseAgent:
 
         if reason:
             context += (
-                "\n\n In the next move you will have the following tools available:\n"
+                "\n\n In the next move you will have the following action available:\n"
             )
             # Append a list of available tools (function name and docstring) to the context
-            context += "\n".join(
-                f"- {tool.__name__}: {tool.__doc__ or ''}" for tool in self.next_tools
-            )
+            context += self._format_tools_description()
+
+            context += "\n\n---\n Reason about your next action. Think step by step. In the end, YOU MUST provide a an action call in format `action_name(args)`. E.g. `eat(food='apple')`."
 
         agent_prompt_message = AgentPromptMessage(
             id=self.agent.id,
@@ -259,3 +259,56 @@ class BaseAgent:
             session_id=self.agent.simulation_id,
         )
         langfuse_context.update_current_observation(model=self.model.name, name=name)
+
+    def _format_tools_description(self) -> str:
+        """
+        Format the available tools into a description string for the agent context.
+
+        Returns:
+            A formatted string describing all available tools with their names,
+            descriptions, and argument details.
+        """
+        tool_descriptions = []
+        for tool in self.next_tools:
+            tool_name = tool.__name__
+            tool_doc = tool.__doc__ or "No description available"
+
+            # Get tool arguments from annotations
+            arg_details = []
+            try:
+                if hasattr(tool, "__annotations__"):
+                    annotations = tool.__annotations__
+                    for param_name, param_type in annotations.items():
+                        if param_name in ("return", "agent_id", "simulation_id"):
+                            continue
+
+                        # Check if it's an Annotated type with description
+                        if hasattr(param_type, "__origin__") and hasattr(
+                            param_type, "__metadata__"
+                        ):
+                            base_type = (
+                                param_type.__origin__
+                                if param_type.__origin__
+                                else param_type.__args__[0]
+                            )
+                            description = (
+                                param_type.__metadata__[0]
+                                if param_type.__metadata__
+                                else ""
+                            )
+                            arg_details.append(
+                                f"{param_name} ({base_type.__name__}): {description}"
+                            )
+                        else:
+                            type_name = getattr(param_type, "__name__", str(param_type))
+                            arg_details.append(f"{param_name} ({type_name})")
+            except Exception:
+                arg_details = []
+
+            if arg_details:
+                tool_args = f"Args: \n\n {'\n'.join(arg_details)}"
+                tool_descriptions.append(f"- {tool_name}: {tool_doc} {tool_args}")
+            else:
+                tool_descriptions.append(f"- {tool_name}: {tool_doc}")
+
+        return "\n".join(tool_descriptions)

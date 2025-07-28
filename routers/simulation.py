@@ -115,7 +115,7 @@ async def relationship_graph(
     return graph
 
 
-@router.get("/simulations/{simulation_id}/relationship-metrics.csv")
+@router.get("/{simulation_id}/relationship-metrics")
 def download_relationship_metrics(
     simulation_id: str,
     db: DB,

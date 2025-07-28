@@ -129,7 +129,7 @@ async def start_conversation(
 
 @observe
 async def accept_conversation_request(
-    conversation_id: str,
+    conversation_id: Annotated[str, "The ID of the conversation to accept."],
     message: Annotated[
         str,
         "Your first message in the conversation.",
@@ -199,7 +199,7 @@ async def accept_conversation_request(
 
 @observe
 async def decline_conversation_request(
-    conversation_id: str,
+    conversation_id: Annotated[str, "The ID of the conversation to decline."],
     message: Annotated[
         str,
         "Reason for declining. Can be empty if you don't want to provide a reason.",
