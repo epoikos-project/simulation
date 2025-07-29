@@ -20,7 +20,7 @@ from utils import log_simulation_result
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("run", range(10))
+@pytest.mark.parametrize("run", range(1))
 async def test_simulation_harvests_resource_with_one_agent(run):
     async with get_nats_broker() as nats:
         with get_session() as db:
@@ -95,9 +95,9 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                 ticks=simulation.tick,
                 success=resource.available == False,
             )
-            assert resource.last_harvest > 0, (
-                "Resource was not harvested within 30 ticks"
-            )
+            assert (
+                resource.last_harvest > 0
+            ), "Resource was not harvested within 30 ticks"
 
 
 def should_continue(

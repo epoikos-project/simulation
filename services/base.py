@@ -78,19 +78,15 @@ class BaseService(Generic[T]):
             raise ValueError(f"No {self._model_class.__name__} instances found.")
         return models
 
-    def get_by_simulation_id(self, simulation_id: str):
+    def get_by_simulation_id(self, simulation_id: str) -> list[T]:
         """
         Retrieve a model instance by its simulation ID.
         """
         statement = select(self._model_class).where(
             self._model_class.simulation_id == simulation_id
         )
-        model = self._db.exec(statement).all()
-        if not model:
-            raise ValueError(
-                f"{self._model_class.__name__} with simulation ID {simulation_id} not found."
-            )
-        return model
+        models = self._db.exec(statement).all()
+        return models
 
 
 class BaseMilvusService(BaseService[T]):
