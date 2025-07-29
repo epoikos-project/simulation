@@ -89,8 +89,9 @@ class SimulationRunner:
             current_thread = threading.current_thread()
             if thread != current_thread:
                 thread.join()
-                del SimulationRunner._threads[id]
-                del SimulationRunner._stop_events[id]
+                if SimulationRunner._threads.get(id):
+                    del SimulationRunner._threads[id]
+                    del SimulationRunner._stop_events[id]
             else:
                 logger.debug(
                     f"Simulation {id} stopping from within simulation thread - cleanup will happen automatically"

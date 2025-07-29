@@ -102,6 +102,6 @@ async def test_agent_moves_within_20_ticks(run):
                 ticks=simulation.tick,
                 success=accepted_conversation,
             )
-            assert accepted_conversation, (
-                "Agent did not accept conversation request within 20 ticks"
-            )
+            assert (
+                accepted_conversation
+            ), "Agent did not accept conversation request within 20 ticks"

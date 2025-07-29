@@ -44,6 +44,8 @@ async def harvest_resource(
                     resource=resource, harvester=agent
                 )
 
+                agent_service.reduce_energy(agent_id=agent_id)
+
                 if harvested:
                     resource_harvested_message = ResourceHarvestedMessage(
                         simulation_id=simulation_id,
@@ -68,6 +70,11 @@ async def continue_waiting(
 ) -> None:
     """Continue waiting for others to join the harvesting process."""
 
+    with get_session() as db:
+        async with get_nats_broker() as nats:
+            agent_service = AgentService(db=db, nats=nats)
+            agent_service.reduce_energy(agent_id=agent_id)
+
     logger.success("Calling tool continue_waiting")
 
 
@@ -81,14 +88,17 @@ async def stop_waiting(
     logger.success("Calling tool stop_waiting")
 
     with get_session() as db:
-        try:
-            agent_service = AgentService(db=db, nats=nats_broker())
-            agent = agent_service.get_by_id(agent_id)
-            agent.harvesting_resource_id = None
+        async with get_nats_broker() as nats:
+            try:
+                agent_service = AgentService(db=db, nats=nats)
+                agent_service.reduce_energy(agent_id=agent_id, commit=False)
 
-            db.add(agent)
-            db.commit()
+                agent = agent_service.get_by_id(agent_id)
+                agent.harvesting_resource_id = None
 
-        except Exception as e:
-            logger.error(f"Error accepting conversation request: {e}")
-            raise e
+                db.add(agent)
+                db.commit()
+
+            except Exception as e:
+                logger.error(f"Error accepting conversation request: {e}")
+                raise e

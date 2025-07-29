@@ -313,7 +313,8 @@ class AgentService(BaseService[Agent]):
             agent.simulation.world.id, agent.x_coord, agent.y_coord
         )
 
-        agent.energy_level -= current_region.region_energy_cost * steps_to_move
+        # agent.energy_level -= current_region.region_energy_cost * steps_to_move
+        agent.energy_level -= current_region.region_energy_cost
 
         self._db.add(agent)
         self._db.commit()
@@ -450,3 +451,14 @@ class AgentService(BaseService[Agent]):
                 )
             ).first()
         ) is not None
+
+    def reduce_energy(
+        self, agent_id: str, amount: int = 1, commit: bool = True
+    ) -> None:
+        """Reduce the energy level of an agent by a specified amount."""
+        agent = self.get_by_id(agent_id)
+
+        agent.energy_level -= amount
+        self._db.add(agent)
+        if commit:
+            self._db.commit()

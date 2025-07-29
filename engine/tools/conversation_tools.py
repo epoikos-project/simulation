@@ -41,6 +41,7 @@ async def start_conversation(
                     logger.error("Cannot start a conversation with oneself.")
                     raise ValueError("Cannot start a conversation with oneself.")
                 agent_service = AgentService(db=db, nats=nats)
+                agent = agent_service.get_by_id(agent_id)
                 other_agent = agent_service.get_by_id_or_name(
                     other_agent_id, simulation_id=simulation_id
                 )
@@ -107,6 +108,9 @@ async def start_conversation(
                     content=message,
                     conversation_id=conversation.id,
                 )
+
+                agent_service.reduce_energy(agent_id=agent_id, commit=False)
+
                 db.add(conversation)
                 db.add(message_model)
                 db.commit()
@@ -285,6 +289,8 @@ async def continue_conversation(
             try:
                 conversation_service = ConversationService(db=db, nats=nats)
                 relationship_service = RelationshipService(db=db, nats=nats)
+                agent_service = AgentService(db=db, nats=nats)
+                agent = agent_service.get_by_id(agent_id)
 
                 conversation = conversation_service.get_active_by_agent_id(agent_id)
                 if not conversation:
@@ -312,6 +318,9 @@ async def continue_conversation(
                     tick=conversation.simulation.tick,
                     commit=False,
                 )
+
+                agent_service.reduce_energy(agent_id=agent_id, commit=False)
+
                 db.add(message_model)
                 db.commit()
 
@@ -350,6 +359,8 @@ async def end_conversation(
 
                 conversation = conversation_service.get_active_by_agent_id(agent_id)
                 relationship_service = RelationshipService(db=db, nats=nats)
+                agent_service = AgentService(db=db, nats=nats)
+                agent = agent_service.get_by_id(agent_id)
 
                 conversation.active = False
                 conversation.finished = True
@@ -375,6 +386,9 @@ async def end_conversation(
                     agent_id=agent_id,
                     conversation_id=conversation.id,
                 )
+
+                agent_service.reduce_energy(agent_id=agent_id, commit=False)
+
                 db.add(conversation)
                 db.add(message_model)
                 db.commit()
