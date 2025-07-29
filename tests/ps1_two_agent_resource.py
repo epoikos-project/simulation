@@ -70,6 +70,7 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                 x_coord=10,
                 y_coord=10,  # adjacent
                 energy_level=100,
+                hunger=100,
             )
             agent = Agent(
                 simulation_id=simulation.id,
@@ -78,6 +79,7 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                 x_coord=11,
                 y_coord=11,  # adjacent
                 energy_level=100,
+                hunger=100,
             )
             db.add(agent)
             db.commit()

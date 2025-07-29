@@ -23,7 +23,7 @@ from utils import log_simulation_result
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("run", range(1))
+@pytest.mark.parametrize("run", range(10))
 async def test_agent_dies_when_energy_depleted(run):
     """
     Test that an agent dies when energy level reaches 0 or below.

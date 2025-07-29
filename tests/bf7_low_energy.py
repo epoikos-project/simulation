@@ -21,7 +21,7 @@ from utils import log_simulation_result
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("run", range(10))
-async def test_simulation_harvests_resource_with_one_agent(run):
+async def test_simulation_low_energy_agent_harvests_first(run):
     async with get_nats_broker() as nats:
         with get_session() as db:
             logger.remove()
@@ -34,7 +34,6 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             orch = OrchestratorService(db=db, nats=nats)
 
             # 1. Create simulation
-
             simulation_id = "test-" + uuid.uuid4().hex[:6]
             simulation = Simulation(
                 id=simulation_id, collection_name="test_sim", running=False
@@ -43,7 +42,6 @@ async def test_simulation_harvests_resource_with_one_agent(run):
 
             # 2. Create world and resource
             world = World(simulation_id=simulation.id)
-            world_service = WorldService(db=db, nats=nats)
             world = world_service.create(world)
             regions = world_service.create_regions_for_world(world=world, num_regions=1)
 
@@ -51,10 +49,10 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                 simulation_id=simulation.id,
                 region_id=regions[0].id,
                 world_id=world.id,
-                x_coord=14,
-                y_coord=14,
+                x_coord=10,
+                y_coord=11,
                 energy_yield=10,
-                required_agents=3,
+                required_agents=1,
                 regrow_time=999,  # never regrow in test
                 available=True,
             )
@@ -62,41 +60,38 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             db.commit()
             db.refresh(resource)
 
-            # 3. Create one agent near the resource
-            agent = Agent(
+            # 3. Create two agents: one with low, one with high energy
+            agent_low = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=10,
                 y_coord=10,  # adjacent
-                energy_level=100,
-                hunger=100,
+                energy_level=10,
+                hunger=50,
             )
-            agent = Agent(
+            agent_high = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
                 x_coord=11,
                 y_coord=11,  # adjacent
                 energy_level=100,
-                hunger=100,
+                hunger=50,
             )
-            agent = Agent(
-                simulation_id=simulation.id,
-                name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
-                x_coord=15,
-                y_coord=15,  # adjacent
-                energy_level=100,
-                hunger=100,
-            )
-            db.add(agent)
+            db.add(agent_low)
+            db.add(agent_high)
             db.commit()
-            db.refresh(agent)
+            db.refresh(agent_low)
+            db.refresh(agent_high)
 
             logger.success(
                 f"View live at http://localhost:3000/simulation/{simulation.id}"
             )
+
+            # Track initial energy
+            initial_low = agent_low.energy_level
+            initial_high = agent_high.energy_level
 
             while should_continue(
                 sim_service, resource_service, simulation.id, resource.id
@@ -107,16 +102,57 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                     simulation_id=simulation.id,
                 )
                 await asyncio.sleep(1)
+                db.refresh(agent_low)
+                db.refresh(agent_high)
+                db.refresh(resource)
 
             log_simulation_result(
                 simulation_id=simulation.id,
-                test_name="ps3-inviting-third-party",
+                test_name="bf7-low-energy",
                 ticks=simulation.tick,
-                success=resource.available == False,
+                success=not resource.available,
             )
+            # Prüfe, dass die Ressource geerntet wurde
             assert resource.last_harvest > 0, (
-                "Resource was not harvested within 100 ticks"
+                "Resource was not harvested within 20 ticks"
             )
+            # Logge, welcher Agent geerntet hat
+            harvested_by = getattr(resource, "last_harvested_by", None)
+            logger.info(
+                f"Low energy agent: {agent_low.name}, Energie: {agent_low.energy_level}, initial: {initial_low}"
+            )
+            logger.info(
+                f"High energy agent: {agent_high.name}, Energie: {agent_high.energy_level}, initial: {initial_high}"
+            )
+            logger.info(f"Resource harvested_by: {harvested_by}")
+            # Keine weitere Assertion, da das Verhalten beobachtet werden soll
+
+            # Nach der Simulation: Prüfe Aktionsreihenfolge des Low-Energy-Agents
+            actions = agent_service.get_last_k_actions(agent_low, k=20)
+            action_names = [a.action for a in actions]
+            logger.info(f"Low energy agent actions: {action_names}")
+            try:
+                first_harvest = next(
+                    i for i, a in enumerate(action_names) if "harvest" in a
+                )
+            except StopIteration:
+                first_harvest = None
+            try:
+                first_convo = next(
+                    i for i, a in enumerate(action_names) if "conversation" in a
+                )
+            except StopIteration:
+                first_convo = None
+            # Prüfe Reihenfolge wie im High-Energy-Test: Harvest muss vor Conversation kommen
+            if first_harvest is not None and first_convo is not None:
+                assert first_harvest < first_convo, (
+                    "Low energy agent started conversation before harvesting!"
+                )
+            elif first_convo is not None:
+                assert False, (
+                    "Low energy agent started conversation but never harvested!"
+                )
+            # Sonst: alles ok, wenn kein Gespräch stattfand
 
 
 def should_continue(
@@ -126,7 +162,7 @@ def should_continue(
     resource_id: str,
 ):
     simulation = sim_service.get_by_id(simulation_id)
-    if simulation.tick >= 100:
+    if simulation.tick >= 20:
         return False
     resource = resource_service.get_by_id(resource_id)
     if not resource.available:

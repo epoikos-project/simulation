@@ -67,17 +67,19 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
-                x_coord=10,
-                y_coord=10,  # adjacent
+                x_coord=5,
+                y_coord=5,  # adjacent
                 energy_level=100,
+                hunger=100,
             )
             agent = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
                 model="gpt-4.1-nano-2025-04-14",
-                x_coord=11,
-                y_coord=11,  # adjacent
+                x_coord=6,
+                y_coord=6,  # adjacent
                 energy_level=100,
+                hunger=100,
             )
             db.add(agent)
             db.commit()
@@ -99,12 +101,12 @@ async def test_simulation_harvests_resource_with_one_agent(run):
 
             log_simulation_result(
                 simulation_id=simulation.id,
-                test_name="ps1-two-agent-resource",
+                test_name="ps2-searching-for-resource",
                 ticks=simulation.tick,
                 success=resource.available == False,
             )
             assert resource.last_harvest > 0, (
-                "Resource was not harvested within 30 ticks"
+                "Resource was not harvested within 100 ticks"
             )
 
 
