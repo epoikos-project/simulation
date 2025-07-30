@@ -18,6 +18,8 @@ from messages.world.resource_grown import ResourceGrownMessage
 from messages.world.resource_harvested import ResourceHarvestedMessage
 
 from services.agent import AgentService
+from services.conversation import ConversationService
+from services.relationship import RelationshipService
 from services.resource import ResourceService
 from services.simulation import SimulationService
 from services.world import WorldService
@@ -81,9 +83,19 @@ class SimulationRunner:
 
         thread = SimulationRunner._threads.get(id)
         if thread is not None:
-            thread.join()
-            del SimulationRunner._threads[id]
-            del SimulationRunner._stop_events[id]
+            # Check if we're trying to join from within the same thread
+            import threading
+
+            current_thread = threading.current_thread()
+            if thread != current_thread:
+                thread.join()
+                if SimulationRunner._threads.get(id):
+                    del SimulationRunner._threads[id]
+                    del SimulationRunner._stop_events[id]
+            else:
+                logger.debug(
+                    f"Simulation {id} stopping from within simulation thread - cleanup will happen automatically"
+                )
         return simulation.tick
 
     @staticmethod
@@ -115,11 +127,26 @@ class SimulationRunner:
         )
 
         agent_ids = db.exec(
-            select(Agent.id).where(Agent.simulation_id == simulation.id)
+            select(Agent.id).where(
+                Agent.simulation_id == simulation.id, Agent.dead == False
+            )
         ).all()
+
+        # If no alive agents, stop simulation
+        if not agent_ids:
+            logger.info(
+                f"[SIM {simulation.id}] No alive agents remaining, stopping simulation"
+            )
+            SimulationRunner.stop_simulation(simulation.id, db, nats)
+            return
 
         tasks = [AgentRunner.tick_agent(nats, agent_id) for agent_id in agent_ids]
         await asyncio.gather(*tasks)
+
+        relationship_service = RelationshipService(db, nats)
+        relationship_service.snapshot_relationship_graph(
+            simulation_id=simulation.id, tick=simulation.tick
+        )
 
     @staticmethod
     async def tick_world(db: Session, nats: NatsBroker, world_id: str):
@@ -130,6 +157,18 @@ class SimulationRunner:
 
         world = world_service.get_by_id(world_id)
         tick_counter = world.simulation.tick
+
+        # Cleanup outstanding conversations for dead agents
+        relationship_service = ConversationService(db, nats)
+        agent_service = AgentService(db, nats)
+        conversations = relationship_service.get_by_simulation_id(world.simulation_id)
+        for convo in conversations:
+            agent_a = agent_service.get_by_id(convo.agent_a_id)
+            agent_b = agent_service.get_by_id(convo.agent_b_id)
+            if (agent_a.dead or agent_b.dead) and not convo.finished:
+                convo.finished = True
+                db.add(convo)
+        db.commit()
 
         for resource in world.resources:
             await SimulationRunner.tick_resource(db, nats, resource.id)
@@ -247,13 +286,20 @@ class SimulationRunner:
         db: Session,
         nats: NatsBroker,
     ):
-        while not stop_event.is_set():
-            try:
-                await SimulationRunner.tick_simulation(
-                    db=db, nats=nats, simulation_id=simulation_id
-                )
-            except Exception as e:
-                logger.exception(f"Error during tick: {e}")
+        try:
+            while not stop_event.is_set():
+                try:
+                    await SimulationRunner.tick_simulation(
+                        db=db, nats=nats, simulation_id=simulation_id
+                    )
+                except Exception as e:
+                    logger.exception(f"Error during tick: {e}")
 
-            await asyncio.sleep(tick_interval)
-        logger.info(f"Simulation {simulation_id} shutdown gracefully")
+                await asyncio.sleep(tick_interval)
+        finally:
+            # Clean up thread references when the loop exits
+            if simulation_id in SimulationRunner._threads:
+                del SimulationRunner._threads[simulation_id]
+            if simulation_id in SimulationRunner._stop_events:
+                del SimulationRunner._stop_events[simulation_id]
+            logger.info(f"Simulation {simulation_id} shutdown gracefully")

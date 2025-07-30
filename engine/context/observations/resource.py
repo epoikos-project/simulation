@@ -9,7 +9,6 @@ class ResourceObservation(BaseObservation):
 
     def __str__(self) -> str:
         if self.resource.available:
-            availability = "available" if self.resource.available else "unavailable"
             observation = (
                 f"[resource_id: {self.id}; "
                 f"type: {self.get_observation_type()}; "
@@ -17,8 +16,8 @@ class ResourceObservation(BaseObservation):
                 f"distance: {self.distance}; "
                 f"energy yield: {self.resource.energy_yield}; "
                 f"required agents: {self.resource.required_agents}; "
-                f"regrow time: {self.resource.regrow_time}; "
-                f"{availability}]"
+                # f"regrow time: {self.resource.regrow_time}; "
+                f"available]"
             )
 
             if self._check_harvest_possible():

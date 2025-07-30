@@ -65,3 +65,27 @@ class ConversationService(BaseService[Conversation]):
             .order_by(Message.tick.desc())
             .limit(k)
         ).all()
+
+    def end_conversation(
+        self, conversation_id: str, agent_id: str, reason: str = ""
+    ) -> None:
+        """End a conversation."""
+        conversation = self.get_by_id(conversation_id)
+        if not conversation:
+            raise ValueError("Conversation not found.")
+
+        message = Message(
+            conversation_id=conversation.id,
+            agent_id=agent_id,
+            content=f"Conversation ended: {reason}",
+            tick=conversation.tick,
+        )
+
+        conversation.active = False
+        conversation.finished = True
+        conversation.declined = False
+
+        self.db.add(message)
+
+        self.db.add(conversation)
+        self.db.commit()

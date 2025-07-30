@@ -5,12 +5,13 @@ from pydantic import Field
 from engine.context.base import BaseContext
 from engine.context.observations import (
     AgentObservation,
+    CarcassObservation,
     OtherObservation,
     ResourceObservation,
 )
 
 ObservationUnion = Annotated[
-    Union[ResourceObservation, AgentObservation, OtherObservation],
+    Union[ResourceObservation, AgentObservation, CarcassObservation, OtherObservation],
     Field(discriminator="type"),
 ]
 

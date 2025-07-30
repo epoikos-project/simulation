@@ -23,6 +23,7 @@ ModelName = Literal[
     "gpt-4o-mini-2024-07-18",
     "o4-mini-2025-04-16",
     "gpt-4.1-nano-2025-04-14",
+    "grok-3-mini",
 ]
 
 
@@ -84,6 +85,16 @@ class AvailableModels:
                 function_calling=True,
                 json_output=True,
                 family=ModelFamily.GPT_4,
+            ),
+            reasoning=False,
+        ),
+        "grok-3-mini": ModelEntry(
+            name="grok-3-mini",
+            info=ModelInfo(
+                vision=False,
+                function_calling=True,
+                json_output=True,
+                family="grok",
             ),
             reasoning=False,
         ),

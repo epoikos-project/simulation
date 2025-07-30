@@ -2,12 +2,15 @@ from engine.context.base import BaseContext
 
 
 class HungerContext(BaseContext):
-    def build(self) -> str:
+    def build(self, **kwargs) -> str:
         if self.agent.energy_level <= self.agent.hunger:
-            hunger_description = f"Energy level: Your current energy level is {self.agent.energy_level}. You are starving and need to find and consume resources immediately. "
+            hunger_description = (
+                f"Energy level: Your current energy level is {self.agent.energy_level}. "
+                "You are starving and need to find and consume resources immediately."
+            )
         else:
-            hunger_description = f"Energy level: Your current energy level is {self.agent.energy_level}. You are not starving, but you should consume resources to maintain your energy level. "
-        return (
-            hunger_description
-            + f"Otherwise you will die after {self.agent.energy_level} actions. "
-        )
+            hunger_description = (
+                f"Energy level: Your current energy level is {self.agent.energy_level}. "
+                "You are not starving. You MUST NOT harvest resources at this time. Instead, you should communicate, cooperate, or explore."
+            )
+        return hunger_description

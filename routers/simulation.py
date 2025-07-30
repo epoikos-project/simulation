@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from clients import Nats
 from clients.db import DB
 
+from services.action_log import ActionLogService
 from services.relationship import RelationshipService
 from services.simulation import SimulationService
 
@@ -113,6 +114,23 @@ async def relationship_graph(
         agent_id=agent_id,
     )
     return graph
+
+
+@router.get("/{simulation_id}/relationship-metrics")
+def download_relationship_metrics(
+    simulation_id: str,
+    db: DB,
+    nats: Nats,
+):
+    service = RelationshipService(db=db, nats=nats)
+    return service.generate_relationship_metrics_csv_stream(simulation_id)
+
+
+@router.get("/{simulation_id}/action-logs")
+async def get_action_logs(simulation_id: str, db: DB, nats: Nats):
+    action_log_service = ActionLogService(db=db, nats=nats)
+    logs = action_log_service.get_by_simulation_id(simulation_id)
+    return logs
 
 
 @router.post("/{simulation_id}/replay")

@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from schemas.resource import Resource
     from schemas.simulation import Simulation
     from schemas.task import Task
+    from schemas.carcass import Carcass
 
 
 class Agent(BaseModel, table=True):
@@ -28,8 +29,10 @@ class Agent(BaseModel, table=True):
     )
 
     name: str = Field()
+    personality: str = Field(default=None, nullable=True)
     model: str = Field(default=None, nullable=True)
     energy_level: float = Field(default=20.0)
+    dead: bool = Field(default=False)
 
     last_error: str = Field(nullable=True, default=None)
 
@@ -93,4 +96,8 @@ class Agent(BaseModel, table=True):
         back_populates="agent",
         cascade_delete=True,
         sa_relationship_kwargs={"foreign_keys": "[MemoryLog.agent_id]"},
+    )
+    carcass: "Carcass" = Relationship(
+        back_populates="agent",
+        sa_relationship_kwargs={"uselist": False, "foreign_keys": "[Carcass.agent_id]"},
     )

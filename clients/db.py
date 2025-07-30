@@ -25,7 +25,7 @@ from schemas import (
     world,
 )
 
-engine = create_engine(settings.db.url)
+engine = create_engine(settings.db.url, max_overflow=10, pool_size=100)
 
 
 def create_db_and_tables():

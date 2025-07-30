@@ -79,7 +79,10 @@ class AutogenAgent(BaseAgent):
         last_conversation = self.conversation_service.get_last_conversation_by_agent_id(
             self.agent.id, max_tick_age=self.agent.simulation.tick - 20
         )
-        memory_logs = self.agent_service.get_last_k_memory_logs(self.agent, k=3)
+        if settings.planning_enabled:
+            memory_logs = self.agent_service.get_last_k_memory_logs(self.agent, k=3)
+        else:
+            memory_logs = []
 
         context = "Current Tick: " + str(self.agent.simulation.tick) + "\n"
         parts = [
@@ -106,7 +109,7 @@ class AutogenAgent(BaseAgent):
             context += OutstandingConversationContext(self.agent).build(
                 outstanding_requests
             )
-            context += "\n Given this information devide whether you would like to accept and engange in the conversation request or not. You may only use ONE (1) tool at a time."
+            context += "\n Given this information decide whether you would like to accept and engange in the conversation request or not."
         # else:
         #     context += "\nGiven this information now decide on your next action by performing a tool call. You may only use ONE (1) tool at a time."
         return (observations, context)
@@ -119,12 +122,14 @@ class AutogenAgent(BaseAgent):
         adapted_tools = tools
 
         if self.agent_service.has_outstanding_conversation_request(self.agent.id):
+            logger.info(
+                f"[COMMUNICATION] | Agent {self.agent.id} has an outstanding conversation request. Adapting tools."
+            )
             adapted_tools = [
                 tool
                 for tool in adapted_tools
                 if tool.__name__ == "accept_conversation_request"
                 or tool.__name__ == "decline_conversation_request"
-                or tool.__name__ == "update_plan"
             ]
             return adapted_tools
 
@@ -200,19 +205,17 @@ class AutogenAgent(BaseAgent):
 
         if reason:
             self.next_tools = list(adapted_tools)
-            context += f"\nGiven this information reason about your next action. Think step by step."
             # "Answer with a comprehensive explanation about which 2 tools you want to call next. Remember, you cannot only call update_plan, you MUST call another tool."
         else:
             self.tools = adapted_tools
 
             self._client, self.autogen_agent = self._initialize_llm()
-            logger.warning(self.autogen_agent._tools)
 
-            # context = self.system_prompt.build() + "\n\n---\n" + self.description.build() + "\n\n---\n"
+            context = self.description.build() + "\n\n---\n"
 
             if reasoning_output:
                 context += f"\nYou previously reasoned about about what to do next: {reasoning_output}"
-                context += f"\nGiven this reasoning now decide on your next action by performing one tool calls."
+                context += f"\nGiven this reasoning perform the proposed tool call."
                 # """You should always first use the tool 'update_plan' to store your reasoning about your long term goal i.e. the overarching thing you want to achive.
                 # Then you MUST additionaly use ONE other tool to perform an immediate action in the environment e.g:
 
