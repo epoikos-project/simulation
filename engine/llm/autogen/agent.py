@@ -79,13 +79,16 @@ class AutogenAgent(BaseAgent):
         last_conversation = self.conversation_service.get_last_conversation_by_agent_id(
             self.agent.id, max_tick_age=self.agent.simulation.tick - 20
         )
-        memory_logs = self.agent_service.get_last_k_memory_logs(self.agent, k=3)
+        if settings.planning_enabled:
+            memory_logs = self.agent_service.get_last_k_memory_logs(self.agent, k=3)
+        else:
+            memory_logs = []
 
         context = "Current Tick: " + str(self.agent.simulation.tick) + "\n"
         parts = [
             SystemDescription(self.agent).build(),
             HungerContext(self.agent).build(),
-            MemoryContext(self.agent).build(actions=actions, memory_logs=[]),
+            MemoryContext(self.agent).build(actions=actions, memory_logs=memory_logs),
             ObservationContext(self.agent).build(observations),
             # PlanContext(self.agent).build(),
             (
@@ -172,6 +175,12 @@ class AutogenAgent(BaseAgent):
             adapted_tools = [
                 tool for tool in adapted_tools if tool.__name__ != "harvest_resource"
             ]
+
+        # remove update_plan
+        adapted_tools = [
+            tool for tool in adapted_tools if tool.__name__ != "update_plan"
+        ]
+
         return adapted_tools
 
     @observe(as_type="generation", name="Agent Tick")

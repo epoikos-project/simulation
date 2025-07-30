@@ -5,10 +5,12 @@ import openai
 from clients.db import get_session
 
 from config.openai import AvailableModels
+from config import settings
 
 from engine.llm.autogen.agent import AutogenAgent
 from engine.llm.autogen.conversation import ConversationAgent
 from engine.llm.autogen.harvest import HarvestingAgent
+from engine.llm.autogen.plan import PlanAgent
 
 from services.agent import AgentService
 from services.conversation import ConversationService
@@ -139,7 +141,6 @@ class AgentRunner:
                     )
                     await harvesting_agent.generate_with_reasoning()
                     return
-
                 else:
                     agent = AutogenAgent(
                         agent=agent,
@@ -171,6 +172,34 @@ class AgentRunner:
                         agent.toggle_tools(use_tools=True)
                         agent.toggle_parallel_tool_calls(use_parallel=False)
                         await agent.generate(reason=False, reasoning_output=None)
+
+                        # If planning is enabled, update the plan after generating the action
+                        if agent.agent.model == "grok-3-mini":
+                            logger.debug(
+                                f"[SIM {agent.agent.simulation.id}][AGENT {agent.agent.id}] Updating plan"
+                            )
+                            plan_agent = PlanAgent(
+                                db=db,
+                                nats=nats,
+                                agent=agent.agent,
+                            )
+                            await plan_agent.generate(
+                                reason=False,
+                                reasoning_output=None,
+                            )
+                    if settings.planning_enabled:
+                        # next tick agent for plan update
+                        memory_agent = PlanAgent(
+                            db=db,
+                            nats=nats,
+                            agent=agent.agent,
+                        )
+                        memory_agent.toggle_tools(use_tools=True)
+                        memory_agent.toggle_parallel_tool_calls(use_parallel=False)
+                        await memory_agent.generate(
+                            reason=False,
+                            reasoning_output=reasoning_output.messages[1].content,
+                        )
             except openai.RateLimitError as e:
                 logger.warning(f"OpenAI Rate Limit Error: {e}")
                 await asyncio.sleep(60)

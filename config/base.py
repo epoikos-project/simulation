@@ -19,5 +19,7 @@ class Settings(BaseSettings):
     openai: OpenAISettings = OpenAISettings()
     db: DBSettings = DBSettings()
 
+    planning_enabled: bool = False
+
 
 settings = Settings()

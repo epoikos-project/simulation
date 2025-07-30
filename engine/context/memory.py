@@ -27,7 +27,7 @@ class MemoryContext(BaseContext):
                 f" - {memory.memory} (Tick: {memory.tick})"
                 + (
                     " (You will lose this oldest plan entry in the next tick. If the information is still needed, include it in your update of the plan.)"
-                    if idx == len(memory_logs) - 1
+                    if len(memory_logs) > 1 and idx == len(memory_logs) - 1
                     else ""
                 )
                 for idx, memory in enumerate(memory_logs)
@@ -40,9 +40,9 @@ class MemoryContext(BaseContext):
         #     )
 
         memory_description = (
-            "Memory: Previously you have performed the following actions: \n"
+            "Memory: \nPreviously you have performed the following actions: \n"
             + action_log
-            + "\n\n---\nPlan: These are your last 3 planning steps, you saved to perform informed future actions:\n"
+            + f"\n\n---\nPlan: These are your last {len(memory_logs)} planning steps, you saved to perform informed future actions:\n"
             + memory_log
             + "\n\n---\n"
         )
