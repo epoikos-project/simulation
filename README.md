@@ -90,6 +90,11 @@ To run test in parallel, run:
 uv run pytest -n auto tests/
 ```
 
+This will execute all tests except for the global simulations s1 to s4. You can manually run these tests by specifying the test file e.g.:
+```shell
+uv run pytest tests/s1_easy_resources.py
+```
+
 ## File Structure
 
 ```
@@ -147,11 +152,15 @@ uv run pytest -n auto tests/
 │   ├── ...
 │   ├── simulation.py
 │   └── world.py
-└── subscribers/
-    ├── __init__.py
-    ├── agent.py
+├── subscribers/
+│   ├── agent.py
+│   ├── ...
+│   ├── world.py
+└── tests/
+    ├── bf1_agent_move.py
+    ├── bf2_agent_start_conersation.py
     ├── ...
-    └── world.py
+    └── s4_reproducability.py
 ```
 
 - `clients/`: Contains the clients for the different services used in the application. For more details, see the [Clients README](clients/README.md).
@@ -173,7 +182,12 @@ uv run pytest -n auto tests/
 - `schemas/`: Pydantic schemas for data validation and serialization.
 - `services/`: Business logic and service layer components.
 - `subscribers/`: Contains the NATS subscribers.
+- `tests/`: Contains the test files for the application. It uses [pytest](https://docs.pytest.org/en/stable/) for testing.
+  - `bf*.py`: Basic functionality tests for agents.
+  - `ps*.py`: Problem-solving tests for agents.
+  - `s*.py`: Global simulation tests for different scenarios.
 - `main.py`: The main entrypoint for the FastAPI application.
 - `utils.py`: Utility functions used throughout the application.
 - `pyproject.toml`: Project configuration and dependencies.
 - `alembic.ini`: Alembic configuration for database migrations.
+- `README.md`: Documentation for the project.

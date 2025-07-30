@@ -1,5 +1,5 @@
 import asyncio
-import random
+from random import Random
 import sys
 import uuid
 from loguru import logger
@@ -23,9 +23,9 @@ from utils import get_neutral_first_names, log_simulation_result
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("run", range(1))
-async def test_simulation_harvests_resource_with_one_agent(run):
-    random.seed(42)
+@pytest.mark.parametrize("run", range(4))
+async def test_reproducibility(run):
+    random = Random(42)
     async with get_nats_broker() as nats:
         with get_session() as db:
             logger.remove()
@@ -53,7 +53,7 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             for i in range(25):
                 # Determine required_agents with specified probabilities
                 rand = random.random()
-                if rand < 0.7:
+                if rand < 0.5:
                     required_agents = 1
                 else:
                     required_agents = 2
