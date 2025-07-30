@@ -1,5 +1,5 @@
 import asyncio
-from random import Random
+import random
 import sys
 import uuid
 from loguru import logger
@@ -25,7 +25,7 @@ from utils import get_neutral_first_names, log_simulation_result
 @pytest.mark.asyncio
 @pytest.mark.parametrize("run", range(1))
 async def test_simulation_harvests_resource_with_one_agent(run):
-    random = Random(42)
+    random.seed(42)
     async with get_nats_broker() as nats:
         with get_session() as db:
             logger.remove()
@@ -53,7 +53,7 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             for i in range(25):
                 # Determine required_agents with specified probabilities
                 rand = random.random()
-                if rand < 0.5:
+                if rand < 0.7:
                     required_agents = 1
                 else:
                     required_agents = 2
@@ -83,6 +83,7 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                 agent = Agent(
                     simulation_id=simulation.id,
                     name=random.choice(get_neutral_first_names()),
+                    personality="You really don't like to work with others. You prefer to be alone and do things your own way. You are not very cooperative and often refuse to help others unless it benefits you directly.",
                     model="gpt-4.1-nano-2025-04-14",
                     x_coord=random.randint(0, 99),
                     y_coord=random.randint(0, 99),

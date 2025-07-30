@@ -182,6 +182,27 @@ async def accept_conversation_request(
                     commit=False,
                 )
 
+                # If agent A & B both request to talk to agent C in the same tick,
+                # we need to finish the other request otherwise it will be stuck.
+                agent_service = AgentService(db=db, nats=nats)
+                outstanding_requests = (
+                    agent_service.get_outstanding_conversation_requests(
+                        agent_id=other_agent_id,
+                    )
+                )
+                for request in outstanding_requests:
+                    if request.id != conversation_id:
+                        request.finished = True
+                        request.declined = True
+                        m = Message(
+                            tick=conversation.simulation.tick,
+                            content="This agent decided to talk to another agent.",
+                            agent_id=agent_id,
+                            conversation_id=request.id,
+                        )
+                        db.add(request)
+                        db.add(m)
+
                 db.add(conversation)
                 db.add(message_model)
                 db.commit()
