@@ -64,7 +64,7 @@ async def test_high_energy_agents_talk_before_harvest(run):
             agent1 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=10,
                 y_coord=10,
                 energy_level=100,
@@ -72,7 +72,7 @@ async def test_high_energy_agents_talk_before_harvest(run):
             agent2 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=11,
                 y_coord=11,
                 energy_level=100,
@@ -117,7 +117,7 @@ async def test_high_energy_agents_talk_before_harvest(run):
                 first_convo1, first_harvest1 = first_indices(action_names1)
                 first_convo2, first_harvest2 = first_indices(action_names2)
 
-                # Sofort abbrechen, wenn Harvest vor Conversation
+                # Abort immediately if harvest occurs before conversation
                 if (
                     first_harvest1 is not None
                     and (first_convo1 is None or first_harvest1 < first_convo1)
@@ -135,7 +135,7 @@ async def test_high_energy_agents_talk_before_harvest(run):
                         "A high energy agent harvested before starting a conversation!"
                     )
 
-                # Sofort abbrechen, wenn Conversation vor Harvest
+                # Abort immediately if conversation occurs before harvest
                 if (
                     first_convo1 is not None
                     and (first_harvest1 is None or first_convo1 < first_harvest1)

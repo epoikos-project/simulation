@@ -83,6 +83,13 @@ uv run uvicorn main:app --port 8000 --reload
 
 Once the application is running, you can access the API documentation is available at [`http://localhost:8000/docs`](http://localhost:8000/docs).
 
+
+#### Running Test
+To run test in parallel, run:
+```shell
+uv run pytest -n auto tests/
+```
+
 ## File Structure
 
 ```

@@ -63,27 +63,31 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             db.refresh(resource)
 
             # 3. Create one agent near the resource
-            agent = Agent(
+            agent1 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=5,
                 y_coord=5,  # adjacent
-                energy_level=100,
-                hunger=100,
+                energy_level=150,
+                hunger=150,
             )
-            agent = Agent(
+            db.add(agent1)
+            db.commit()
+            db.refresh(agent1)
+
+            agent2 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=6,
                 y_coord=6,  # adjacent
-                energy_level=100,
-                hunger=100,
+                energy_level=150,
+                hunger=150,
             )
-            db.add(agent)
+            db.add(agent2)
             db.commit()
-            db.refresh(agent)
+            db.refresh(agent2)
 
             logger.success(
                 f"View live at http://localhost:3000/simulation/{simulation.id}"
@@ -117,7 +121,7 @@ def should_continue(
     resource_id: str,
 ):
     simulation = sim_service.get_by_id(simulation_id)
-    if simulation.tick >= 100:
+    if simulation.tick >= 150:
         return False
     resource = resource_service.get_by_id(resource_id)
     if not resource.available:

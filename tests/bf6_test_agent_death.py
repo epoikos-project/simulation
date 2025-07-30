@@ -57,7 +57,7 @@ async def test_agent_dies_when_energy_depleted(run):
             agent = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=10,
                 y_coord=10,
                 energy_level=5,  # Low energy so it dies quickly
@@ -129,12 +129,12 @@ async def test_agent_dies_when_energy_depleted(run):
                 await asyncio.sleep(0.1)  # Small delay to allow processing
 
             # 5. Assertions
-            assert (
-                agent_died
-            ), f"Agent did not die within 20 ticks. Final energy: {agent.energy_level}"
-            assert (
-                agent.energy_level <= 0
-            ), f"Agent died but energy is still {agent.energy_level}"
+            assert agent_died, (
+                f"Agent did not die within 20 ticks. Final energy: {agent.energy_level}"
+            )
+            assert agent.energy_level <= 0, (
+                f"Agent died but energy is still {agent.energy_level}"
+            )
             assert agent.dead == True, "Agent died but dead flag is not True"
             assert carcass_found, "Agent died but no carcass was created"
 

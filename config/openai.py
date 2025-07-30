@@ -96,7 +96,8 @@ class AvailableModels:
                 json_output=True,
                 family="grok",
             ),
-        )
+            reasoning=False,
+        ),
     }
 
     @classmethod

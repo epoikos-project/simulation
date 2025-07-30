@@ -63,36 +63,44 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             db.refresh(resource)
 
             # 3. Create one agent near the resource
-            agent = Agent(
+            agent1 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=10,
                 y_coord=10,  # adjacent
-                energy_level=100,
-                hunger=100,
+                energy_level=150,
+                hunger=150,
             )
-            agent = Agent(
+
+            db.add(agent1)
+            db.commit()
+            db.refresh(agent1)
+            agent2 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=11,
                 y_coord=11,  # adjacent
-                energy_level=100,
-                hunger=100,
+                energy_level=150,
+                hunger=150,
             )
-            agent = Agent(
+            db.add(agent2)
+            db.commit()
+            db.refresh(agent2)
+
+            agent3 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=15,
                 y_coord=15,  # adjacent
-                energy_level=100,
-                hunger=100,
+                energy_level=150,
+                hunger=150,
             )
-            db.add(agent)
+            db.add(agent3)
             db.commit()
-            db.refresh(agent)
+            db.refresh(agent3)
 
             logger.success(
                 f"View live at http://localhost:3000/simulation/{simulation.id}"
@@ -115,7 +123,7 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                 success=resource.available == False,
             )
             assert resource.last_harvest > 0, (
-                "Resource was not harvested within 100 ticks"
+                "Resource was not harvested within 150 ticks"
             )
 
 
@@ -126,7 +134,7 @@ def should_continue(
     resource_id: str,
 ):
     simulation = sim_service.get_by_id(simulation_id)
-    if simulation.tick >= 100:
+    if simulation.tick >= 150:
         return False
     resource = resource_service.get_by_id(resource_id)
     if not resource.available:

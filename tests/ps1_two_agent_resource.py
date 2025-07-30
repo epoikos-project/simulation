@@ -63,27 +63,30 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             db.refresh(resource)
 
             # 3. Create one agent near the resource
-            agent = Agent(
+            agent1 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=10,
                 y_coord=10,  # adjacent
-                energy_level=100,
-                hunger=100,
+                energy_level=50,
+                hunger=50,
             )
-            agent = Agent(
+            db.add(agent1)
+            db.commit()
+            db.refresh(agent1)
+            agent2 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=11,
                 y_coord=11,  # adjacent
-                energy_level=100,
-                hunger=100,
+                energy_level=50,
+                hunger=50,
             )
-            db.add(agent)
+            db.add(agent2)
             db.commit()
-            db.refresh(agent)
+            db.refresh(agent2)
 
             logger.success(
                 f"View live at http://localhost:3000/simulation/{simulation.id}"

@@ -64,7 +64,7 @@ async def test_simulation_low_energy_agent_harvests_first(run):
             agent_low = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=10,
                 y_coord=10,  # adjacent
                 energy_level=10,
@@ -73,7 +73,7 @@ async def test_simulation_low_energy_agent_harvests_first(run):
             agent_high = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=11,
                 y_coord=11,  # adjacent
                 energy_level=100,
@@ -112,11 +112,11 @@ async def test_simulation_low_energy_agent_harvests_first(run):
                 ticks=simulation.tick,
                 success=not resource.available,
             )
-            # Prüfe, dass die Ressource geerntet wurde
+            # Check that the resource was harvested
             assert resource.last_harvest > 0, (
                 "Resource was not harvested within 20 ticks"
             )
-            # Logge, welcher Agent geerntet hat
+            # Log which agent harvested the resource
             harvested_by = getattr(resource, "last_harvested_by", None)
             logger.info(
                 f"Low energy agent: {agent_low.name}, Energie: {agent_low.energy_level}, initial: {initial_low}"
@@ -125,9 +125,9 @@ async def test_simulation_low_energy_agent_harvests_first(run):
                 f"High energy agent: {agent_high.name}, Energie: {agent_high.energy_level}, initial: {initial_high}"
             )
             logger.info(f"Resource harvested_by: {harvested_by}")
-            # Keine weitere Assertion, da das Verhalten beobachtet werden soll
+            # No further assertion, as the behavior is to be observed
 
-            # Nach der Simulation: Prüfe Aktionsreihenfolge des Low-Energy-Agents
+            # After the simulation: Check action order of the low-energy agent
             actions = agent_service.get_last_k_actions(agent_low, k=20)
             action_names = [a.action for a in actions]
             logger.info(f"Low energy agent actions: {action_names}")
@@ -143,7 +143,7 @@ async def test_simulation_low_energy_agent_harvests_first(run):
                 )
             except StopIteration:
                 first_convo = None
-            # Prüfe Reihenfolge wie im High-Energy-Test: Harvest muss vor Conversation kommen
+            # Check order as in the high-energy test: harvest must come before conversation
             if first_harvest is not None and first_convo is not None:
                 assert first_harvest < first_convo, (
                     "Low energy agent started conversation before harvesting!"
@@ -152,7 +152,7 @@ async def test_simulation_low_energy_agent_harvests_first(run):
                 assert False, (
                     "Low energy agent started conversation but never harvested!"
                 )
-            # Sonst: alles ok, wenn kein Gespräch stattfand
+            # Otherwise: everything is fine if no conversation took place
 
 
 def should_continue(

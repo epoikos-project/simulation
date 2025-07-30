@@ -3,6 +3,7 @@ import sys
 import uuid
 from loguru import logger
 import pytest
+from sympy import per
 
 from clients.db import get_session
 from clients.nats import get_nats_broker
@@ -20,7 +21,7 @@ from utils import log_simulation_result
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("run", range(1))
+@pytest.mark.parametrize("run", range(10))
 async def test_simulation_harvests_resource_with_one_agent(run):
     async with get_nats_broker() as nats:
         with get_session() as db:
@@ -66,10 +67,11 @@ async def test_simulation_harvests_resource_with_one_agent(run):
             agent = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=10,
                 y_coord=10,  # adjacent
-                energy_level=100,
+                energy_level=50,
+                hunger=100,
             )
             db.add(agent)
             db.commit()
@@ -95,9 +97,9 @@ async def test_simulation_harvests_resource_with_one_agent(run):
                 ticks=simulation.tick,
                 success=resource.available == False,
             )
-            assert (
-                resource.last_harvest > 0
-            ), "Resource was not harvested within 30 ticks"
+            assert resource.last_harvest > 0, (
+                "Resource was not harvested within 30 ticks"
+            )
 
 
 def should_continue(

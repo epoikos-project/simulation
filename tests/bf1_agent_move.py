@@ -66,7 +66,7 @@ async def test_agent_moves_within_20_ticks(run):
             agent = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=10,
                 y_coord=10,  # adjacent
                 energy_level=15,

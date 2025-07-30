@@ -51,7 +51,7 @@ async def test_agent_moves_within_20_ticks(run):
             agent1 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 personality="You do not want to talk at all. Decline all conversation requests.",
                 x_coord=10,
                 y_coord=10,  # adjacent
@@ -61,7 +61,7 @@ async def test_agent_moves_within_20_ticks(run):
             agent2 = Agent(
                 simulation_id=simulation.id,
                 name=orch.name_generator({}),
-                model="gpt-4.1-nano-2025-04-14",
+                model="grok-3-mini",
                 x_coord=12,
                 y_coord=12,  # adjacent
                 energy_level=100,
