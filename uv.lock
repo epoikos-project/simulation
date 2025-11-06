@@ -1,6 +1,9 @@
 version = 1
 revision = 1
 requires-python = ">=3.13"
+required-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux'",
+]
 
 [[package]]
 name = "aiofiles"
