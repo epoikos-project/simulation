@@ -1,0 +1,37 @@
+{{- if .Values.ingressRoute.enabled -}}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ template "helm.name" . }}
+{{- with .Values.ingressRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+    {{- with .Values.ingressRoute.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  entryPoints:
+  {{- range .Values.ingressRoute.entryPoints }}
+  - {{ . }}
+  {{- end }}
+  routes:
+    {{- if .Values.ingressRoute.enableDefaultRoute }}
+    - match: Host(`{{ .Values.hostname }}`)
+      kind: Rule
+      services:
+        - name: {{ template "helm.name" . }}
+          port: {{ .Values.service.port }}
+    {{- end }}
+    {{- with .Values.ingressRoute.routes }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  
+  tls:
+    certResolver: {{ .Values.ingressRoute.certResolver | default "tdresolver" }}
+  {{- with .Values.ingressRoute.tls  }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end -}}
