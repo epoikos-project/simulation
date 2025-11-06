@@ -42,9 +42,9 @@ spec:
                   name: {{ .Values.db.secret.name }}
                   key: {{ .Values.db.secret.key }}
             {{- end }}
-            {{- if (and .Values.config.openai.baseUrl.name .Values.config.openai.baseUrl.key) }}
             - name: OPENAI_BASEURL
               value: {{ .Values.config.openai.baseUrl }}
+            {{- if (and .Values.config.openai.apiKey.name .Values.config.openai.apiKey.key) }}
             - name: OPENAI_APIKEY
               valueFrom:
                 secretKeyRef:
