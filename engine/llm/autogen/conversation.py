@@ -1,5 +1,5 @@
 from autogen_core import CancellationToken
-from langfuse.decorators import langfuse_context, observe
+from langfuse import observe
 from loguru import logger
 from sqlmodel import Session
 

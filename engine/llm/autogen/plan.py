@@ -1,4 +1,4 @@
-from langfuse.decorators import observe
+from langfuse import observe
 from loguru import logger
 from sqlmodel import Session
 

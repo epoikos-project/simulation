@@ -2,7 +2,7 @@ import json
 import uuid
 from typing import Annotated, List, Optional, Union
 
-from langfuse.decorators import observe
+from langfuse import observe
 from loguru import logger
 
 from clients.db import get_session

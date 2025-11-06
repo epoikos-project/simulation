@@ -64,6 +64,8 @@ spec:
             {{- end }}
             - name: ENABLE_PLANNING
               value: {{ .Values.config.planning.enabled | quote }}
+            - name: NATS_URL
+              value: {{ .Values.config.nats.url }}
           ports:
             - name: http
               containerPort: 8000

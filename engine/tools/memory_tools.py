@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from langfuse.decorators import observe
+from langfuse import observe
 from loguru import logger
 
 from clients.db import get_session

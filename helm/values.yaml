@@ -144,3 +144,5 @@ config:
     host: ""
   planning:
     enabled: false
+  nats:
+    url: ""
