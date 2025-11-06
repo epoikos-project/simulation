@@ -32,6 +32,9 @@ dependencies = [
     "python-louvain>=0.16",
 ]
 
+[tools.uv]
+required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
 [dependency-groups]
 dev = [
     "black>=25.1.0",
