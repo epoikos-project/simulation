@@ -19,7 +19,7 @@ spec:
   {{- end }}
   routes:
     {{- if .Values.ingressRoute.enableDefaultRoute }}
-    - match: Host(`{{ .Values.hostname }}`)
+    - match: Host(`{{ .Values.hostname }}`) && PathPrefix(`/`)
       kind: Rule
       priority: 10
       services:
