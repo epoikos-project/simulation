@@ -21,6 +21,7 @@ spec:
     {{- if .Values.ingressRoute.enableDefaultRoute }}
     - match: Host(`{{ .Values.hostname }}`)
       kind: Rule
+      priority: 10
       services:
         - name: {{ template "helm.name" . }}
           port: {{ .Values.service.port }}
