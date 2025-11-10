@@ -166,7 +166,7 @@ class BaseAgent:
 
         langfuse = get_client()
 
-        langfuse.update_current_observation(
+        langfuse.update_current_generation(
             usage_details={
                 "input_tokens": self._client.actual_usage().prompt_tokens,
                 "output_tokens": self._client.actual_usage().completion_tokens,
@@ -262,7 +262,7 @@ class BaseAgent:
             metadata={"agent_id": self.agent.id},
             session_id=self.agent.simulation_id,
         )
-        langfuse.update_current_observation(model=self.model.name, name=name)
+        langfuse.update_current_generation(model=self.model.name, name=name)
 
     def _format_tools_description(self) -> str:
         """
