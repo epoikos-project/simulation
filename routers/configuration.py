@@ -79,7 +79,7 @@ async def get_configuration(
     }
 
 
-@router.get("/")
+@router.get("")
 async def get_all_configurations(
     db: DB,
 ):
