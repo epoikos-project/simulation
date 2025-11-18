@@ -7,7 +7,7 @@ from autogen_agentchat.base import TaskResult
 from autogen_core import CancellationToken, FunctionCall
 from autogen_core.tools import BaseTool, FunctionTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
-from langfuse.decorators import langfuse_context, observe
+from langfuse import observe
 from loguru import logger
 from pymilvus import MilvusClient
 from sqlmodel import Session

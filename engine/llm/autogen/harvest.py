@@ -2,7 +2,7 @@ from typing import override
 
 from autogen_core import CancellationToken
 from autogen_core.models import FunctionExecutionResult
-from langfuse.decorators import langfuse_context, observe
+from langfuse import observe
 from loguru import logger
 from sqlmodel import Session
 

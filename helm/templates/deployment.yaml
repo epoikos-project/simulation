@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helm.name" . }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "helm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "helm.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      imagePullSecrets:
+            - name: {{ .Values.image.pullSecret | default "docker-pull-creds" }}
+      serviceAccountName: {{ include "helm.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{.Values.image.registry | default "registry.teckdigital.de" }}/kube/{{ .Values.organization }}/{{ .Values.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- if (and .Values.db.secret.name .Values.db.secret.key) }}
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.db.secret.name }}
+                  key: {{ .Values.db.secret.key }}
+            {{- end }}
+            - name: OPENAI_BASEURL
+              value: {{ .Values.config.openai.baseUrl }}
+            {{- if (and .Values.config.openai.apiKey.name .Values.config.openai.apiKey.key) }}
+            - name: OPENAI_APIKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.openai.apiKey.name }}
+                  key: {{ .Values.config.openai.apiKey.key }}
+            {{- end }}
+            - name: LANGFUSE_HOST
+              value: {{ .Values.config.langfuse.host }}            
+            - name: LANGFUSE_PUBLIC_KEY
+              value: {{ .Values.config.langfuse.publicKey }}
+            {{- if (and .Values.config.langfuse.secretKey.name .Values.config.langfuse.secretKey.key) }}
+            - name: LANGFUSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.langfuse.secretKey.name }}
+                  key: {{ .Values.config.langfuse.secretKey.key }}
+            {{- end }}
+            - name: ENABLE_PLANNING
+              value: {{ .Values.config.planning.enabled | quote }}
+            - name: NATS_URL
+              value: {{ .Values.config.nats.url }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      initContainers:
+        - name: {{ .Chart.Name }}-migrate
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{.Values.image.registry | default "registry.teckdigital.de" }}/kube/{{ .Values.organization }}/{{ .Values.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- if (and .Values.db.secret.name .Values.db.secret.key) }}
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.db.secret.name }}
+                  key: {{ .Values.db.secret.key }}
+            {{- end }}
+          command: ["uv", "run", "alembic", "upgrade", "head"]
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

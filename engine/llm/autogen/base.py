@@ -8,7 +8,7 @@ from autogen_agentchat.base import TaskResult
 from autogen_core import CancellationToken, FunctionCall
 from autogen_core.tools import BaseTool, FunctionTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
-from langfuse.decorators import langfuse_context
+from langfuse import get_client
 from loguru import logger
 from sqlmodel import Session
 
@@ -164,7 +164,9 @@ class BaseAgent:
 
         await agent_response_message.publish(self._nats)
 
-        langfuse_context.update_current_observation(
+        langfuse = get_client()
+
+        langfuse.update_current_generation(
             usage_details={
                 "input_tokens": self._client.actual_usage().prompt_tokens,
                 "output_tokens": self._client.actual_usage().completion_tokens,
@@ -253,12 +255,14 @@ class BaseAgent:
         self._client, self.autogen_agent = self._initialize_llm()
 
     def _update_langfuse_trace_name(self, name: str):
-        langfuse_context.update_current_trace(
+        langfuse = get_client()
+
+        langfuse.update_current_trace(
             name=name,
             metadata={"agent_id": self.agent.id},
             session_id=self.agent.simulation_id,
         )
-        langfuse_context.update_current_observation(model=self.model.name, name=name)
+        langfuse.update_current_generation(model=self.model.name, name=name)
 
     def _format_tools_description(self) -> str:
         """
